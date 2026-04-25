@@ -39,6 +39,9 @@ export function ChatView({ messages }: ChatViewProps) {
           <Box marginTop={1}>
             <Text dimColor>/remember, /forget, /memory | /checkpoint, /restore | /compress</Text>
           </Box>
+          <Box marginTop={1}>
+            <Text dimColor>/mcp, /skills, /agents, /stats | Tab: cycle mode</Text>
+          </Box>
         </Box>
       ) : (
         messages.map((msg, i) => (

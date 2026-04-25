@@ -7,9 +7,14 @@ import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js';
 import type { SessionOptions } from '../cli/interactive.js';
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js';
 import { getToolsForMode } from '../tools/registry.js';
-import { saveMemory, listMemories, deleteMemory, searchMemories, type MemoryEntry } from '../core/memory.js';
+import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js';
 import { saveSession, getLastSessionId } from '../core/session.js';
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js';
+import { mcpManager } from '../core/mcp.js';
+import { subAgentManager, SubAgent } from '../core/subagent.js';
+import { skillsManager } from '../core/skills.js';
+import { hooksManager } from '../core/hooks.js';
+import { lspManager } from '../core/lsp.js';
 
 interface AppProps {
   config: DeepSeekConfig;
@@ -26,9 +31,13 @@ export function App({ config, options }: AppProps) {
   const [statusText, setStatusText] = useState('Ready');
   const apiRef = useRef(new DeepSeekAPI(config));
   const sessionIdRef = useRef<string>('');
+  const initializedRef = useRef(false);
 
-  // Initialize session on mount
+  // Initialize session and services on mount
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     (async () => {
       if (options.continue_) {
         const lastId = await getLastSessionId();
@@ -37,6 +46,17 @@ export function App({ config, options }: AppProps) {
       if (!sessionIdRef.current) {
         sessionIdRef.current = await saveSession({});
       }
+
+      // Initialize services in background
+      await Promise.allSettled([
+        mcpManager.loadConfig().then(() => mcpManager.connectAll()),
+        skillsManager.loadAll(),
+        hooksManager.load(),
+        lspManager.load().then(() => lspManager.initializeAll()),
+        subAgentManager.loadFromDir(),
+      ]);
+
+      setStatusText('Ready');
     })();
   }, []);
 
@@ -47,6 +67,7 @@ export function App({ config, options }: AppProps) {
     const cmd = parts[0]?.toLowerCase();
 
     switch (cmd) {
+      // === Memory commands ===
       case '/remember': {
         const text = parts.slice(1).join(' ');
         if (!text) {
@@ -72,23 +93,15 @@ export function App({ config, options }: AppProps) {
       case '/forget': {
         const query = parts.slice(1).join(' ');
         if (!query) {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: 'Usage: /forget <query> — remove matching memories',
-          }]);
+          setMessages(prev => [...prev, { role: 'assistant', content: 'Usage: /forget <query>' }]);
           return true;
         }
         const matches = await searchMemories(query);
         if (matches.length === 0) {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: 'No memories found matching that query.',
-          }]);
+          setMessages(prev => [...prev, { role: 'assistant', content: 'No memories found.' }]);
           return true;
         }
-        for (const m of matches) {
-          await deleteMemory(m.name);
-        }
+        for (const m of matches) await deleteMemory(m.name);
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `✓ Removed ${matches.length} memory/memories matching "${query}"`,
@@ -105,9 +118,7 @@ export function App({ config, options }: AppProps) {
           }]);
           return true;
         }
-        const list = allMemories.map((m, i) =>
-          `${i + 1}. **${m.name}** — ${m.description}`,
-        ).join('\n');
+        const list = allMemories.map((m, i) => `${i + 1}. **${m.name}** — ${m.description}`).join('\n');
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `**Saved Memories (${allMemories.length}):**\n${list}`,
@@ -115,23 +126,24 @@ export function App({ config, options }: AppProps) {
         return true;
       }
 
+      // === Context commands ===
       case '/compress': {
         const totalLen = messages.reduce((sum, m) => sum + m.content.length, 0);
         setMessages(prev => [...prev, {
           role: 'assistant',
           content: `Context compressed. Previous size: ~${(totalLen / 1024).toFixed(1)}KB across ${messages.length} messages.`,
         }]);
-        // In a real implementation, this would summarize older messages
         return true;
       }
 
+      // === Checkpoint commands ===
       case '/checkpoint': {
         const cpMsg = parts.slice(1).join(' ') || `Checkpoint at ${new Date().toLocaleTimeString()}`;
         const cp = await createCheckpoint(cpMsg);
         if (!cp) {
           setMessages(prev => [...prev, {
             role: 'assistant',
-            content: 'Checkpoint requires a git repository. Initialize one with `git init`.',
+            content: 'Checkpoint requires a git repository.',
           }]);
           return true;
         }
@@ -147,10 +159,7 @@ export function App({ config, options }: AppProps) {
         if (!cpId) {
           const cps = await listCheckpoints();
           if (cps.length === 0) {
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: 'No checkpoints found.',
-            }]);
+            setMessages(prev => [...prev, { role: 'assistant', content: 'No checkpoints found.' }]);
             return true;
           }
           const list = cps.slice(0, 10).map((cp, i) =>
@@ -163,34 +172,122 @@ export function App({ config, options }: AppProps) {
           return true;
         }
         const ok = await restoreCheckpoint(cpId);
-        if (ok) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: ok ? `✓ Restored checkpoint: ${cpId}` : `✗ Could not restore checkpoint: ${cpId}`,
+        }]);
+        return true;
+      }
+
+      // === MCP commands ===
+      case '/mcp': {
+        const sub = parts[1]?.toLowerCase();
+        if (sub === 'list' || !sub) {
+          const tools = mcpManager.getAllTools();
+          if (tools.length === 0) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: 'No MCP tools available. Configure servers in `.deepseek-code/mcp.json`.',
+            }]);
+          } else {
+            const list = tools.map(t => `- **${t.serverName}/${t.name}**: ${t.description}`).join('\n');
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `**MCP Tools (${tools.length}):**\n${list}`,
+            }]);
+          }
+        } else if (sub === 'connect') {
+          const name = parts.slice(2).join(' ');
+          if (!name) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Usage: /mcp connect <server-name>' }]);
+            return true;
+          }
+          const server = mcpManager.getServer(name);
+          if (!server) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `Server "${name}" not found.` }]);
+            return true;
+          }
+          await server.connect();
           setMessages(prev => [...prev, {
             role: 'assistant',
-            content: `✓ Restored checkpoint: ${cpId}`,
-          }]);
-        } else {
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: `✗ Could not restore checkpoint: ${cpId}. Patch may not exist or apply cleanly.`,
+            content: `✓ Connected to MCP server: ${name} (${server.tools.length} tools)`,
           }]);
         }
+        return true;
+      }
+
+      // === Skills commands ===
+      case '/skills': {
+        const name = parts.slice(1).join(' ');
+        if (!name) {
+          const all = skillsManager.listSkills();
+          if (all.length === 0) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: 'No skills available. Create one in `.deepseek-code/skills/<name>/SKILL.md`.',
+            }]);
+          } else {
+            const list = all.map(s => `- **${s.name}**: ${s.description}`).join('\n');
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `**Available Skills (${all.length}):**\n${list}\n\nUse \`/skills <name>\` to run a skill.`,
+            }]);
+          }
+        } else {
+          const skill = skillsManager.getSkill(name);
+          if (!skill) {
+            setMessages(prev => [...prev, { role: 'assistant', content: `Skill "${name}" not found.` }]);
+          } else {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `**Running skill: ${skill.name}**\n\n${skill.prompt}`,
+            }]);
+          }
+        }
+        return true;
+      }
+
+      // === Subagent commands ===
+      case '/agents': {
+        const allAgents = subAgentManager['agents'];
+        if (allAgents.size === 0) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'No subagents configured. Create them in `.deepseek-code/agents/`.',
+          }]);
+        } else {
+          const list = Array.from(allAgents.keys()).map(name => `- **${name}**`).join('\n');
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Registered Subagents:**\n${list}`,
+          }]);
+        }
+        return true;
+      }
+
+      // === Stats ===
+      case '/stats': {
+        const mcpTools = mcpManager.getAllTools().length;
+        const skills = skillsManager.listSkills().length;
+        const agents = subAgentManager['agents'].size;
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `**Session Statistics:**\n- Messages: ${messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Approval Mode: ${approvalMode}`,
+        }]);
         return true;
       }
 
       default:
         return false;
     }
-  }, [messages]);
+  }, [messages, approvalMode]);
 
   const handleSubmit = useCallback(async (input: string) => {
     if (!input.trim() || isProcessing) return;
 
-    // Check for system slash commands
     if (input.startsWith('/')) {
       const handled = await handleSlashCommand(input);
       if (handled) return;
-
-      // Fall through to AI for unknown slash commands
     }
 
     const userMessage: ChatMessage = { role: 'user', content: input };
@@ -199,28 +296,31 @@ export function App({ config, options }: AppProps) {
     setStatusText('Processing...');
 
     try {
+      // Execute hooks
+      await hooksManager.execute('UserPromptSubmit', {
+        event: 'UserPromptSubmit',
+        projectDir: process.cwd(),
+      });
+
       const response = await apiRef.current.chat([...messages, userMessage]);
       const assistantMessage: ChatMessage = { role: 'assistant', content: response };
       setMessages(prev => [...prev, assistantMessage]);
 
-      // Auto-save session
       await saveSession({
         id: sessionIdRef.current,
         messageCount: messages.length + 2,
       });
     } catch (err) {
-      const errorMessage: ChatMessage = {
+      setMessages(prev => [...prev, {
         role: 'assistant',
         content: `Error: ${(err as Error).message}`,
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      }]);
     } finally {
       setIsProcessing(false);
       setStatusText('Ready');
     }
   }, [messages, isProcessing, handleSlashCommand]);
 
-  // Handle approval mode cycling
   useInput((_input, key) => {
     if (key.tab) {
       setApprovalMode(prev => {
@@ -231,13 +331,8 @@ export function App({ config, options }: AppProps) {
     }
   });
 
-  const handleClear = useCallback(() => {
-    setMessages([]);
-  }, []);
-
-  const handleExit = useCallback(() => {
-    exit();
-  }, [exit]);
+  const handleClear = useCallback(() => { setMessages([]); }, []);
+  const handleExit = useCallback(() => { exit(); }, [exit]);
 
   return (
     <Box flexDirection="column" height="100%">

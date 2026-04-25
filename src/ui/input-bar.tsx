@@ -15,9 +15,7 @@ export function InputBar({ onSubmit, disabled, onClear, onExit }: InputBarProps)
 
   useInput((_input, key) => {
     if (key.return && !key.shift) {
-      if (input.startsWith('/')) {
-        handleSlashCommand(input);
-      } else if (input.trim()) {
+      if (input.trim()) {
         onSubmit(input);
         setHistory(prev => [input, ...prev].slice(0, 100));
         setInput('');
@@ -44,36 +42,6 @@ export function InputBar({ onSubmit, disabled, onClear, onExit }: InputBarProps)
       onExit();
     }
   });
-
-  const handleSlashCommand = (cmd: string) => {
-    const parts = cmd.trim().split(/\s+/);
-    const command = parts[0]?.toLowerCase();
-
-    switch (command) {
-      case '/help':
-      case '/?':
-        onSubmit(`Available commands:
-  /help, /?     - Show this help
-  /clear        - Clear the conversation
-  /model <name> - Switch model
-  /quit, /exit  - Exit DeepSeek Code
-  /plan         - Enter plan mode
-  /stats        - Show session statistics`);
-        break;
-      case '/clear':
-        onClear();
-        break;
-      case '/quit':
-      case '/exit':
-        onExit();
-        break;
-      case '/plan':
-        onSubmit('Entering plan mode. Use /plan exit to return.');
-        break;
-      default:
-        onSubmit(`Unknown command: ${command}. Type /help for available commands.`);
-    }
-  };
 
   return (
     <Box borderStyle="round" borderColor="gray" paddingX={1} paddingY={0}>

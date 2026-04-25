@@ -20,6 +20,9 @@ Thumbs.db
 # DeepSeek Code runtime
 .deepseek-code/
 
+# Qwen Code AI agent data
+.qwen/
+
 # Chrome CLI Tools subproject
 chrome-cli-tools/node_modules/
 chrome-cli-tools/.git/

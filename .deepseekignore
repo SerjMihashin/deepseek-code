@@ -1,0 +1,15 @@
+# DeepSeek Code ignore file
+# Patterns listed here will be ignored by DeepSeek Code tools
+
+node_modules/
+dist/
+.git/
+.idea/
+.vscode/
+*.log
+*.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.env
+.env.local

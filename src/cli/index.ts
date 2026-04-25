@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { startInteractiveSession } from './interactive.js';
+import { headlessMode } from './headless.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,6 +29,10 @@ program
   .option('--debug', 'Enable debug logging')
   .option('-c, --continue', 'Continue last session')
   .option('-r, --resume [sessionId]', 'Resume a specific session')
+  .option('--json', 'JSON output mode (for CI/CD integration)')
+  .option('--headless', 'Headless mode (no TUI, pipe-friendly)')
+  .option('--theme <name>', 'Set color theme')
+  .option('--lang <code>', 'Set language (en, ru, zh)')
   .option('-v, --version', 'Show version')
   .option('-h, --help', 'Show help');
 
@@ -49,7 +54,26 @@ program.action(async (query: string[] | undefined, opts: Record<string, unknown>
     debug: !!opts.debug,
     continue_: !!opts.continue,
     resume: opts.resume as string | undefined,
+    json: !!opts.json,
+    headless: !!opts.headless,
+    theme: opts.theme as string | undefined,
+    lang: opts.lang as string | undefined,
   };
+
+  // Headless/JSON mode for CI/CD
+  if (options.headless || options.json) {
+    const prompt = options.prompt ?? options.query;
+    if (prompt) {
+      const result = await headlessMode(prompt, options);
+      if (options.json) {
+        console.log(JSON.stringify(result));
+      } else {
+        console.log(result.response);
+      }
+      process.exit(result.exitCode ?? 0);
+    }
+    return;
+  }
 
   await startInteractiveSession(options);
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { ChatMessage } from '../api/index.js';
+import { i18n } from '../core/i18n.js';
 
 interface ChatViewProps {
   messages: ChatMessage[];
@@ -9,7 +10,7 @@ interface ChatViewProps {
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
-  const label = isUser ? 'You' : isSystem ? 'System' : 'DeepSeek';
+  const label = isUser ? i18n.t('you') : isSystem ? i18n.t('system') : i18n.t('assistant');
 
   return (
     <Box flexDirection="column" marginBottom={1}>
@@ -30,17 +31,14 @@ export function ChatView({ messages }: ChatViewProps) {
     <Box flexDirection="column" flexGrow={1} paddingX={1}>
       {messages.length === 0 ? (
         <Box flexDirection="column" alignItems="center" marginTop={3}>
-          <Text bold>DeepSeek Code</Text>
-          <Text dimColor>AI-powered CLI agent for software development</Text>
-          <Text dimColor>Type your request to get started.</Text>
-          <Box marginTop={1}>
-            <Text dimColor>Tab: cycle approval mode | /help: show commands</Text>
-          </Box>
+          <Text bold>{i18n.t('welcome')}</Text>
+          <Text dimColor>{i18n.t('welcomeSubtitle')}</Text>
+          <Text dimColor>{i18n.t('welcomeHint')}</Text>
           <Box marginTop={1}>
             <Text dimColor>/remember, /forget, /memory | /checkpoint, /restore | /compress</Text>
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>/mcp, /skills, /agents, /stats | Tab: cycle mode</Text>
+            <Text dimColor>/mcp, /skills, /agents, /stats, /review | /theme, /lang, /extensions</Text>
           </Box>
         </Box>
       ) : (

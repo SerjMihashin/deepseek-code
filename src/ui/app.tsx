@@ -20,10 +20,46 @@ import { sandbox } from '../core/sandbox.js';
 import { gitIntegration } from '../core/git.js';
 import { scheduler, Scheduler } from '../core/scheduler.js';
 import type { ScheduledTask } from '../core/scheduler.js';
+import { themeManager } from '../core/themes.js';
+import { i18n, type Locale } from '../core/i18n.js';
+import { extensionManager } from '../core/extensions.js';
 
 interface AppProps {
   config: DeepSeekConfig;
   options: SessionOptions;
+}
+
+/**
+ * Generate contextual follow-up suggestions based on the last assistant message
+ */
+function generateFollowups(lastContent: string): string[] {
+  const suggestions: string[] = [];
+
+  if (lastContent.includes('error') || lastContent.includes('Error') || lastContent.includes('failed')) {
+    suggestions.push('Fix the error and try again');
+    suggestions.push('Show me the full error trace');
+    suggestions.push('Debug this issue step by step');
+  }
+
+  if (lastContent.includes('```') || lastContent.includes('code')) {
+    suggestions.push('Explain this code in detail');
+    suggestions.push('Add tests for this code');
+    suggestions.push('Optimize this code');
+  }
+
+  if (lastContent.includes('review') || lastContent.includes('Review')) {
+    suggestions.push('Apply the suggested fixes');
+    suggestions.push('Run a deeper review');
+    suggestions.push('Check for security issues');
+  }
+
+  if (suggestions.length === 0) {
+    suggestions.push('Continue with the next step');
+    suggestions.push('Explain what was done');
+    suggestions.push('Show me alternative approaches');
+  }
+
+  return suggestions;
 }
 
 export function App({ config, options }: AppProps) {
@@ -426,10 +462,90 @@ export function App({ config, options }: AppProps) {
         const skills = skillsManager.listSkills().length;
         const agents = subAgentManager['agents'].size;
         const tasks = scheduler.count;
+        const exts = extensionManager.listExtensions().length;
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `**Session Statistics:**\n- Messages: ${messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Approval Mode: ${approvalMode}`,
+          content: `**Session Statistics:**\n- Messages: ${messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${approvalMode}`,
         }]);
+        return true;
+      }
+
+      // === Theme ===
+      case '/theme': {
+        const name = parts[1];
+        if (!name) {
+          const themes = themeManager.listThemes().map(t => `- **${t.name}**: ${t.description}`).join('\n');
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Available Themes:**\n${themes}\n\nCurrent: **${themeManager.theme.name}**\nUse \`/theme <name>\` to switch.`,
+          }]);
+        } else if (themeManager.setTheme(name)) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✓ Theme switched to: **${name}**`,
+          }]);
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✗ Theme "${name}" not found. Use \`/theme\` to list available themes.`,
+          }]);
+        }
+        return true;
+      }
+
+      // === Language / i18n ===
+      case '/lang':
+      case '/language': {
+        const code = parts[1] as Locale | undefined;
+        if (!code) {
+          const locales = i18n.listLocales().map(l => `- **${l.code}**: ${l.name}`).join('\n');
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Available Languages:**\n${locales}\n\nCurrent: **${i18n.getLocale()}**\nUse \`/lang <code>\` to switch.`,
+          }]);
+        } else {
+          i18n.setLocale(code);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✓ Language switched to: **${code}**`,
+          }]);
+        }
+        return true;
+      }
+
+      // === Extensions ===
+      case '/extensions': {
+        const all = extensionManager.listExtensions();
+        if (all.length === 0) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'No extensions installed. Create them in `.deepseek-code/extensions/<name>/package.json`.',
+          }]);
+        } else {
+          const list = all.map(e => `- **${e.name}** v${e.version}: ${e.description}`).join('\n');
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Installed Extensions (${all.length}):**\n${list}`,
+          }]);
+        }
+        return true;
+      }
+
+      // === Followup Suggestions ===
+      case '/followup': {
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg || lastMsg.role !== 'assistant') {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'No assistant message to suggest followups for.',
+          }]);
+        } else {
+          const suggestions = generateFollowups(lastMsg.content);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Suggested Follow-ups:**\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+          }]);
+        }
         return true;
       }
 

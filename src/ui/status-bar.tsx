@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { ApprovalMode } from '../config/defaults.js';
+import { i18n } from '../core/i18n.js';
 
 interface StatusBarProps {
   mode: ApprovalMode;
@@ -33,7 +34,7 @@ export function StatusBar({ mode, status, messageCount }: StatusBarProps) {
         <Text dimColor>{status}</Text>
       </Box>
       <Box>
-        <Text dimColor>Messages: {messageCount}</Text>
+        <Text dimColor>{i18n.t('system')}: {messageCount}</Text>
       </Box>
     </Box>
   );

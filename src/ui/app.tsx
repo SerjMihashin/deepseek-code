@@ -15,6 +15,11 @@ import { subAgentManager, SubAgent } from '../core/subagent.js';
 import { skillsManager } from '../core/skills.js';
 import { hooksManager } from '../core/hooks.js';
 import { lspManager } from '../core/lsp.js';
+import { reviewCode, type ReviewOptions } from '../core/review.js';
+import { sandbox } from '../core/sandbox.js';
+import { gitIntegration } from '../core/git.js';
+import { scheduler, Scheduler } from '../core/scheduler.js';
+import type { ScheduledTask } from '../core/scheduler.js';
 
 interface AppProps {
   config: DeepSeekConfig;
@@ -265,14 +270,165 @@ export function App({ config, options }: AppProps) {
         return true;
       }
 
+      // === Review ===
+      case '/review': {
+        const sub = parts[1]?.toLowerCase();
+        const reviewOptions: ReviewOptions = {};
+
+        if (sub === 'all') {
+          reviewOptions.files = ['src'];
+        } else if (sub === 'diff') {
+          reviewOptions.gitRef = parts[2] ?? 'HEAD';
+        } else if (sub === 'auto') {
+          reviewOptions.autoFix = true;
+        }
+
+        setStatusText('Reviewing code...');
+        setMessages(prev => [...prev, { role: 'assistant', content: '🔍 Running code review...' }]);
+
+        try {
+          const result = await reviewCode(config, reviewOptions);
+          const issueList = result.issues.slice(0, 20).map(i =>
+            `- [${i.severity.toUpperCase()}] ${i.file}:${i.line} — ${i.message}`,
+          ).join('\n');
+
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Code Review Results**\n\nScore: **${result.score}/100**\nIssues: ${result.issues.length}\nDuration: ${(result.durationMs / 1000).toFixed(1)}s\n\n${issueList || '✅ No issues found.'}\n\n${result.summary}`,
+          }]);
+        } catch (err) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `Review failed: ${(err as Error).message}`,
+          }]);
+        }
+
+        setStatusText('Ready');
+        return true;
+      }
+
+      // === Sandbox ===
+      case '/sandbox': {
+        const cmd = parts.slice(1).join(' ');
+        if (!cmd) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Usage: /sandbox <command> — run command in isolated sandbox',
+          }]);
+          return true;
+        }
+
+        setStatusText('Running in sandbox...');
+        try {
+          const result = await sandbox.execute(cmd, { timeout: 60000 });
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `**Sandbox Result** (${(result.durationMs / 1000).toFixed(1)}s, exit: ${result.exitCode})\n\n${result.stdout.slice(0, 2000)}${result.stderr ? `\n\n**Stderr:**\n${result.stderr.slice(0, 1000)}` : ''}`,
+          }]);
+        } catch (err) {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `Sandbox error: ${(err as Error).message}`,
+          }]);
+        }
+        setStatusText('Ready');
+        return true;
+      }
+
+      // === Git commands ===
+      case '/git': {
+        const sub = parts[1]?.toLowerCase();
+
+        if (sub === 'commit' || !sub) {
+          const msg = parts.slice(2).join(' ') || 'Update';
+          const result = await gitIntegration.commit({ message: msg, all: true });
+          if (result.success) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `✓ Committed: \`${msg}\` (${result.hash?.slice(0, 7)})`,
+            }]);
+          } else {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `✗ Commit failed: ${result.error}`,
+            }]);
+          }
+        } else if (sub === 'branch') {
+          const name = parts[2];
+          if (!name) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'Usage: /git branch <name>' }]);
+            return true;
+          }
+          const result = await gitIntegration.createBranch({ name });
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: result.success ? `✓ Switched to branch: ${name}` : `✗ ${result.error}`,
+          }]);
+        } else if (sub === 'diff') {
+          const diff = await gitIntegration.getDiff(parts[2]);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `\`\`\`diff\n${diff.slice(0, 3000)}\n\`\`\``,
+          }]);
+        } else if (sub === 'status') {
+          const { execSync } = await import('node:child_process');
+          const status = execSync('git status', { encoding: 'utf-8', windowsHide: true });
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `\`\`\`\n${status}\n\`\`\``,
+          }]);
+        }
+        return true;
+      }
+
+      // === Loop / Scheduler ===
+      case '/loop': {
+        const sub = parts[1]?.toLowerCase();
+
+        if (sub === 'list') {
+          const tasks = scheduler.listTasks();
+          if (tasks.length === 0) {
+            setMessages(prev => [...prev, { role: 'assistant', content: 'No active tasks.' }]);
+          } else {
+            const list = tasks.map((t, i) =>
+              `${i + 1}. **${t.prompt.slice(0, 40)}** — every ${(t.interval / 1000).toFixed(0)}s (${t.runCount}/${t.maxRuns ?? '∞'})`,
+            ).join('\n');
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `**Active Tasks:**\n${list}`,
+            }]);
+          }
+        } else if (sub === 'clear') {
+          scheduler.clearAll();
+          setMessages(prev => [...prev, { role: 'assistant', content: '✓ All tasks cleared.' }]);
+        } else if (sub) {
+          // Parse interval and prompt
+          const intervalStr = sub;
+          const prompt = parts.slice(2).join(' ') || 'check status';
+          const intervalMs = Scheduler.parseInterval(intervalStr);
+          const task = scheduler.addTask(prompt, intervalMs);
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `✓ Task scheduled: "${prompt}" every ${intervalStr} (ID: ${task.id})`,
+          }]);
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: 'Usage:\n  /loop <interval> <prompt> — schedule task\n  /loop list — list tasks\n  /loop clear — clear all tasks',
+          }]);
+        }
+        return true;
+      }
+
       // === Stats ===
       case '/stats': {
         const mcpTools = mcpManager.getAllTools().length;
         const skills = skillsManager.listSkills().length;
         const agents = subAgentManager['agents'].size;
+        const tasks = scheduler.count;
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `**Session Statistics:**\n- Messages: ${messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Approval Mode: ${approvalMode}`,
+          content: `**Session Statistics:**\n- Messages: ${messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Approval Mode: ${approvalMode}`,
         }]);
         return true;
       }

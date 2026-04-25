@@ -1,20 +1,19 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { startInteractiveSession } from './interactive.js';
-import { headlessMode } from './headless.js';
+import { Command } from 'commander'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import type { CliOptions } from './interactive.js'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 // Read version from package.json
-const pkgPath = join(__dirname, '..', '..', 'package.json');
-const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string };
+const pkgPath = join(__dirname, '..', '..', 'package.json')
+const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string }
 
-const program = new Command();
+const program = new Command()
 
 program
   .name('deepseek-code')
@@ -33,18 +32,17 @@ program
   .option('--headless', 'Headless mode (no TUI, pipe-friendly)')
   .option('--theme <name>', 'Set color theme')
   .option('--lang <code>', 'Set language (en, ru, zh)')
-  .option('-v, --version', 'Show version')
-  .option('-h, --help', 'Show help');
+  .helpOption(false) // Disable built-in --help, we handle it ourselves
 
 program.hook('preAction', (thisCommand) => {
-  const opts = thisCommand.optsWithGlobals();
+  const opts = thisCommand.optsWithGlobals()
   if (opts.debug) {
-    process.env.DEEPSEEK_CODE_DEBUG = '1';
+    process.env.DEEPSEEK_CODE_DEBUG = '1'
   }
-});
+})
 
 program.action(async (query: string[] | undefined, opts: Record<string, unknown>) => {
-  const options = {
+  const options: CliOptions = {
     query: query?.join(' ') ?? undefined,
     prompt: opts.prompt as string | undefined,
     promptInteractive: opts.promptInteractive as string | undefined,
@@ -58,40 +56,45 @@ program.action(async (query: string[] | undefined, opts: Record<string, unknown>
     headless: !!opts.headless,
     theme: opts.theme as string | undefined,
     lang: opts.lang as string | undefined,
-  };
+  }
 
   // Headless/JSON mode for CI/CD
   if (options.headless || options.json) {
-    const prompt = options.prompt ?? options.query;
+    const { headlessMode } = await import('./headless.js')
+    const prompt = options.prompt ?? options.query
     if (prompt) {
-      const result = await headlessMode(prompt, options);
+      const result = await headlessMode(prompt, options)
       if (options.json) {
-        console.log(JSON.stringify(result));
+        console.log(JSON.stringify(result))
       } else {
-        console.log(result.response);
+        console.log(result.response)
       }
-      process.exit(result.exitCode ?? 0);
+      process.exit(result.exitCode ?? 0)
     }
-    return;
+    return
   }
 
-  await startInteractiveSession(options);
-});
+  const { startInteractiveSession } = await import('./interactive.js')
+  await startInteractiveSession(options)
+})
 
-export async function run(args: string[]): Promise<void> {
-  await program.parseAsync(args, { from: 'user' });
+export async function run (args: string[]): Promise<void> {
+  // Handle --help and --version before loading Ink
+  if (args.includes('--help') || args.includes('-h')) {
+    program.outputHelp()
+    return
+  }
+  if (args.includes('--version') || args.includes('-V')) {
+    console.log(pkg.version)
+    return
+  }
+  // Handle --help passed via commander's parse
+  // Commander may intercept --help before action, but we also handle it here
+  await program.parseAsync(args, { from: 'user' })
 }
 
-// Allow running directly
-const isMainModule = process.argv[1] && (
-  process.argv[1] === __filename ||
-  process.argv[1].endsWith('cli.js') ||
-  process.argv[1].endsWith('deepseek-code')
-);
-
-if (isMainModule) {
-  run(process.argv).catch((err) => {
-    console.error('Fatal error:', err);
-    process.exit(1);
-  });
-}
+// Always run when this module is loaded
+run(process.argv).catch((err) => {
+  console.error('Fatal error:', err)
+  process.exit(1)
+})

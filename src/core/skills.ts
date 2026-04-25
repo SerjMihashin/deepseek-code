@@ -1,7 +1,7 @@
-import { readFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 export interface SkillDefinition {
   name: string;
@@ -31,39 +31,39 @@ export interface SkillResult {
  * 3. Bundled: src/skills/<name>/SKILL.md (built-in)
  */
 export class SkillsManager {
-  private skills: Map<string, SkillDefinition> = new Map();
+  private skills: Map<string, SkillDefinition> = new Map()
 
-  async loadAll(): Promise<void> {
-    this.skills.clear();
+  async loadAll (): Promise<void> {
+    this.skills.clear()
 
     // Load from all locations
     const locations = [
       join(process.cwd(), '.deepseek-code', 'skills'),
       join(homedir(), '.deepseek-code', 'skills'),
-    ];
+    ]
 
     for (const baseDir of locations) {
-      await this.loadFromDir(baseDir);
+      await this.loadFromDir(baseDir)
     }
   }
 
-  private async loadFromDir(baseDir: string): Promise<void> {
-    if (!existsSync(baseDir)) return;
+  private async loadFromDir (baseDir: string): Promise<void> {
+    if (!existsSync(baseDir)) return
 
     try {
-      const entries = await readdir(baseDir, { withFileTypes: true });
+      const entries = await readdir(baseDir, { withFileTypes: true })
 
       for (const entry of entries) {
         if (entry.isDirectory()) {
-          const skillDir = join(baseDir, entry.name);
-          const skillFile = join(skillDir, 'SKILL.md');
+          const skillDir = join(baseDir, entry.name)
+          const skillFile = join(skillDir, 'SKILL.md')
 
           if (existsSync(skillFile)) {
-            const skill = await this.parseSkillFile(skillFile);
+            const skill = await this.parseSkillFile(skillFile)
             if (skill) {
               // Project skills override user skills
               if (!this.skills.has(skill.name)) {
-                this.skills.set(skill.name, skill);
+                this.skills.set(skill.name, skill)
               }
             }
           }
@@ -72,21 +72,21 @@ export class SkillsManager {
     } catch { /* ignore */ }
   }
 
-  private async parseSkillFile(filePath: string): Promise<SkillDefinition | null> {
+  private async parseSkillFile (filePath: string): Promise<SkillDefinition | null> {
     try {
-      const content = await readFile(filePath, 'utf-8');
-      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-      if (!frontmatterMatch) return null;
+      const content = await readFile(filePath, 'utf-8')
+      const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+      if (!frontmatterMatch) return null
 
-      const frontmatter: Record<string, string> = {};
+      const frontmatter: Record<string, string> = {}
       for (const line of frontmatterMatch[1].split('\n')) {
-        const [key, ...rest] = line.split(':');
+        const [key, ...rest] = line.split(':')
         if (key && rest.length > 0) {
-          frontmatter[key.trim()] = rest.join(':').trim();
+          frontmatter[key.trim()] = rest.join(':').trim()
         }
       }
 
-      if (!frontmatter.name) return null;
+      if (!frontmatter.name) return null
 
       return {
         name: frontmatter.name,
@@ -94,27 +94,27 @@ export class SkillsManager {
         prompt: frontmatterMatch[2].trim(),
         requiresTools: frontmatter.tools ? frontmatter.tools.split(',').map(t => t.trim()) : undefined,
         model: frontmatter.model,
-      };
+      }
     } catch {
-      return null;
+      return null
     }
   }
 
-  getSkill(name: string): SkillDefinition | undefined {
-    return this.skills.get(name);
+  getSkill (name: string): SkillDefinition | undefined {
+    return this.skills.get(name)
   }
 
-  listSkills(): SkillDefinition[] {
-    return Array.from(this.skills.values());
+  listSkills (): SkillDefinition[] {
+    return Array.from(this.skills.values())
   }
 
-  findSkills(query: string): SkillDefinition[] {
-    const lower = query.toLowerCase();
+  findSkills (query: string): SkillDefinition[] {
+    const lower = query.toLowerCase()
     return this.listSkills().filter(
-      s => s.name.toLowerCase().includes(lower) || s.description.toLowerCase().includes(lower),
-    );
+      s => s.name.toLowerCase().includes(lower) || s.description.toLowerCase().includes(lower)
+    )
   }
 }
 
 // Singleton
-export const skillsManager = new SkillsManager();
+export const skillsManager = new SkillsManager()

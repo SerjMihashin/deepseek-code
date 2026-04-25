@@ -1,7 +1,7 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 export interface ThemeColors {
   primary: string;
@@ -50,7 +50,7 @@ const DEFAULT_THEME: Theme = {
     assistantBubble: 'blue',
     systemBubble: 'yellow',
   },
-};
+}
 
 const LIGHT_THEME: Theme = {
   name: 'light',
@@ -73,7 +73,7 @@ const LIGHT_THEME: Theme = {
     assistantBubble: '#6c63ff',
     systemBubble: '#ffc107',
   },
-};
+}
 
 const DRACULA_THEME: Theme = {
   name: 'dracula',
@@ -96,7 +96,7 @@ const DRACULA_THEME: Theme = {
     assistantBubble: '#ff79c6',
     systemBubble: '#f1fa8c',
   },
-};
+}
 
 const NORD_THEME: Theme = {
   name: 'nord',
@@ -119,7 +119,7 @@ const NORD_THEME: Theme = {
     assistantBubble: '#81a1c1',
     systemBubble: '#ebcb8b',
   },
-};
+}
 
 const SOLARIZED_THEME: Theme = {
   name: 'solarized',
@@ -142,7 +142,7 @@ const SOLARIZED_THEME: Theme = {
     assistantBubble: '#6c71c4',
     systemBubble: '#b58900',
   },
-};
+}
 
 const BUILT_IN_THEMES: Record<string, Theme> = {
   default: DEFAULT_THEME,
@@ -150,52 +150,52 @@ const BUILT_IN_THEMES: Record<string, Theme> = {
   dracula: DRACULA_THEME,
   nord: NORD_THEME,
   solarized: SOLARIZED_THEME,
-};
+}
 
 export class ThemeManager {
-  private currentTheme: Theme = DEFAULT_THEME;
-  private customThemes: Map<string, Theme> = new Map();
+  private currentTheme: Theme = DEFAULT_THEME
+  private customThemes: Map<string, Theme> = new Map()
 
-  get theme(): Theme {
-    return this.currentTheme;
+  get theme (): Theme {
+    return this.currentTheme
   }
 
-  setTheme(name: string): boolean {
+  setTheme (name: string): boolean {
     if (BUILT_IN_THEMES[name]) {
-      this.currentTheme = BUILT_IN_THEMES[name];
-      return true;
+      this.currentTheme = BUILT_IN_THEMES[name]
+      return true
     }
     if (this.customThemes.has(name)) {
-      this.currentTheme = this.customThemes.get(name)!;
-      return true;
+      this.currentTheme = this.customThemes.get(name)!
+      return true
     }
-    return false;
+    return false
   }
 
-  listThemes(): Theme[] {
-    return [...Object.values(BUILT_IN_THEMES), ...Array.from(this.customThemes.values())];
+  listThemes (): Theme[] {
+    return [...Object.values(BUILT_IN_THEMES), ...Array.from(this.customThemes.values())]
   }
 
-  async loadCustomThemes(): Promise<void> {
-    const themesDir = join(homedir(), '.deepseek-code', 'themes');
-    if (!existsSync(themesDir)) return;
+  async loadCustomThemes (): Promise<void> {
+    const themesDir = join(homedir(), '.deepseek-code', 'themes')
+    if (!existsSync(themesDir)) return
 
     try {
-      const files = await (await import('node:fs/promises')).readdir(themesDir);
+      const files = await (await import('node:fs/promises')).readdir(themesDir)
       for (const file of files.filter(f => f.endsWith('.json'))) {
         try {
-          const content = await readFile(join(themesDir, file), 'utf-8');
-          const theme = JSON.parse(content) as Theme;
-          this.customThemes.set(theme.name, theme);
+          const content = await readFile(join(themesDir, file), 'utf-8')
+          const theme = JSON.parse(content) as Theme
+          this.customThemes.set(theme.name, theme)
         } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
   }
 
-  getColors(): ThemeColors {
-    return this.currentTheme.colors;
+  getColors (): ThemeColors {
+    return this.currentTheme.colors
   }
 }
 
 // Singleton
-export const themeManager = new ThemeManager();
+export const themeManager = new ThemeManager()

@@ -1,0 +1,36 @@
+# Зависимости Node.js
+node_modules/
+package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Временные файлы
+*.log
+*.tmp
+*.temp
+Thumbs.db
+
+# Профиль Chrome (временные данные)
+chrome-user-data/
+
+# Скриншоты
+*.png
+*.jpg
+*.jpeg
+!docs/*.png
+
+# Секреты и ключи
+.env
+.env.local
+*.key
+*.pem
+
+# ОС
+.DS_Store
+desktop.ini
+
+PUBLISH_CHECKLIST.md
+GITHUB_GUIDE.md

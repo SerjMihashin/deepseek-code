@@ -1,10 +1,10 @@
-import { execSync } from 'node:child_process';
-import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { join, basename } from 'node:path';
-import { homedir } from 'node:os';
-import { DeepSeekAPI, type ChatMessage } from '../api/index.js';
-import type { DeepSeekConfig } from '../config/defaults.js';
+import { execSync } from 'node:child_process'
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { join, basename } from 'node:path'
+import { homedir } from 'node:os'
+import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
+import type { DeepSeekConfig } from '../config/defaults.js'
 
 export interface ReviewOptions {
   /** Files to review (empty = all changed files) */
@@ -42,7 +42,7 @@ const LINTER_COMMANDS: Record<string, string> = {
   ts: 'npx tsc --noEmit 2>&1 || true',
   eslint: 'npx eslint . --format compact 2>&1 || true',
   // Add more linters as needed
-};
+}
 
 /**
  * Multi-step code review pipeline:
@@ -53,17 +53,17 @@ const LINTER_COMMANDS: Record<string, string> = {
  * 5. Generate summary and score
  * 6. Auto-fix if enabled
  */
-export async function reviewCode(
+export async function reviewCode (
   config: DeepSeekConfig,
-  options: ReviewOptions,
+  options: ReviewOptions
 ): Promise<ReviewResult> {
-  const startTime = Date.now();
-  const api = new DeepSeekAPI(config);
-  const issues: ReviewIssue[] = [];
-  let linterOutput = '';
+  const startTime = Date.now()
+  const api = new DeepSeekAPI(config)
+  const issues: ReviewIssue[] = []
+  let linterOutput = ''
 
   // Step 1: Determine scope
-  const filesToReview = await determineScope(options);
+  const filesToReview = await determineScope(options)
 
   if (filesToReview.length === 0) {
     return {
@@ -71,20 +71,20 @@ export async function reviewCode(
       summary: 'No files to review.',
       score: 100,
       durationMs: Date.now() - startTime,
-    };
+    }
   }
 
   // Step 2: Run linters
   if (options.runLinters !== false) {
-    linterOutput = await runLinters(filesToReview);
+    linterOutput = await runLinters(filesToReview)
   }
 
   // Step 3: AI analysis
-  const fileContents: string[] = [];
+  const fileContents: string[] = []
   for (const file of filesToReview.slice(0, 10)) { // Limit to 10 files
     try {
-      const content = await readFile(file, 'utf-8');
-      fileContents.push(`=== ${file} ===\n${content.slice(0, 5000)}`); // Limit per file
+      const content = await readFile(file, 'utf-8')
+      fileContents.push(`=== ${file} ===\n${content.slice(0, 5000)}`) // Limit per file
     } catch { /* skip binary/unreadable */ }
   }
 
@@ -108,19 +108,19 @@ Respond with a JSON array of issues and a summary. Format:
   "summary": "Overall assessment...",
   "score": 85
 }
-\`\`\``;
+\`\`\``
 
   try {
     const response = await api.chat([
       { role: 'system', content: 'You are a code review expert. Analyze code and return structured JSON results.' },
       { role: 'user', content: reviewPrompt },
-    ]);
+    ])
 
     // Parse JSON from response
-    const jsonMatch = response.match(/```json\n([\s\S]*?)\n```/);
+    const jsonMatch = response.content.match(/```json\n([\s\S]*?)\n```/)
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[1]);
-      issues.push(...(parsed.issues ?? []));
+      const parsed = JSON.parse(jsonMatch[1])
+      issues.push(...(parsed.issues ?? []))
     }
   } catch { /* ignore parse errors */ }
 
@@ -129,7 +129,7 @@ Respond with a JSON array of issues and a summary. Format:
     // In a real implementation, this would apply fixes
   }
 
-  const score = issues.length === 0 ? 100 : Math.max(0, 100 - issues.length * 5);
+  const score = issues.length === 0 ? 100 : Math.max(0, 100 - issues.length * 5)
 
   return {
     issues,
@@ -137,35 +137,35 @@ Respond with a JSON array of issues and a summary. Format:
     score,
     linterOutput,
     durationMs: Date.now() - startTime,
-  };
+  }
 }
 
-async function determineScope(options: ReviewOptions): Promise<string[]> {
+async function determineScope (options: ReviewOptions): Promise<string[]> {
   if (options.files && options.files.length > 0) {
-    return options.files;
+    return options.files
   }
 
   if (options.prUrl) {
     // Cross-repo review: fetch PR diff
-    return [];
+    return []
   }
 
   // Git diff against ref or HEAD
   try {
-    const ref = options.gitRef ?? 'HEAD';
+    const ref = options.gitRef ?? 'HEAD'
     const output = execSync(`git diff --name-only ${ref}`, {
       encoding: 'utf-8',
       windowsHide: true,
-    });
-    return output.split('\n').filter(Boolean).map(f => join(process.cwd(), f));
+    })
+    return output.split('\n').filter(Boolean).map(f => join(process.cwd(), f))
   } catch {
-    return [];
+    return []
   }
 }
 
-async function runLinters(files: string[]): Promise<string> {
-  const output: string[] = [];
-  const hasTsFiles = files.some(f => f.endsWith('.ts') || f.endsWith('.tsx'));
+async function runLinters (files: string[]): Promise<string> {
+  const output: string[] = []
+  const hasTsFiles = files.some(f => f.endsWith('.ts') || f.endsWith('.tsx'))
 
   if (hasTsFiles) {
     try {
@@ -173,8 +173,8 @@ async function runLinters(files: string[]): Promise<string> {
         encoding: 'utf-8',
         timeout: 60000,
         windowsHide: true,
-      });
-      if (result.trim()) output.push(`[tsc]\n${result}`);
+      })
+      if (result.trim()) output.push(`[tsc]\n${result}`)
     } catch { /* ignore */ }
 
     try {
@@ -182,10 +182,10 @@ async function runLinters(files: string[]): Promise<string> {
         encoding: 'utf-8',
         timeout: 60000,
         windowsHide: true,
-      });
-      if (result.trim()) output.push(`[eslint]\n${result}`);
+      })
+      if (result.trim()) output.push(`[eslint]\n${result}`)
     } catch { /* ignore */ }
   }
 
-  return output.join('\n\n');
+  return output.join('\n\n')
 }

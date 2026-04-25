@@ -1,7 +1,7 @@
-import { readFile, readdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 export interface ExtensionManifest {
   name: string;
@@ -48,30 +48,30 @@ export interface ExtensionAPI {
  * Each extension has a package.json manifest and a main JS/TS file.
  */
 export class ExtensionManager {
-  private extensions: Map<string, ExtensionManifest> = new Map();
-  private loaded = new Set<string>();
+  private extensions: Map<string, ExtensionManifest> = new Map()
+  private loaded = new Set<string>()
 
-  async discover(): Promise<ExtensionManifest[]> {
-    const all: ExtensionManifest[] = [];
+  async discover (): Promise<ExtensionManifest[]> {
+    const all: ExtensionManifest[] = []
     const locations = [
       join(process.cwd(), '.deepseek-code', 'extensions'),
       join(homedir(), '.deepseek-code', 'extensions'),
-    ];
+    ]
 
     for (const baseDir of locations) {
-      if (!existsSync(baseDir)) continue;
+      if (!existsSync(baseDir)) continue
       try {
-        const entries = await readdir(baseDir, { withFileTypes: true });
+        const entries = await readdir(baseDir, { withFileTypes: true })
         for (const entry of entries) {
           if (entry.isDirectory()) {
-            const manifestPath = join(baseDir, entry.name, 'package.json');
+            const manifestPath = join(baseDir, entry.name, 'package.json')
             if (existsSync(manifestPath)) {
               try {
-                const content = await readFile(manifestPath, 'utf-8');
-                const manifest = JSON.parse(content) as ExtensionManifest;
-                manifest.name = entry.name;
-                this.extensions.set(entry.name, manifest);
-                all.push(manifest);
+                const content = await readFile(manifestPath, 'utf-8')
+                const manifest = JSON.parse(content) as ExtensionManifest
+                manifest.name = entry.name
+                this.extensions.set(entry.name, manifest)
+                all.push(manifest)
               } catch { /* ignore */ }
             }
           }
@@ -79,47 +79,47 @@ export class ExtensionManager {
       } catch { /* ignore */ }
     }
 
-    return all;
+    return all
   }
 
-  async loadExtension(name: string): Promise<boolean> {
-    if (this.loaded.has(name)) return true;
+  async loadExtension (name: string): Promise<boolean> {
+    if (this.loaded.has(name)) return true
 
-    const manifest = this.extensions.get(name);
-    if (!manifest) return false;
+    const manifest = this.extensions.get(name)
+    if (!manifest) return false
 
     // Check dependencies
     if (manifest.dependencies) {
       for (const dep of manifest.dependencies) {
         if (!this.loaded.has(dep)) {
-          const loaded = await this.loadExtension(dep);
+          const loaded = await this.loadExtension(dep)
           if (!loaded) {
-            console.error(`Extension "${name}" depends on "${dep}" which could not be loaded`);
-            return false;
+            console.error(`Extension "${name}" depends on "${dep}" which could not be loaded`)
+            return false
           }
         }
       }
     }
 
-    this.loaded.add(name);
-    return true;
+    this.loaded.add(name)
+    return true
   }
 
-  async loadAll(): Promise<void> {
-    await this.discover();
+  async loadAll (): Promise<void> {
+    await this.discover()
     for (const name of this.extensions.keys()) {
-      await this.loadExtension(name);
+      await this.loadExtension(name)
     }
   }
 
-  getExtension(name: string): ExtensionManifest | undefined {
-    return this.extensions.get(name);
+  getExtension (name: string): ExtensionManifest | undefined {
+    return this.extensions.get(name)
   }
 
-  listExtensions(): ExtensionManifest[] {
-    return Array.from(this.extensions.values());
+  listExtensions (): ExtensionManifest[] {
+    return Array.from(this.extensions.values())
   }
 }
 
 // Singleton
-export const extensionManager = new ExtensionManager();
+export const extensionManager = new ExtensionManager()

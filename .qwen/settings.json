@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(C:\\Users\\SerjMikhashin\\.deepseek-code/**)",
+      "WebFetch(github.com)",
+      "WebFetch(docs.anthropic.com)",
+      "WebFetch(raw.githubusercontent.com)",
+      "Read(C:\\Scripts\\chrome-cli-tools/**)"
+    ]
+  },
+  "$version": 3
+}

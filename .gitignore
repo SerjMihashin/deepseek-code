@@ -19,3 +19,7 @@ Thumbs.db
 
 # DeepSeek Code runtime
 .deepseek-code/
+
+# Chrome CLI Tools subproject
+chrome-cli-tools/node_modules/
+chrome-cli-tools/.git/

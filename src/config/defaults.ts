@@ -19,7 +19,7 @@ export interface DeepSeekConfig {
   systemPrompt?: string;
 }
 
-export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'yolo';
+export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'yolo'
 
 export const DEFAULT_CONFIG: DeepSeekConfig = {
   baseUrl: 'https://api.deepseek.com',
@@ -40,7 +40,7 @@ Guidelines:
 - Explain your reasoning when making significant changes
 - Ask clarifying questions when requirements are ambiguous
 - Always verify changes by running tests when applicable`,
-};
+}
 
-export const CONFIG_FILE_NAME = 'settings.json';
-export const CONFIG_DIR_NAME = '.deepseek-code';
+export const CONFIG_FILE_NAME = 'settings.json'
+export const CONFIG_DIR_NAME = '.deepseek-code'

@@ -1,11 +1,11 @@
-import { render } from 'ink';
-import React from 'react';
-import { App } from '../ui/app.js';
-import { loadConfig } from '../config/loader.js';
-import { themeManager } from '../core/themes.js';
-import { i18n } from '../core/i18n.js';
+import { render } from 'ink'
+import React from 'react'
+import { App } from '../ui/app.js'
+import { loadConfig } from '../config/loader.js'
+import { themeManager } from '../core/themes.js'
+import { i18n } from '../core/i18n.js'
 
-export interface SessionOptions {
+export interface CliOptions {
   query?: string;
   prompt?: string;
   promptInteractive?: string;
@@ -21,23 +21,25 @@ export interface SessionOptions {
   lang?: string;
 }
 
-export async function startInteractiveSession(options: SessionOptions): Promise<void> {
-  const config = await loadConfig();
+export type SessionOptions = CliOptions
+
+export async function startInteractiveSession (options: SessionOptions): Promise<void> {
+  const config = await loadConfig()
 
   // Apply CLI theme/lang overrides
   if (options.theme) {
-    themeManager.setTheme(options.theme);
+    themeManager.setTheme(options.theme)
   }
   if (options.lang) {
-    i18n.setLocale(options.lang as 'en' | 'ru' | 'zh');
+    i18n.setLocale(options.lang as 'en' | 'ru' | 'zh')
   }
 
   const { waitUntilExit } = render(
     React.createElement(App, {
       config,
       options,
-    }),
-  );
+    })
+  )
 
-  await waitUntilExit();
+  await waitUntilExit()
 }

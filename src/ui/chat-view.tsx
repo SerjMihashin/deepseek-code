@@ -3,6 +3,8 @@ import { Box, Text } from 'ink'
 import type { ChatMessage } from '../api/index.js'
 import { i18n } from '../core/i18n.js'
 import { themeManager } from '../core/themes.js'
+import { MarkdownView } from './markdown-view.js'
+import { MatrixRain } from './matrix-rain.js'
 
 interface ChatViewProps {
   messages: ChatMessage[];
@@ -28,7 +30,9 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
         </Text>
       </Box>
       <Box marginLeft={2} flexDirection='column'>
-        <Text wrap='wrap'>{textContent}</Text>
+        {isUser || isSystem
+          ? <Text wrap='wrap'>{textContent}</Text>
+          : <MarkdownView text={textContent} />}
         {hasImage && <Text color={colors.info}>[📎 image attached]</Text>}
       </Box>
     </Box>
@@ -47,12 +51,13 @@ export const ChatView = React.memo(
     <Box flexDirection='column' flexGrow={1} paddingX={1}>
       {visibleMessages.length === 0
         ? (
-          <Box flexDirection='column' alignItems='center' marginTop={3}>
+          <Box flexDirection='column' alignItems='center' marginTop={2}>
+            {themeManager.theme.name === 'matrix' && <MatrixRain />}
             <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
             <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
             <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
             <Box marginTop={1}>
-              <Text color={colors.textMuted}>/help — команды  |  /setup — настройка</Text>
+              <Text color={colors.textMuted}>/help — commands  |  /setup — settings  |  Alt+V — paste image</Text>
             </Box>
           </Box>
           )

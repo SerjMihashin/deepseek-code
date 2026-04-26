@@ -122,7 +122,7 @@ Teach the agent to use the browser naturally when a task implies rendered UI or 
 - [x] Tighten plan/default/yolo semantics around browser actions
 - [x] Improve TUI messaging so browser actions are legible and concise
 - [x] Document browser usage philosophy in user-facing docs
-- [ ] Add commit hash for this iteration
+- [x] Add commit hash for this iteration
 
 Expected result:
 - user does not need to explicitly say “open browser” for relevant tasks.
@@ -132,6 +132,9 @@ Notes:
 - the `chrome` tool description now frames browser checks as the primary tool for localhost/UI/browser-debug tasks;
 - `auto-edit` mode now auto-approves `chrome`, reducing friction for autonomous UI validation;
 - user-facing docs now describe the browser layer as a native runtime rather than an add-on.
+
+Commit:
+- `b46afe4` — `feat: teach agent proactive browser usage`
 
 ---
 

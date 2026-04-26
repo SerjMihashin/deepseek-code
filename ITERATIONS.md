@@ -188,6 +188,9 @@ Notes:
 - session persistence now captures approval mode, prompt/response summaries, tool-call count, and artifact paths;
 - headless output is now suitable for chaining in CI and for another agent to resume from structured evidence.
 
+Progress commit:
+- `2a5157f` — `feat: add execution bundles for autonomous runs`
+
 ---
 
 ## Handoff Notes

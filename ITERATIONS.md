@@ -95,7 +95,7 @@ Make the browser layer feel native, reliable, and useful without explicit user p
 - [x] Decide the role of vendored `chrome-cli-tools/`:
 - [x] Option A: compatibility/reference only, clearly documented
 - [ ] Option B: real adapter/backend usage, if actually wired
-- [ ] Add commit hash for this iteration
+- [x] Add commit hash for this iteration
 
 Expected result:
 - browser is not “extra functionality” but a core agent runtime.
@@ -106,23 +106,32 @@ Notes:
 - screenshots default to `.deepseek-code/artifacts/browser/`;
 - current architecture decision: vendored `chrome-cli-tools/` is reference/compatibility material, not the canonical agent runtime.
 
+Commit:
+- `d5b5060` — `feat: harden native browser runtime`
+
 ---
 
 ## Iteration 4 — Agent Browser Intelligence
-Status: Planned
+Status: Completed
 
 Goal:
 Teach the agent to use the browser naturally when a task implies rendered UI or web validation.
 
-- [ ] Update system prompt guidance around browser-first validation when needed
-- [ ] Improve tool descriptions so the model better chooses browser actions
-- [ ] Tighten plan/default/yolo semantics around browser actions
-- [ ] Improve TUI messaging so browser actions are legible and concise
-- [ ] Document browser usage philosophy in user-facing docs
+- [x] Update system prompt guidance around browser-first validation when needed
+- [x] Improve tool descriptions so the model better chooses browser actions
+- [x] Tighten plan/default/yolo semantics around browser actions
+- [x] Improve TUI messaging so browser actions are legible and concise
+- [x] Document browser usage philosophy in user-facing docs
 - [ ] Add commit hash for this iteration
 
 Expected result:
 - user does not need to explicitly say “open browser” for relevant tasks.
+
+Notes:
+- the system prompt now explicitly tells the agent to use `chrome` without waiting for a literal “open browser” request when the task implies UI/browser validation;
+- the `chrome` tool description now frames browser checks as the primary tool for localhost/UI/browser-debug tasks;
+- `auto-edit` mode now auto-approves `chrome`, reducing friction for autonomous UI validation;
+- user-facing docs now describe the browser layer as a native runtime rather than an add-on.
 
 ---
 

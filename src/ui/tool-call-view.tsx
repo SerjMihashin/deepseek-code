@@ -11,7 +11,7 @@ const statusIcons: Record<string, string> = {
   running: '🔄',
   completed: '✅',
   failed: '❌',
-  rejected: '⛔',
+  rejected: '🚫',
 }
 
 const statusColors: Record<string, string> = {
@@ -32,18 +32,13 @@ function formatArgs (args: Record<string, unknown>): string {
   const entries = Object.entries(args)
   if (entries.length === 0) return ''
 
-  const parts = entries.map(([key, value]) => {
+  return entries.map(([key, value]) => {
     const str = typeof value === 'string' ? value : JSON.stringify(value)
-    const truncated = str.length > 80 ? str.slice(0, 77) + '...' : str
+    const truncated = str.length > 80 ? `${str.slice(0, 77)}...` : str
     return `${key}: ${truncated}`
-  })
-
-  return parts.join(', ')
+  }).join(', ')
 }
 
-/**
- * Форматирует Chrome-специфичные аргументы для понятного отображения.
- */
 function formatChromeArgs (args: Record<string, unknown>): string {
   const action = args.action as string
   const url = args.url as string
@@ -51,39 +46,41 @@ function formatChromeArgs (args: Record<string, unknown>): string {
   const text = args.text as string
   const code = args.code as string
   const sameTab = args.sameTab as boolean
+  const headless = args.headless as boolean
 
   const parts: string[] = []
-
   if (url) parts.push(url)
   if (selector) parts.push(`"${selector}"`)
   if (text) parts.push(`"${text}"`)
   if (code) {
-    const truncated = code.length > 50 ? code.slice(0, 47) + '...' : code
+    const truncated = code.length > 50 ? `${code.slice(0, 47)}...` : code
     parts.push(`\`${truncated}\``)
   }
   if (sameTab) parts.push('(same-tab)')
+  if (headless) parts.push('(headless)')
 
   const actionLabels: Record<string, string> = {
-    open: '🌐 Open',
-    click: '🖱 Click',
-    fill: '✏️ Fill',
-    eval: '⚡ Eval',
-    text: '📄 Text',
-    html: '🔍 HTML',
-    console: '📋 Console',
-    network: '🌍 Network',
-    shot: '📸 Screenshot',
-    nav: '🧭 Navigate',
-    wait: '⏳ Wait',
-    scroll: '📜 Scroll',
-    locator: '🔎 Locator',
-    cookies: '🍪 Cookies',
-    storage: '💾 Storage',
-    quiz: '📝 Quiz',
+    open: 'Open',
+    click: 'Click',
+    fill: 'Fill',
+    eval: 'Eval',
+    text: 'Text',
+    html: 'HTML',
+    console: 'Console',
+    network: 'Network',
+    state: 'State',
+    shot: 'Screenshot',
+    nav: 'Navigate',
+    wait: 'Wait',
+    scroll: 'Scroll',
+    locator: 'Locator',
+    cookies: 'Cookies',
+    storage: 'Storage',
+    quiz: 'Quiz',
   }
 
   const label = actionLabels[action] ?? action
-  return `${label} ${parts.join(' ')}`
+  return `${label}${parts.length > 0 ? ` ${parts.join(' ')}` : ''}`
 }
 
 export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
@@ -92,11 +89,9 @@ export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
   return (
     <Box flexDirection='column' marginLeft={2}>
       {toolCalls.map((tc) => {
-        const icon = statusIcons[tc.status] ?? '❓'
+        const icon = statusIcons[tc.status] ?? '✳'
         const color = statusColors[tc.status] ?? 'white'
         const duration = tc.durationMs ? formatDuration(tc.durationMs) : ''
-
-        // Chrome-специфичное форматирование
         const isChrome = tc.name === 'chrome'
         const displayArgs = isChrome ? formatChromeArgs(tc.arguments) : formatArgs(tc.arguments)
 
@@ -109,7 +104,7 @@ export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
                 {' '}
                 <Text bold color={color}>{tc.name}</Text>
                 {displayArgs ? <Text dimColor> {displayArgs}</Text> : null}
-                {duration ? <Text dimColor> — {duration}</Text> : null}
+                {duration ? <Text dimColor> - {duration}</Text> : null}
               </Text>
             </Box>
             {tc.status === 'failed' && tc.error && (
@@ -121,7 +116,7 @@ export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
               <Box marginLeft={4} flexDirection='column'>
                 <Text dimColor>
                   {tc.result.length > 200
-                    ? tc.result.slice(0, 197) + '...'
+                    ? `${tc.result.slice(0, 197)}...`
                     : tc.result}
                 </Text>
               </Box>

@@ -775,7 +775,7 @@ export function App ({ config, options }: AppProps) {
           },
           onApprovalRequest: async (toolName, args) => {
             if (approvalMode === 'yolo') return true
-            if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit')) return true
+            if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit' || toolName === 'chrome')) return true
             if (approvalMode === 'plan') return false
 
             // Default mode — ask user for confirmation

@@ -659,6 +659,8 @@ export const chromeTool: Tool = {
   description: `Control a real browser through a native Chrome runtime.
 Use it for UI validation, rendered DOM inspection, console and network debugging,
 screenshots, and multi-step browser workflows when terminal tools are not enough.
+If the task mentions localhost pages, forms, browser bugs, screenshots, rendered state,
+console output, or network requests, this is the primary tool.
 
 Examples:
 - { "action": "open", "url": "https://example.com" }

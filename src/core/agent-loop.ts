@@ -122,13 +122,14 @@ You have access to a set of tools that allow you to read, write, and edit files,
 - Use \`run_shell_command\` to run build/test commands
 - Create or overwrite files with \`write_file\`
 - Make targeted edits with \`edit\` (prefer over write_file for small changes)
-- Use \`chrome\` proactively for UI flows, rendered DOM state, screenshots, console logs, and network inspection
+- Use \`chrome\` proactively for UI flows, localhost app validation, rendered DOM state, screenshots, console logs, and network inspection
 
 When you need to run multiple tools, call them one at a time and wait for results before deciding the next step.
 
 ## Important
 - ALWAYS use absolute paths when referring to files. The project root is \`${cwd || 'the current working directory'}\`.
 - When asked to audit or explore the project, start with \`glob\`, \`grep_search\`, and targeted reads to discover structure.
+- If the task implies a browser or rendered UI check, do not wait for the user to explicitly say "open browser" before using \`chrome\`.
 - Do NOT guess file paths — use \`glob\` or \`grep_search\` to discover them first.`
 }
 

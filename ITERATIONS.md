@@ -162,6 +162,9 @@ Notes:
 - review core now normalizes and sorts findings by severity, with a reusable formatted report helper;
 - verification for this iteration: `npm run typecheck`, `npm run lint`, `npm run build`, `node --test dist/tools/types.test.js`.
 
+Commit:
+- `61355b5` — `feat: improve handoff and workflow reporting`
+
 ---
 
 ## Iteration 6 — Unique Product Layer

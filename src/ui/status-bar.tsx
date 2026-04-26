@@ -3,7 +3,7 @@ import { Box, Text } from 'ink'
 import type { ApprovalMode } from '../config/defaults.js'
 import { i18n } from '../core/i18n.js'
 import { themeManager } from '../core/themes.js'
-import { chromeManager } from '../tools/chrome-manager.js'
+import { chromeManager, type ChromeRuntimeState } from '../tools/chrome-manager.js'
 
 interface StatusBarProps {
   mode: ApprovalMode;
@@ -27,19 +27,14 @@ const modeLabels: Record<ApprovalMode, string> = {
 }
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-
-/**
- * Пульсирующие цвета для статуса "Thinking..."
- */
 const PULSE_COLORS: Array<'yellow' | 'cyan' | 'green' | 'white'> = ['yellow', 'cyan', 'green', 'white']
 
 export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusBarProps) {
   const colors = themeManager.getColors()
-  const [chromeConnected, setChromeConnected] = useState(false)
+  const [chromeState, setChromeState] = useState<ChromeRuntimeState>(chromeManager.getState())
   const [spinnerFrame, setSpinnerFrame] = useState(0)
   const [pulseIdx, setPulseIdx] = useState(0)
 
-  // Spinner animation when processing
   useEffect(() => {
     if (!isProcessing) return
     const interval = setInterval(() => {
@@ -48,7 +43,6 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  // Pulse animation when processing
   useEffect(() => {
     if (!isProcessing) return
     const interval = setInterval(() => {
@@ -57,15 +51,14 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  // Keep Chrome status in sync with the runtime.
   useEffect(() => {
-    setChromeConnected(chromeManager.isConnected())
-    const handleConnectionChange = (connected: boolean) => {
-      setChromeConnected(connected)
+    setChromeState(chromeManager.getState())
+    const handleStateChange = (state: ChromeRuntimeState) => {
+      setChromeState(state)
     }
-    chromeManager.on('connectionChange', handleConnectionChange)
+    chromeManager.on('stateChange', handleStateChange)
     return () => {
-      chromeManager.off('connectionChange', handleConnectionChange)
+      chromeManager.off('stateChange', handleStateChange)
     }
   }, [])
 
@@ -87,8 +80,8 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
           : <Text color={colors.textMuted}>{status}</Text>}
       </Box>
       <Box>
-        {chromeConnected && (
-          <Text color='green'> 🌐Chrome </Text>
+        {chromeState.connected && (
+          <Text color='green'> 🌐Chrome{chromeState.headless ? ':H' : ''} </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>
       </Box>

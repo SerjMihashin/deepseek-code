@@ -1,10 +1,29 @@
 import { EventEmitter } from 'node:events'
 import { type Browser, type Page, type LaunchOptions, launch } from 'puppeteer'
 
+export interface ChromeRuntimeState {
+  connected: boolean;
+  headless: boolean;
+  debugPort: number;
+  currentUrl?: string;
+}
+
 class ChromeManager extends EventEmitter {
   private browser: Browser | null = null
   private currentPage: Page | null = null
   private debugPort = 9222
+  private headlessMode = false
+
+  getState (): ChromeRuntimeState {
+    return {
+      connected: this.isConnected(),
+      headless: this.headlessMode,
+      debugPort: this.debugPort,
+      currentUrl: this.currentPage && !this.currentPage.isClosed()
+        ? this.currentPage.url()
+        : undefined,
+    }
+  }
 
   async getBrowser (): Promise<Browser> {
     if (this.browser && this.browser.connected) {
@@ -19,7 +38,7 @@ class ChromeManager extends EventEmitter {
     }
 
     const launchOptions: LaunchOptions = {
-      headless: false,
+      headless: this.headlessMode,
       args: [
         `--remote-debugging-port=${this.debugPort}`,
         '--no-first-run',
@@ -32,12 +51,12 @@ class ChromeManager extends EventEmitter {
 
     this.browser = await launch(launchOptions)
     this.currentPage = null
-    this.emit('connectionChange', true)
+    this.emitState()
 
     this.browser.on('disconnected', () => {
       this.browser = null
       this.currentPage = null
-      this.emit('connectionChange', false)
+      this.emitState()
     })
 
     return this.browser
@@ -47,6 +66,7 @@ class ChromeManager extends EventEmitter {
     const browser = await this.getBrowser()
 
     if (sameTab && this.currentPage && !this.currentPage.isClosed()) {
+      this.emitState()
       return this.currentPage
     }
 
@@ -60,6 +80,7 @@ class ChromeManager extends EventEmitter {
     page.setDefaultTimeout(15000)
 
     this.currentPage = page
+    this.emitState()
     return page
   }
 
@@ -73,7 +94,7 @@ class ChromeManager extends EventEmitter {
     }
     this.browser = null
     this.currentPage = null
-    this.emit('connectionChange', false)
+    this.emitState()
   }
 
   isConnected (): boolean {
@@ -82,11 +103,24 @@ class ChromeManager extends EventEmitter {
 
   setDebugPort (port: number): void {
     this.debugPort = port
+    this.emitState()
+  }
+
+  setHeadlessMode (headless: boolean): void {
+    this.headlessMode = headless
+    this.emitState()
   }
 
   async navigate (url: string, sameTab = false): Promise<void> {
     const page = await this.getPage(sameTab)
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
+    this.currentPage = page
+    this.emitState()
+  }
+
+  private emitState (): void {
+    this.emit('connectionChange', this.isConnected())
+    this.emit('stateChange', this.getState())
   }
 }
 

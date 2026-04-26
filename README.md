@@ -95,6 +95,15 @@ dsc --theme dracula
 dsc --lang ru
 ```
 
+## 🌐 Browser Runtime
+
+The browser layer is a native part of the agent, not an external add-on.
+
+- The canonical runtime is the built-in `chrome` tool under `src/tools/`.
+- The vendored `chrome-cli-tools/` directory is kept as reference/compatibility material, not as the primary runtime path.
+- Browser screenshots are stored under `.deepseek-code/artifacts/browser/` unless an explicit output path is provided.
+- The browser tool supports `headless: true` for CI-safe automation flows.
+
 ## 🎮 How It Works
 
 ```

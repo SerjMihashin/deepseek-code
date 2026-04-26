@@ -1,3 +1,5 @@
+import { mkdir } from 'node:fs/promises'
+import { dirname, isAbsolute, join } from 'node:path'
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer'
 import type { Tool, ToolParameter, ToolResult } from './types.js'
 import { chromeManager } from './chrome-manager.js'
@@ -11,6 +13,7 @@ export type ChromeAction =
   | 'html'
   | 'console'
   | 'network'
+  | 'state'
   | 'shot'
   | 'nav'
   | 'wait'
@@ -46,6 +49,7 @@ export interface ChromeToolArgs {
   attr?: string;
   count?: boolean;
   port?: number;
+  headless?: boolean;
   quizStrategy?: 'first' | 'random';
 }
 
@@ -75,6 +79,16 @@ function formatEvalResult (result: unknown): string {
 
 function sleep (ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+async function resolveArtifactPath (output?: string): Promise<string> {
+  const artifactDir = join(process.cwd(), '.deepseek-code', 'artifacts', 'browser')
+  const targetPath = output
+    ? (isAbsolute(output) ? output : join(process.cwd(), output))
+    : join(artifactDir, `chrome-shot-${Date.now()}.png`)
+
+  await mkdir(dirname(targetPath), { recursive: true })
+  return targetPath
 }
 
 async function navigateIfNeeded (
@@ -183,6 +197,9 @@ async function collectNetworkRequests (
 async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
   const timeout = args.timeout ?? 10000
   const sameTab = args.sameTab ?? false
+  if (args.headless !== undefined) {
+    chromeManager.setHeadlessMode(args.headless)
+  }
   const page = await chromeManager.getPage(sameTab)
 
   try {
@@ -247,14 +264,24 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
       case 'network':
         return collectNetworkRequests(page, args)
 
+      case 'state': {
+        return {
+          success: true,
+          output: JSON.stringify(chromeManager.getState(), null, 2),
+        }
+      }
+
       case 'shot': {
         await navigateIfNeeded(args, page)
-        const shotPath = args.output ?? `chrome-shot-${Date.now()}.png`
+        const shotPath = await resolveArtifactPath(args.output)
         await page.screenshot({
           path: shotPath,
           fullPage: args.full ?? false,
         })
-        return { success: true, output: `Screenshot saved: ${shotPath}` }
+        return {
+          success: true,
+          output: `Screenshot saved: ${shotPath}\nPage: ${page.url()}`,
+        }
       }
 
       case 'nav': {
@@ -466,7 +493,7 @@ const chromeParameters: ToolParameter[] = [
   {
     name: 'action',
     type: 'string',
-    description: 'Browser action: open, click, fill, eval, text, html, console, network, shot, nav, wait, scroll, locator, cookies, storage, quiz',
+    description: 'Browser action: open, click, fill, eval, text, html, console, network, state, shot, nav, wait, scroll, locator, cookies, storage, quiz',
     required: true,
   },
   {
@@ -614,6 +641,12 @@ const chromeParameters: ToolParameter[] = [
     required: false,
   },
   {
+    name: 'headless',
+    type: 'boolean',
+    description: 'Run the browser in headless mode for automation or CI',
+    required: false,
+  },
+  {
     name: 'quizStrategy',
     type: 'string',
     description: 'Quiz answer strategy: first or random',
@@ -634,8 +667,10 @@ Examples:
 - { "action": "fill", "url": "https://example.com/login", "selector": "#email", "text": "user@example.com" }
 - { "action": "eval", "url": "https://example.com", "code": "document.title" }
 - { "action": "network", "url": "https://example.com", "api": true }
+- { "action": "state" }
 - { "action": "shot", "url": "https://example.com", "output": "screenshot.png", "full": true }
-- Use "sameTab": true for multi-step flows in one tab.`,
+- Use "sameTab": true for multi-step flows in one tab.
+- Use "headless": true for automation or CI-safe browser execution.`,
   parameters: chromeParameters,
   execute: async (args: Record<string, unknown>): Promise<ToolResult> => {
     const typedArgs = args as unknown as ChromeToolArgs

@@ -61,7 +61,7 @@ Restore trust in the repository by fixing baseline defects and removing false cl
 - [x] Align registered tools, system prompt, and docs
 - [x] Verify `typecheck`, `build`, and `lint`
 - [x] Run tests that are possible in the current environment and document any remaining gaps
-- [ ] Add commit hash for this iteration
+- [x] Add commit hash for this iteration
 
 Expected result:
 - clean baseline;
@@ -76,26 +76,35 @@ Notes:
 - compiled test path `node --test dist/tools/types.test.js` passes;
 - sandboxed `node --test` still needs escalation in this environment because of `spawn EPERM`.
 
+Commit:
+- `963bb11` — `fix: stabilize browser runtime and docs`
+
 ---
 
 ## Iteration 3 — Browser Runtime Hardening
-Status: Planned
+Status: Completed
 
 Goal:
 Make the browser layer feel native, reliable, and useful without explicit user prompting.
 
-- [ ] Introduce clearer browser runtime lifecycle boundaries
-- [ ] Add browser runtime status/events for UI consumption
-- [ ] Support stronger multi-step page/session reuse semantics
-- [ ] Improve screenshot and evidence reporting
-- [ ] Add optional headless browser mode for automation/CI
-- [ ] Decide the role of vendored `chrome-cli-tools/`:
-- [ ] Option A: compatibility/reference only, clearly documented
+- [x] Introduce clearer browser runtime lifecycle boundaries
+- [x] Add browser runtime status/events for UI consumption
+- [x] Support stronger multi-step page/session reuse semantics
+- [x] Improve screenshot and evidence reporting
+- [x] Add optional headless browser mode for automation/CI
+- [x] Decide the role of vendored `chrome-cli-tools/`:
+- [x] Option A: compatibility/reference only, clearly documented
 - [ ] Option B: real adapter/backend usage, if actually wired
 - [ ] Add commit hash for this iteration
 
 Expected result:
 - browser is not “extra functionality” but a core agent runtime.
+
+Notes:
+- browser runtime now exposes state via `chromeManager.getState()`;
+- UI reacts to runtime state changes and shows headless mode as `Chrome:H`;
+- screenshots default to `.deepseek-code/artifacts/browser/`;
+- current architecture decision: vendored `chrome-cli-tools/` is reference/compatibility material, not the canonical agent runtime.
 
 ---
 

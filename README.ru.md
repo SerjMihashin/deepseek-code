@@ -27,6 +27,11 @@ AI сам решает, какие инструменты использоват
 - Скриншоты по умолчанию сохраняются в `.deepseek-code/artifacts/browser/`.
 - Для CI и автоматизации браузерный инструмент поддерживает `headless: true`.
 
+### 🔁 Continuation и handoff
+- Сессии теперь сохраняют последний prompt, последний ответ, число tool calls, approval mode и summary.
+- Каждый автономный прогон пишет handoff-файл в `~/.deepseek-code/sessions/<project-hash>/<session-id>.handoff.md`.
+- JSON/headless-вывод теперь включает `sessionId`, `handoffFile` и сводку по tool calls для CI и передачи работы другому агенту.
+
 ### 🔒 Режимы разрешений
 | Режим | Описание |
 |---|---|

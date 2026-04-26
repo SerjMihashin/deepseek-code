@@ -5,17 +5,11 @@ import { DeepSeekAPI } from '../api/index.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 
 export interface ReviewOptions {
-  /** Files to review (empty = all changed files) */
   files?: string[];
-  /** Git reference (commit, branch) to diff against */
   gitRef?: string;
-  /** Run linters before review */
   runLinters?: boolean;
-  /** Auto-fix issues when possible */
   autoFix?: boolean;
-  /** PR number (for GitHub PR review) */
   prNumber?: number;
-  /** PR URL (for cross-repo review) */
   prUrl?: string;
 }
 
@@ -31,7 +25,7 @@ export interface ReviewIssue {
 export interface ReviewResult {
   issues: ReviewIssue[];
   summary: string;
-  score: number; // 0-100
+  score: number;
   linterOutput?: string;
   durationMs: number;
 }
@@ -39,30 +33,24 @@ export interface ReviewResult {
 const LINTER_COMMANDS: Record<string, string> = {
   ts: 'npx tsc --noEmit 2>&1 || true',
   eslint: 'npx eslint . --format compact 2>&1 || true',
-  // Add more linters as needed
 }
 
-/**
- * Multi-step code review pipeline:
- * 1. Determine scope (git diff or specific files)
- * 2. Run deterministic linters
- * 3. Launch parallel subagents for analysis
- * 4. Deduplicate and verify issues
- * 5. Generate summary and score
- * 6. Auto-fix if enabled
- */
+const severityWeight: Record<ReviewIssue['severity'], number> = {
+  critical: 0,
+  major: 1,
+  minor: 2,
+  info: 3,
+}
+
 export async function reviewCode (
   config: DeepSeekConfig,
   options: ReviewOptions
 ): Promise<ReviewResult> {
   const startTime = Date.now()
   const api = new DeepSeekAPI(config)
-  const issues: ReviewIssue[] = []
   let linterOutput = ''
 
-  // Step 1: Determine scope
   const filesToReview = await determineScope(options)
-
   if (filesToReview.length === 0) {
     return {
       issues: [],
@@ -72,90 +60,113 @@ export async function reviewCode (
     }
   }
 
-  // Step 2: Run linters
   if (options.runLinters !== false) {
     linterOutput = await runLinters(filesToReview)
   }
 
-  // Step 3: AI analysis
   const fileContents: string[] = []
-  for (const file of filesToReview.slice(0, 10)) { // Limit to 10 files
+  for (const file of filesToReview.slice(0, 10)) {
     try {
       const content = await readFile(file, 'utf-8')
-      fileContents.push(`=== ${file} ===\n${content.slice(0, 5000)}`) // Limit per file
-    } catch { /* skip binary/unreadable */ }
+      fileContents.push(`=== ${file} ===\n${content.slice(0, 5000)}`)
+    } catch {
+      // Skip unreadable files.
+    }
   }
 
   const reviewPrompt = `Review the following code for issues. Focus on:
-1. **Correctness** — logic errors, race conditions, edge cases
-2. **Security** — injection, XSS, auth issues, unsafe patterns
-3. **Quality** — readability, maintainability, code smells
-4. **Performance** — unnecessary work, memory leaks, N+1 queries
+1. Correctness
+2. Security
+3. Quality
+4. Performance
 
-For each issue, provide: file, line, severity (critical/major/minor/info), category, message, and suggestion.
+Return strict JSON only:
+{
+  "issues": [
+    {
+      "file": "path",
+      "line": 1,
+      "severity": "critical|major|minor|info",
+      "category": "correctness|security|quality|performance",
+      "message": "short finding",
+      "suggestion": "optional fix"
+    }
+  ],
+  "summary": "overall assessment",
+  "score": 0
+}
 
-Files to review:
+Files:
 ${fileContents.join('\n\n')}
 
-${linterOutput ? `\nLinter output:\n${linterOutput}` : ''}
+${linterOutput ? `\nLinter output:\n${linterOutput}` : ''}`
 
-Respond with a JSON array of issues and a summary. Format:
-\`\`\`json
-{
-  "issues": [{ "file": "...", "line": 0, "severity": "major", "category": "correctness", "message": "...", "suggestion": "..." }],
-  "summary": "Overall assessment...",
-  "score": 85
-}
-\`\`\``
+  let issues: ReviewIssue[] = []
+  let summary = `Reviewed ${filesToReview.length} file(s).`
+  let score = 100
 
   try {
     const response = await api.chat([
-      { role: 'system', content: 'You are a code review expert. Analyze code and return structured JSON results.' },
+      { role: 'system', content: 'You are a code review expert. Return strict JSON only.' },
       { role: 'user', content: reviewPrompt },
     ])
 
-    // Parse JSON from response
-    const jsonMatch = response.content.match(/```json\n([\s\S]*?)\n```/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[1])
-      issues.push(...(parsed.issues ?? []))
+    const parsed = parseReviewResponse(response.content)
+    if (parsed) {
+      issues = normalizeIssues(parsed.issues ?? [])
+      summary = parsed.summary ?? summary
+      if (typeof parsed.score === 'number') {
+        score = clampScore(parsed.score)
+      }
     }
-  } catch { /* ignore parse errors */ }
-
-  // Step 5: Auto-fix (basic implementation)
-  if (options.autoFix && issues.length > 0) {
-    // In a real implementation, this would apply fixes
+  } catch {
+    // Keep deterministic fallback summary below.
   }
 
-  const score = issues.length === 0 ? 100 : Math.max(0, 100 - issues.length * 5)
+  if (issues.length === 0) {
+    score = Math.max(score, linterOutput.trim() ? 90 : 100)
+  } else if (score === 100) {
+    score = Math.max(0, 100 - issues.length * 5)
+  }
 
   return {
     issues,
-    summary: `Reviewed ${filesToReview.length} file(s). Found ${issues.length} issue(s).`,
+    summary,
     score,
     linterOutput,
     durationMs: Date.now() - startTime,
   }
 }
 
+export function formatReviewReport (result: ReviewResult): string {
+  if (result.issues.length === 0) {
+    return `**Findings**\n\nNo issues found.\n\n**Summary**\n\nScore: **${result.score}/100**\nDuration: ${(result.durationMs / 1000).toFixed(1)}s\n\n${result.summary}`
+  }
+
+  const findings = result.issues.slice(0, 20).map(issue => {
+    const suggestion = issue.suggestion ? `\n  Suggestion: ${issue.suggestion}` : ''
+    return `- [${issue.severity.toUpperCase()}] ${issue.file}:${issue.line} (${issue.category}) — ${issue.message}${suggestion}`
+  }).join('\n')
+
+  return `**Findings**\n\n${findings}\n\n**Summary**\n\nScore: **${result.score}/100**\nIssues: ${result.issues.length}\nDuration: ${(result.durationMs / 1000).toFixed(1)}s\n\n${result.summary}`
+}
+
 async function determineScope (options: ReviewOptions): Promise<string[]> {
   if (options.files && options.files.length > 0) {
-    return options.files
+    return options.files.map(file => file.startsWith(process.cwd()) ? file : join(process.cwd(), file))
   }
 
   if (options.prUrl) {
-    // Cross-repo review: fetch PR diff
     return []
   }
 
-  // Git diff against ref or HEAD
   try {
     const ref = options.gitRef ?? 'HEAD'
     const output = execSync(`git diff --name-only ${ref}`, {
       encoding: 'utf-8',
       windowsHide: true,
     })
-    return output.split('\n').filter(Boolean).map(f => join(process.cwd(), f))
+    return output.split('\n').filter(Boolean).map(file => join(process.cwd(), file))
   } catch {
     return []
   }
@@ -163,7 +174,7 @@ async function determineScope (options: ReviewOptions): Promise<string[]> {
 
 async function runLinters (files: string[]): Promise<string> {
   const output: string[] = []
-  const hasTsFiles = files.some(f => f.endsWith('.ts') || f.endsWith('.tsx'))
+  const hasTsFiles = files.some(file => file.endsWith('.ts') || file.endsWith('.tsx'))
 
   if (hasTsFiles) {
     try {
@@ -173,7 +184,9 @@ async function runLinters (files: string[]): Promise<string> {
         windowsHide: true,
       })
       if (result.trim()) output.push(`[tsc]\n${result}`)
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore linter process failures, capture only output.
+    }
 
     try {
       const result = execSync(LINTER_COMMANDS.eslint, {
@@ -182,8 +195,58 @@ async function runLinters (files: string[]): Promise<string> {
         windowsHide: true,
       })
       if (result.trim()) output.push(`[eslint]\n${result}`)
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore linter process failures, capture only output.
+    }
   }
 
   return output.join('\n\n')
+}
+
+function parseReviewResponse (content: string): { issues?: unknown[]; summary?: string; score?: number } | null {
+  const fencedMatch = content.match(/```json\n([\s\S]*?)\n```/)
+  const raw = fencedMatch?.[1] ?? content.trim()
+
+  try {
+    return JSON.parse(raw) as { issues?: unknown[]; summary?: string; score?: number }
+  } catch {
+    return null
+  }
+}
+
+function normalizeIssues (issues: unknown[]): ReviewIssue[] {
+  const normalized: ReviewIssue[] = []
+
+  for (const issue of issues) {
+    if (!issue || typeof issue !== 'object') continue
+    const candidate = issue as Partial<ReviewIssue>
+    if (!candidate.file || !candidate.message) continue
+
+    normalized.push({
+      file: candidate.file,
+      line: typeof candidate.line === 'number' ? candidate.line : 1,
+      severity: isSeverity(candidate.severity) ? candidate.severity : 'minor',
+      category: isCategory(candidate.category) ? candidate.category : 'quality',
+      message: candidate.message,
+      suggestion: candidate.suggestion,
+    })
+  }
+
+  return normalized.sort((a, b) =>
+    severityWeight[a.severity] - severityWeight[b.severity] ||
+    a.file.localeCompare(b.file) ||
+    a.line - b.line
+  )
+}
+
+function isSeverity (value: unknown): value is ReviewIssue['severity'] {
+  return value === 'critical' || value === 'major' || value === 'minor' || value === 'info'
+}
+
+function isCategory (value: unknown): value is ReviewIssue['category'] {
+  return value === 'correctness' || value === 'security' || value === 'quality' || value === 'performance'
+}
+
+function clampScore (score: number): number {
+  return Math.max(0, Math.min(100, Math.round(score)))
 }

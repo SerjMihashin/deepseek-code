@@ -11,14 +11,14 @@ import type { SessionOptions } from '../cli/interactive.js'
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { AgentLoop, type ToolCallEvent } from '../core/agent-loop.js'
 import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js'
-import { saveSession, getLastSessionId } from '../core/session.js'
+import { saveSession, getLastSessionId, writeSessionHandoff } from '../core/session.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
 import { mcpManager } from '../core/mcp.js'
 import { subAgentManager } from '../core/subagent.js'
 import { skillsManager } from '../core/skills.js'
 import { hooksManager } from '../core/hooks.js'
 import { lspManager } from '../core/lsp.js'
-import { reviewCode, type ReviewOptions } from '../core/review.js'
+import { reviewCode, formatReviewReport, type ReviewOptions } from '../core/review.js'
 import { sandbox } from '../core/sandbox.js'
 import { gitIntegration } from '../core/git.js'
 import { scheduler, Scheduler } from '../core/scheduler.js'
@@ -191,6 +191,8 @@ export function App ({ config, options }: AppProps) {
       if (!sessionIdRef.current) {
         sessionIdRef.current = await saveSession({})
       }
+
+      subAgentManager.setApiConfig({ ...config, apiKey: localApiKey || config.apiKey })
 
       // Initialize services in background
       await Promise.allSettled([
@@ -433,9 +435,10 @@ export function App ({ config, options }: AppProps) {
 
         try {
           const result = await reviewCode(config, reviewOptions)
-          const issueList = result.issues.slice(0, 20).map(i =>
+          const issueList = formatReviewReport(result)
+          String(result.issues.slice(0, 20).map(i =>
             `- [${i.severity.toUpperCase()}] ${i.file}:${i.line} — ${i.message}`
-          ).join('\n')
+          ).join('\n'))
 
           setMessages(prev => [...prev, {
             role: 'assistant',
@@ -786,11 +789,30 @@ export function App ({ config, options }: AppProps) {
         }
       )
 
-      await agentLoopRef.current.run(input, messages)
+      const finalResponse = await agentLoopRef.current.run(input, messages)
+      const toolHistory = agentLoopRef.current.getToolCallHistory()
+      const handoffFile = await writeSessionHandoff({
+        sessionId: sessionIdRef.current,
+        prompt: input,
+        response: finalResponse,
+        approvalMode,
+        toolCalls: toolHistory.map(toolCall => ({
+          name: toolCall.name,
+          status: toolCall.status,
+          durationMs: toolCall.durationMs,
+          error: toolCall.error,
+        })),
+      })
 
       await saveSession({
         id: sessionIdRef.current,
         messageCount: messages.length + 2,
+        toolCallCount: toolHistory.length,
+        approvalMode,
+        lastPrompt: input,
+        lastResponse: finalResponse,
+        summary: finalResponse,
+        handoffFile,
       })
     } catch (err) {
       const error = err as Error
@@ -817,6 +839,21 @@ export function App ({ config, options }: AppProps) {
         role: 'assistant',
         content: friendlyMsg,
       }])
+      const handoffFile = await writeSessionHandoff({
+        sessionId: sessionIdRef.current,
+        prompt: input,
+        error: friendlyMsg,
+        approvalMode,
+      })
+      await saveSession({
+        id: sessionIdRef.current,
+        messageCount: messages.length + 2,
+        approvalMode,
+        lastPrompt: input,
+        lastError: friendlyMsg,
+        summary: friendlyMsg,
+        handoffFile,
+      })
     } finally {
       setIsProcessing(false)
       setStatusText('Ready')

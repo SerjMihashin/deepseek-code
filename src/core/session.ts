@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -12,24 +12,54 @@ export interface SessionData {
   startedAt: string;
   updatedAt: string;
   messageCount: number;
+  toolCallCount?: number;
+  approvalMode?: string;
   summary?: string;
+  lastPrompt?: string;
+  lastResponse?: string;
+  lastError?: string;
+  handoffFile?: string;
+}
+
+export interface SessionHandoffInput {
+  sessionId: string;
+  prompt: string;
+  response?: string;
+  error?: string;
+  approvalMode?: string;
+  toolCalls?: Array<{
+    name: string;
+    status: string;
+    durationMs?: number;
+    error?: string;
+  }>;
 }
 
 function getProjectHash (): string {
   return createHash('sha256').update(process.cwd()).digest('hex').slice(0, 16)
 }
 
-export async function saveSession (data: Partial<SessionData>): Promise<string> {
+async function ensureProjectSessionDir (): Promise<string> {
   if (!existsSync(SESSIONS_DIR)) {
     await mkdir(SESSIONS_DIR, { recursive: true })
   }
 
-  const projectHash = getProjectHash()
-  const projectDir = join(SESSIONS_DIR, projectHash)
-
+  const projectDir = join(SESSIONS_DIR, getProjectHash())
   if (!existsSync(projectDir)) {
     await mkdir(projectDir, { recursive: true })
   }
+
+  return projectDir
+}
+
+function summarizeText (text?: string, limit = 240): string | undefined {
+  if (!text) return text
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text
+}
+
+export async function saveSession (data: Partial<SessionData>): Promise<string> {
+  const projectHash = getProjectHash()
+  const projectDir = await ensureProjectSessionDir()
 
   const sessionId = data.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const filePath = join(projectDir, `${sessionId}.json`)
@@ -38,7 +68,9 @@ export async function saveSession (data: Partial<SessionData>): Promise<string> 
   if (existsSync(filePath)) {
     try {
       existing = JSON.parse(await readFile(filePath, 'utf-8'))
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore malformed existing session data.
+    }
   }
 
   const session: SessionData = {
@@ -47,44 +79,77 @@ export async function saveSession (data: Partial<SessionData>): Promise<string> 
     startedAt: existing.startedAt ?? new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     messageCount: data.messageCount ?? existing.messageCount ?? 0,
+    toolCallCount: data.toolCallCount ?? existing.toolCallCount,
+    approvalMode: data.approvalMode ?? existing.approvalMode,
     summary: data.summary ?? existing.summary,
+    lastPrompt: summarizeText(data.lastPrompt ?? existing.lastPrompt),
+    lastResponse: summarizeText(data.lastResponse ?? existing.lastResponse),
+    lastError: summarizeText(data.lastError ?? existing.lastError),
+    handoffFile: data.handoffFile ?? existing.handoffFile,
   }
 
   await writeFile(filePath, JSON.stringify(session, null, 2), 'utf-8')
   return sessionId
 }
 
-export async function getLastSessionId (): Promise<string | null> {
-  const projectHash = getProjectHash()
-  const projectDir = join(SESSIONS_DIR, projectHash)
+export async function writeSessionHandoff (input: SessionHandoffInput): Promise<string> {
+  const projectDir = await ensureProjectSessionDir()
+  const handoffFile = join(projectDir, `${input.sessionId}.handoff.md`)
 
+  const toolSummary = (input.toolCalls ?? []).length > 0
+    ? input.toolCalls!.map((toolCall, index) =>
+      `${index + 1}. ${toolCall.name} — ${toolCall.status}${toolCall.durationMs !== undefined ? ` (${toolCall.durationMs}ms)` : ''}${toolCall.error ? ` — ${toolCall.error}` : ''}`
+    ).join('\n')
+    : 'No tool calls recorded.'
+
+  const content = [
+    `# Session Handoff: ${input.sessionId}`,
+    '',
+    `- Time: ${new Date().toISOString()}`,
+    `- Project: ${process.cwd()}`,
+    `- Approval mode: ${input.approvalMode ?? 'unknown'}`,
+    '',
+    '## Prompt',
+    input.prompt || '(empty)',
+    '',
+    input.error ? '## Error' : '## Response',
+    input.error ?? input.response ?? '(empty)',
+    '',
+    '## Tool Calls',
+    toolSummary,
+    '',
+  ].join('\n')
+
+  await writeFile(handoffFile, content, 'utf-8')
+  return handoffFile
+}
+
+export async function getLastSessionId (): Promise<string | null> {
+  const projectDir = join(SESSIONS_DIR, getProjectHash())
   if (!existsSync(projectDir)) return null
 
-  const files = (await import('node:fs/promises')).readdir
-  const entries = await files(projectDir)
-  const sessionFiles = entries.filter(f => f.endsWith('.json'))
-
+  const entries = await readdir(projectDir)
+  const sessionFiles = entries.filter(file => file.endsWith('.json'))
   if (sessionFiles.length === 0) return null
 
-  // Return most recent
   sessionFiles.sort()
   return sessionFiles[sessionFiles.length - 1].replace('.json', '')
 }
 
 export async function getSessionList (): Promise<SessionData[]> {
-  const projectHash = getProjectHash()
-  const projectDir = join(SESSIONS_DIR, projectHash)
-
+  const projectDir = join(SESSIONS_DIR, getProjectHash())
   if (!existsSync(projectDir)) return []
 
-  const entries = await (await import('node:fs/promises')).readdir(projectDir)
+  const entries = await readdir(projectDir)
   const sessions: SessionData[] = []
 
-  for (const file of entries.filter(f => f.endsWith('.json'))) {
+  for (const file of entries.filter(entry => entry.endsWith('.json'))) {
     try {
-      const data = JSON.parse(await readFile(join(projectDir, file), 'utf-8'))
+      const data = JSON.parse(await readFile(join(projectDir, file), 'utf-8')) as SessionData
       sessions.push(data)
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore malformed session files.
+    }
   }
 
   return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))

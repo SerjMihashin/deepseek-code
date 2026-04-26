@@ -81,8 +81,14 @@ export class SubAgent extends EventEmitter {
 
 export class SubAgentManager {
   private agents: Map<string, SubAgent> = new Map()
+  private apiConfig: DeepSeekConfig | null = null
+
+  setApiConfig (apiConfig: DeepSeekConfig): void {
+    this.apiConfig = apiConfig
+  }
 
   registerAgent (config: SubAgentConfig, apiConfig: DeepSeekConfig): SubAgent {
+    this.setApiConfig(apiConfig)
     const agent = new SubAgent(config, apiConfig)
     this.agents.set(config.name, agent)
     return agent
@@ -124,8 +130,8 @@ export class SubAgentManager {
       try {
         const content = await readFile(join(agentsDir, file), 'utf-8')
         const config = parseAgentConfig(content)
-        if (config) {
-          this.agents.set(config.name, new SubAgent(config, {} as DeepSeekConfig))
+        if (config && this.apiConfig) {
+          this.agents.set(config.name, new SubAgent(config, this.apiConfig))
         }
       } catch { /* ignore */ }
     }

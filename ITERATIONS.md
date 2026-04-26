@@ -139,20 +139,28 @@ Commit:
 ---
 
 ## Iteration 5 — Workflow Quality
-Status: Planned
+Status: Completed
 
 Goal:
 Adopt the strongest workflow ideas from Qwen Code, Claude Code, and Codex CLI while staying DeepSeek-first.
 
-- [ ] Strengthen handoff conventions and repo-local continuation state
-- [ ] Improve hooks/skills/subagent documentation and reliability
-- [ ] Improve review workflow to be findings-first and evidence-backed
-- [ ] Improve headless/CI reporting
-- [ ] Reduce architecture drift between docs and runtime
+- [x] Strengthen handoff conventions and repo-local continuation state
+- [x] Improve hooks/skills/subagent documentation and reliability
+- [x] Improve review workflow to be findings-first and evidence-backed
+- [x] Improve headless/CI reporting
+- [x] Reduce architecture drift between docs and runtime
 - [ ] Add commit hash for this iteration
 
 Expected result:
 - stronger operator trust and better continuity across sessions and agents.
+
+Notes:
+- sessions now store last prompt/response, approval mode, tool-call count, summary, and handoff path;
+- autonomous runs write a `.handoff.md` file for continuation;
+- headless results now expose `sessionId`, `handoffFile`, and tool-call summaries;
+- subagent loading now depends on a real API config instead of an empty placeholder config;
+- review core now normalizes and sorts findings by severity, with a reusable formatted report helper;
+- verification for this iteration: `npm run typecheck`, `npm run lint`, `npm run build`, `node --test dist/tools/types.test.js`.
 
 ---
 

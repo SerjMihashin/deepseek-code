@@ -34,7 +34,9 @@ The repository does not yet consistently deliver:
 - clean lint/test baseline;
 - production-grade browser lifecycle and telemetry;
 - strong handoff discipline;
-- complete parity between documented and registered tools.
+- complete parity between documented and registered tools;
+- clean TUI layout (tool call logs dominate screen, no blinking cursor);
+- meaningful context window display (current metric is session-cumulative, not per-request).
 
 This document is the source of truth going forward.
 

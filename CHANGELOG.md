@@ -158,15 +158,99 @@ src/
   utils/        — Утилиты (логгер, .deepseekignore)
 ```
 
-## Что дальше (следующие итерации)
+---
 
-### Итерация 5: Plan Mode
-- Режим `plan` — AI получает только read-инструменты на первой фазе
-- После плана — подтверждение пользователя
-- Вторая фаза — все инструменты
+## Итерация 5: Метрики и Execution Summary ✅
 
-### Итерация 6: Полировка и CI/CD
-- Контекстное сжатие (чтобы не превысить лимит токенов)
-- Логирование всех вызовов
-- Обработка ошибок: таймауты, неверные аргументы, отказ инструмента
-- Оптимизация system prompt
+**Цель:** Пользователь видит статистику сессии: количество вызовов инструментов, затраченные токены, время выполнения.
+
+### Что сделано:
+- Создан `MetricsCollector` — централизованный сбор метрик выполнения
+- Подсчёт количества вызовов инструментов (`toolCalls`)
+- Подсчёт затраченных токенов (input / output / total) из ответа API
+- Замер времени выполнения каждого инструмента (per-call duration)
+- Общий таймер сессии (elapsed time)
+- `getSummary()` — красивый вывод статистики в формате таблицы:
+
+```
+╭──────────────────────────────────────────────────╮
+│            Execution Summary                     │
+├──────────────────────────────────────────────────┤
+│  Tool uses:       12                             │
+│  Total:      156 320 tokens                      │
+│  Input:      124 530 tokens                      │
+│  Output:      31 790 tokens                      │
+│  Time:       2m 15s                              │
+╰──────────────────────────────────────────────────╯
+
+Tool Call Breakdown:
+  ✓ read_file              1 234ms
+  ✓ grep_search              890ms
+  ✓ run_shell_command      4 567ms
+  ✓ edit                     321ms
+```
+
+- `getContextUsagePercent()` — расчёт процента использованного контекста (на основе 128k лимита)
+- Интеграция в `AgentLoop`: метрики записываются при каждом tool call и при получении `usage` чанка из стрима
+- API обновлён: `streamChat()` передаёт `stream_options: { include_usage: true }` и парсит финальный `usage` чанк
+- Прогресс-бар в `StatusBar`: отображает процент использованного контекста рядом с `ProcessingDots`
+
+### Файлы:
+- `src/core/metrics.ts` — **создан** (класс MetricsCollector)
+- `src/core/agent-loop.ts` — интеграция метрик в executeLoop
+- `src/api/index.ts` — `stream_options: { include_usage: true }`, парсинг `chunk.usage`
+- `src/ui/status-bar.tsx` — добавлен прогресс-бар контекста
+
+---
+
+---
+
+## Итерация 6–10: Approval Modes, MCP, Hooks, LSP, Extensions, Memory ✅
+
+> Итерации 6–10 завершены в рамках спринта v0.1.0 → v0.2.0. Ключевые вехи:
+
+**Итерация 6 — Approval Modes:**
+- 4 режима: `plan` / `default` / `auto-edit` / `yolo`
+- Каждый инструмент декларирует `approvalRequirement` (always/auto-edit/never)
+- `/plan` команда переключает режим
+- UI: цветной badge в статус-баре
+
+**Итерация 7 — MCP (Model Context Protocol):**
+- `src/core/mcp.ts` — подключение MCP-серверов через stdio/SSE
+- `/mcp` команда для управления серверами
+- Динамическое добавление инструментов из MCP в реестр
+
+**Итерация 8 — Hooks, Extensions, Skills:**
+- `src/core/hooks.ts` — shell-хуки на события AgentLoop (AgentLoopStart, ToolCall, etc.)
+- `src/core/extensions.ts` — загрузка JS-расширений из `~/.deepseek-code/extensions/`
+- `src/core/skills.ts` — шаблонные команды из `~/.deepseek-code/skills/`
+- `/hooks`, `/extensions`, `/skills` команды
+
+**Итерация 9 — LSP, Sandbox, Git:**
+- `src/core/lsp.ts` — Language Server Protocol клиент (диагностика, completion)
+- `src/core/sandbox.ts` — выполнение кода в Docker (Linux/macOS; ограничено на Windows)
+- `src/core/git.ts` — git-операции через API (`status`, `diff`, `log`, `commit`, `branch`)
+- `/sandbox`, `/git` команды
+
+**Итерация 10 — Sessions, Memory, Subagents, Matrix Rain:**
+- `src/core/session.ts` — сохранение/восстановление сессий, handoff-файлы, бандлы
+- `src/core/memory.ts` — семантическая память (substring-поиск, `/remember`, `/forget`)
+- `src/core/subagent.ts` — запуск вложенных агентов (`/agents`)
+- `src/ui/matrix-rain.tsx` — декоративный компонент с падающими символами
+- Matrix тема в `src/core/themes.ts`
+- Retry с exponential backoff + stream timeout 60s в `src/api/index.ts`
+
+---
+
+## Итерация 11: Аудит и Roadmap ✅
+
+**Цель:** Зафиксировать текущее состояние, выявить проблемы, составить план.
+
+### Что сделано:
+- Полный аудит кода — 10 проблем задокументированы в `audit.md`
+- `ITERATIONS.md` — план итераций 11–16 (впоследствии пересмотрен на 12–15)
+- Определены приоритеты: UI layout → cursor → tool log → ctx% → image paste
+
+### Файлы:
+- `audit.md` — обновлён
+- `ITERATIONS.md` — план итераций

@@ -1,6 +1,6 @@
-# Audit — DeepSeek Code v0.1.0
+# Audit — DeepSeek Code v0.2.0
 
-> Полный аудит проекта от AI-ассистента. Проведён: 2025.
+> Аудит проекта. Обновлён: 2026-04-26.
 
 ---
 
@@ -33,48 +33,44 @@
 
 ---
 
-## ⚠️ Проблемы (актуальные)
+## ⚠️ Проблемы (актуальные, v0.2.0)
 
 | # | Проблема | Где | Серьёзность | Статус |
 |---|----------|-----|-------------|--------|
-| 1 | **UI дребезг при вводе** — каждое нажатие перерисовывает всё | `app.tsx`, `chat-view.tsx` | 🔴 High | **Iteration 12** |
-| 2 | **Дублирование текста ответа** — дважды пушится сообщение | `app.tsx` в 2 местах | 🟡 Medium | **Iteration 12** |
-| 3 | **Семантическая память** — только substring, нет embeddings | `memory.ts` | 🔴 High | **Iteration 13** |
-| 4 | **`/compress` не сжимает** — только показывает размер | `app.tsx` handleSlashCommand | 🟡 Medium | **Iteration 14** |
-| 5 | **Hooks не интегрированы** — load есть, execute никто не зовёт | `hooks.ts`, `agent-loop.ts` | 🟢 Low | **Iteration 15** |
-| 6 | **Fallback при пустом ответе DeepSeek** — костыль | `agent-loop.ts:183` | 🟡 Medium | backlog |
-| 7 | **Sandbox падает на Windows** — пути C:\ не монтируются | `sandbox.ts:67` | 🔴 High | backlog |
-| 8 | **Headless plan mode** — отклоняет все инструменты | `headless.ts:37` | 🟡 Medium | **Iteration 16** |
-| 9 | **ExtensionManager: load есть, execute нет** | `extensions.ts` | 🟢 Low | backlog |
+| 1 | **Layout/читаемость** — текст идёт наверх, логи занимают экран, шейкинг | `app.tsx`, `results-panel.tsx`, `chat-view.tsx` | 🔴 Critical | **Iteration 12** |
+| 2 | **Нет мигающего курсора** — даже в терминале есть | `input-bar.tsx` | 🔴 High | **Iteration 12** |
+| 3 | **Лог инструментов занимает экран** — нет ограничения высоты, результаты на 2 строки | `results-panel.tsx`, `tool-call-view.tsx` | 🔴 High | **Iteration 12** |
+| 4 | **Context % — накопительный, не текущий** — показывает сумму токенов за сессию / 128k, а не размер текущего окна | `metrics.ts`, `app.tsx` | 🟡 Medium | **Iteration 14** |
+| 5 | **ResultsPanel без скролла** — при 8+ вызовах нет возможности прокрутить | `results-panel.tsx` | 🟡 Medium | **Iteration 14** |
+| 6 | **Вставка картинок (Alt+V) не реализована** | `input-bar.tsx`, `app.tsx` | 🟡 Medium | **Iteration 15** |
+| 7 | **Matrix тема — жёлтый/красный ломают эстетику** — modeColors и warning/error не тема-зависимые | `themes.ts`, `status-bar.tsx` | 🟡 Medium | **Iteration 13** |
+| 8 | **Sandbox падает на Windows** — пути C:\ не монтируются | `sandbox.ts:67` | 🔴 High | backlog |
+| 9 | **Headless plan mode** — отклоняет все инструменты | `headless.ts:37` | 🟡 Medium | backlog |
 | 10 | **LSP Manager: не используется** | `lsp.ts` | 🟢 Low | backlog |
 
 ---
 
-## 🎯 План итераций
+## 🎯 Текущий план итераций (12–15)
 
-### Iteration 12 — 🎯 Убрать дребезг UI
-- `React.memo` на ChatView
-- Дебаунс reasoning на 100ms
-- Fix дублирования сообщений
-- `useInput` — ранний return при вводе
+### Iteration 12 — UI Core Fixes
+- Ограничить высоту ResultsPanel (max 10 строк)
+- Tool calls — результат инлайн, одна строка
+- Мигающий курсор в InputBar
+- React.memo с кастомным компаратором для ChatView
 
-### Iteration 13 — 🧠 Семантическая память
-- `embed()` в API слой (text-embedding-002)
-- Хранение векторов в memory.ts
-- Гибридный поиск (точный + cosine similarity)
+### Iteration 13 — Visual Polish
+- Matrix тема: warning → lime-green, badges → тема-зависимые
+- Извлечь FadeIn в shared компонент
+- Fade-in для новых tool calls
 
-### Iteration 14 — 📦 Настоящий `/compress`
-- Берёт первые 50% сообщений
-- Сжимает через API chat()
-- Заменяет на system-сообщение с резюме
+### Iteration 14 — Context % Fix + Scroll
+- Показывать токены ПОСЛЕДНЕГО запроса / 128k (не накопительные)
+- Добавить скролл ResultsPanel (PageUp/PageDown)
 
-### Iteration 15 — 🔗 Hooks в AgentLoop
-- PreToolExecution / PostToolExecution вызовы
-- Логирование ошибок хуков
-
-### Iteration 16 — 🚪 Graceful exit + Headless plan fix
-- Ctrl+C → Save session? (y/n)
-- headless.ts — plan mode для read-тулов
+### Iteration 15 — Image Paste (Alt+V)
+- Читать изображение из буфера обмена (Windows/macOS/Linux)
+- Передавать в API как multimodal content
+- Предупреждение если модель не поддерживает vision
 
 ---
 

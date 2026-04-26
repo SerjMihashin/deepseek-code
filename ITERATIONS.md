@@ -41,95 +41,108 @@
 
 ---
 
-## 🎯 Iteration 12 — Убрать дребезг UI
+## 🎯 Iteration 12 — UI Core Fixes
 
-**Цель:** Устранить дёрганье интерфейса при вводе текста и дублирование сообщений.
+**Цель:** Чистый, структурированный, читаемый интерфейс. Нет шейкинга. Мигающий курсор. Логи инструментов ограничены.
 
 **Статус:** ⏳ В плане
 
 **Файлы:**
-- `src/ui/app.tsx` — дебаунс reasoning, фикс дублирования, useInput оптимизация
-- `src/ui/chat-view.tsx` — React.memo
-- `src/ui/input-bar.tsx` — убрать дублирование useInput
+- `src/ui/app.tsx` — переупорядочить JSX (approval выше ResultsPanel)
+- `src/ui/results-panel.tsx` — ограничение высоты (10 строк), maxItems 3
+- `src/ui/tool-call-view.tsx` — результат инлайн (60 символов), ошибки 100 символов
+- `src/ui/input-bar.tsx` — мигающий курсор (state + useEffect 530ms)
+- `src/ui/chat-view.tsx` — кастомный React.memo компаратор (anti-shake)
 
 **Задачи:**
-1. `ChatView` обернуть в `React.memo`
-2. `setReasoning` задебаунсить на 100ms
-3. В `app.tsx` найти 2 места где пушится сообщение → оставить одно
-4. В `useInput` сделать ранний `return` для лишних клавиш
+1. `ResultsPanel`: `height={10} overflowY='hidden'`, `maxItems={3}`
+2. `ToolCallView`: результат → инлайн ` → текст...`, без отдельной строки
+3. `InputBar`: `cursorVisible` state, интервал 530ms, `▋` после displayText
+4. `ChatView`: `React.memo(fn, customComparator)` — только при смене длины или последнего сообщения
+5. `app.tsx`: переместить `{pendingApproval && ...}` выше `<ResultsPanel />`
 
 **Проверка:**
-- Напечатать 20+ символов — UI не дёргается
-- Скролл не сбрасывается при вводе
-- Сообщения не дублируются
-- Reasoning стримится плавно
+- Набрать 40+ символов — нет дёрганья экрана
+- Вопрос с 6+ вызовами инструментов — панель не превышает 10 строк
+- В простое — курсор мигает; во время обработки — курсор скрыт
+- Результаты инструментов — одна строка
 
 ---
 
-## 🧠 Iteration 13 — Семантическая память
+## 🎨 Iteration 13 — Visual Polish
 
-**Цель:** Добавить векторный поиск в `/memory` через embeddings.
+**Цель:** Matrix тема полностью зелёная. Badges тема-зависимые. Micro-анимации для tool calls.
 
 **Статус:** ⏳ В плане
 
 **Файлы:**
-- `src/api/index.ts` — метод `embed()`
-- `src/core/memory.ts` — хранение векторов, hybrid search
+- `src/core/themes.ts` — Matrix warning/error цвета
+- `src/ui/status-bar.tsx` — modeColors внутрь компонента, через theme colors
+- `src/ui/tool-call-view.tsx` — statusColors через themeManager
+- `src/ui/reasoning-view.tsx` — убрать хардкод 'yellow'/'green'
+- `src/ui/fade-in.tsx` — новый файл (извлечь из app.tsx)
 
 **Задачи:**
-1. Добавить `embed(text)` в API слой (DeepSeek text-embedding-002)
-2. В `memory.ts` хранить `{ text, description, embedding: number[], tags, path }`
-3. `searchMemories` — гибрид: точное совпадение + cosine similarity
-4. `/memory` — semantic matches показывать жирным / с оценкой релевантности
+1. `themes.ts`: Matrix `warning: '#88ff44'` (было '#ffff00'), `error: '#ff6666'`
+2. `status-bar.tsx`: `modeColors` → `{ plan: colors.warning, default: colors.info, ... }`
+3. `tool-call-view.tsx`: `statusColors` → `{ pending: colors.warning, running: colors.info, ... }`
+4. `reasoning-view.tsx`: `'yellow'` → `colors.warning`, `'green'` → `colors.success`
+5. Извлечь `FadeIn` из `app.tsx:31-39` → `src/ui/fade-in.tsx`
+6. Обернуть каждый tool call в `<FadeIn>` (150ms задержка появления)
+
+**Проверка:**
+- `/theme matrix` → всё зелёных оттенков, нет жёлтых badges, нет жёлтого спиннера
+- `/theme default` → [PLAN] badge по-прежнему жёлтый (themes.ts default warning)
+- Новые tool calls плавно появляются, а не мгновенно
 
 ---
 
-## 📦 Iteration 14 — Настоящий `/compress`
+## 📊 Iteration 14 — Context % Fix + Scroll
 
-**Цель:** Реальное сжатие контекста через DeepSeek API.
+**Цель:** Context % показывает актуальный размер окна. ResultsPanel прокручивается.
 
 **Статус:** ⏳ В плане
 
 **Файлы:**
-- `src/ui/app.tsx` — handleSlashCommand('/compress')
+- `src/core/metrics.ts` — `_lastInputTokens`, `getCurrentWindowPercent()`
+- `src/ui/app.tsx` — переключить на новый метод, добавить `toolCallScrollOffset`
+- `src/ui/status-bar.tsx` — добавить префикс `ctx:` к отображению
+- `src/ui/results-panel.tsx` — добавить `scrollOffset` prop, slice toolCalls
 
 **Задачи:**
-1. Взять первые 50% сообщений (исключая последние 3-4)
-2. Отправить в `api.chat()` с промптом summarization
-3. Заменить на `{ role: 'system', content: 'Сжатый контекст: ...' }`
-4. Показать: "~12KB → ~2KB (83%)"
+1. `metrics.ts`: добавить `_lastInputTokens`, обновить `recordTokens()`, добавить `getCurrentWindowPercent()`
+2. `app.tsx`: `getContextUsagePercent()` → `getCurrentWindowPercent()`
+3. `status-bar.tsx`: `{contextPercent}%` → `ctx:{contextPercent}%`
+4. `results-panel.tsx`: `scrollOffset` prop, visible slice (3 элемента)
+5. `app.tsx`: `toolCallScrollOffset` state, PageUp/PageDown при `isProcessing`
+
+**Проверка:**
+- Запрос на 10k токенов → `ctx:8%`, а не 100%
+- Во время длинного запуска с 8+ вызовами — PageUp показывает старые
+- После завершения — PageUp/PageDown скроллит чат
 
 ---
 
-## 🔗 Iteration 15 — Hooks в AgentLoop
+## 🖼️ Iteration 15 — Image Paste (Alt+V)
 
-**Цель:** Интегрировать систему хуков в жизненный цикл выполнения инструментов.
+**Цель:** Alt+V читает изображение из буфера обмена и прикрепляет к сообщению.
 
 **Статус:** ⏳ В плане
 
 **Файлы:**
-- `src/core/agent-loop.ts` — вызов hooks в executeTool
+- `src/utils/clipboard.ts` — новый файл, платформо-специфичное чтение
+- `src/ui/input-bar.tsx` — обработчик Alt+V, `pendingImageLabel` state
+- `src/ui/app.tsx` — `pendingImage` state, проверка модели
+- `src/api/index.ts` — расширить `ChatMessage.content` до `string | ContentBlock[]`
 
 **Задачи:**
-1. Импортировать `hooksManager`
-2. Перед `executeTool()`: `hooksManager.execute('PreToolExecution', ...)`
-3. После результата: `hooksManager.execute('PostToolExecution', ...)`
-4. Ошибки хуков логировать, не блокировать
+1. `clipboard.ts`: Windows (PowerShell), macOS (osascript), Linux (xclip) → `Buffer | null`
+2. `input-bar.tsx`: `key.meta && _input === 'v'` → читать буфер, показать `[image: NKB]`
+3. `app.tsx`: если модель без vision → показать предупреждение; иначе сохранить в `pendingImage`
+4. При submit: добавить `image_url` content block к сообщению
+5. `api/index.ts`: `ContentBlock` тип, `ChatMessage.content: string | ContentBlock[]`
 
----
-
-## 🚪 Iteration 16 — Graceful exit + Headless plan fix
-
-**Цель:** Безопасный выход + корректный plan mode в headless.
-
-**Статус:** ⏳ В плане
-
-**Файлы:**
-- `src/cli/headless.ts` — plan mode для read-тулов
-- `src/ui/app.tsx` — Ctrl+C → сохранить сессию
-- `src/ui/input-bar.tsx` — onExit с сохранением
-
-**Задачи:**
-1. headless.ts: `plan` mode → `true` для read, `false` для write/edit/bash
-2. app.tsx: `Ctrl+C` в простое → "Save session? (y/n)"
-3. input-bar.tsx: `Ctrl+C` → onExit() с saveSession
+**Проверка:**
+- Windows + изображение в буфере: Alt+V → `[image: 42KB]`, при отправке включает данные
+- Модель без vision: чёткое предупреждение
+- Буфер пустой: 2с подсказка `(no image in clipboard)`

@@ -3,6 +3,7 @@ import { type ToolDefinition, type ApprovalRequirement, toOpenAITools } from '..
 import { getToolsForMode } from '../tools/registry.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
+import { i18n } from './i18n.js'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { platform, release, type } from 'node:os'
@@ -287,8 +288,7 @@ export class AgentLoop extends EventEmitter {
             responseContent = fallbackResult.content
             this.options.onStreamChunk(responseContent)
           } else {
-            // DeepSeek API вернул пустой ответ — возможно модель "передумала"
-            const fallback = 'Я выполнил запрошенные действия. Что ещё нужно сделать?'
+            const fallback = i18n.t('agentEmptyResponse')
             this.messages.push({ role: 'assistant', content: fallback })
             this.options.onResponse(fallback)
             return fallback

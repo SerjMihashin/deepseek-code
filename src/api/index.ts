@@ -40,6 +40,34 @@ export interface ToolCallMessage {
   tool_calls: NonNullable<ChatMessage['tool_calls']>;
 }
 
+// ─── Retry helpers ───────────────────────────────────────────────────────────
+
+const MAX_RETRY_ATTEMPTS = 3
+const STREAM_CHUNK_TIMEOUT_MS = 60_000
+
+function sleep (ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetryable (err: unknown): boolean {
+  const msg = String((err as { message?: unknown })?.message ?? err)
+  return /429|5[0-9]{2}|ECONNRESET|ETIMEDOUT|ENOTFOUND|ECONNREFUSED/.test(msg)
+}
+
+async function withRetry<T> (fn: () => Promise<T>): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn()
+    } catch (err: unknown) {
+      lastErr = err
+      if (attempt === MAX_RETRY_ATTEMPTS || !isRetryable(err)) throw err
+      await sleep(Math.min(1000 * 2 ** (attempt - 1), 30_000))
+    }
+  }
+  throw lastErr
+}
+
 export class DeepSeekAPI {
   private client: OpenAI
   private model: string
@@ -63,57 +91,97 @@ export class DeepSeekAPI {
       ...buildMessages(messages),
     ]
 
-    const stream = await this.client.chat.completions.create({
-      model: this.model,
-      messages: fullMessages,
-      stream: true,
-      ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' as const } : {}),
-    })
+    const timeoutController = new AbortController()
+    let chunkTimer: ReturnType<typeof setTimeout>
+
+    const resetChunkTimer = () => {
+      clearTimeout(chunkTimer)
+      chunkTimer = setTimeout(() => {
+        timeoutController.abort(new Error(`Stream timeout: no data received for ${STREAM_CHUNK_TIMEOUT_MS / 1000}s`))
+      }, STREAM_CHUNK_TIMEOUT_MS)
+    }
+
+    const stream = await withRetry(() =>
+      this.client.chat.completions.create(
+        {
+          model: this.model,
+          messages: fullMessages,
+          stream: true,
+          ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' as const } : {}),
+        },
+        { signal: timeoutController.signal }
+      )
+    ) as unknown as AsyncIterable<OpenAI.Chat.ChatCompletionChunk>
 
     let currentToolCallId = ''
     let currentToolName = ''
     let currentToolArgs = ''
 
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta
+    resetChunkTimer()
+    try {
+      for await (const chunk of stream) {
+        resetChunkTimer()
+        const delta = chunk.choices[0]?.delta
 
-      if (!delta) continue
+        if (!delta) continue
 
-      // Reasoning content (DeepSeek-specific, from deepseek-reasoner model)
-      const reasoningContent = (delta as Record<string, unknown>).reasoning_content as string | undefined
-      if (reasoningContent) {
-        yield {
-          type: 'reasoning',
-          content: reasoningContent,
+        // Reasoning content (DeepSeek-specific, from deepseek-reasoner model)
+        const reasoningContent = (delta as Record<string, unknown>).reasoning_content as string | undefined
+        if (reasoningContent) {
+          yield {
+            type: 'reasoning',
+            content: reasoningContent,
+          }
+          continue
         }
-        continue
-      }
 
-      // Tool call delta
-      if (delta.tool_calls) {
-        for (const tc of delta.tool_calls) {
-          if (tc.id) {
+        // Tool call delta
+        if (delta.tool_calls) {
+          for (const tc of delta.tool_calls) {
+            if (tc.id) {
             // Flush previous tool call if any
-            if (currentToolCallId && currentToolName) {
-              yield {
-                type: 'tool_use',
-                content: '',
-                toolName: currentToolName,
-                toolInput: safeParseJSON(currentToolArgs),
-                toolCallId: currentToolCallId,
+              if (currentToolCallId && currentToolName) {
+                yield {
+                  type: 'tool_use',
+                  content: '',
+                  toolName: currentToolName,
+                  toolInput: safeParseJSON(currentToolArgs),
+                  toolCallId: currentToolCallId,
+                }
               }
+              currentToolCallId = tc.id
+              currentToolName = tc.function?.name ?? ''
+              currentToolArgs = tc.function?.arguments ?? ''
+            } else if (tc.function?.arguments) {
+              currentToolArgs += tc.function.arguments
             }
-            currentToolCallId = tc.id
-            currentToolName = tc.function?.name ?? ''
-            currentToolArgs = tc.function?.arguments ?? ''
-          } else if (tc.function?.arguments) {
-            currentToolArgs += tc.function.arguments
+          }
+          continue
+        }
+
+        // Flush pending tool call before text
+        if (currentToolCallId && currentToolName) {
+          yield {
+            type: 'tool_use',
+            content: '',
+            toolName: currentToolName,
+            toolInput: safeParseJSON(currentToolArgs),
+            toolCallId: currentToolCallId,
+          }
+          currentToolCallId = ''
+          currentToolName = ''
+          currentToolArgs = ''
+        }
+
+        if (delta?.content) {
+          yield {
+            type: 'text',
+            content: delta.content,
           }
         }
-        continue
       }
 
-      // Flush pending tool call before text
+      // Flush remaining tool call at end of stream
       if (currentToolCallId && currentToolName) {
         yield {
           type: 'tool_use',
@@ -122,28 +190,9 @@ export class DeepSeekAPI {
           toolInput: safeParseJSON(currentToolArgs),
           toolCallId: currentToolCallId,
         }
-        currentToolCallId = ''
-        currentToolName = ''
-        currentToolArgs = ''
       }
-
-      if (delta?.content) {
-        yield {
-          type: 'text',
-          content: delta.content,
-        }
-      }
-    }
-
-    // Flush remaining tool call at end of stream
-    if (currentToolCallId && currentToolName) {
-      yield {
-        type: 'tool_use',
-        content: '',
-        toolName: currentToolName,
-        toolInput: safeParseJSON(currentToolArgs),
-        toolCallId: currentToolCallId,
-      }
+    } finally {
+      clearTimeout(chunkTimer!)
     }
   }
 
@@ -160,11 +209,13 @@ export class DeepSeekAPI {
       ...buildMessages(messages),
     ]
 
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: fullMessages,
-      ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' as const } : {}),
-    })
+    const response = await withRetry(() =>
+      this.client.chat.completions.create({
+        model: this.model,
+        messages: fullMessages,
+        ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' as const } : {}),
+      })
+    )
 
     const message = response.choices[0]?.message
 

@@ -6,6 +6,7 @@ import { themeManager } from '../core/themes.js'
 
 interface ChatViewProps {
   messages: ChatMessage[];
+  scrollOffset?: number;
 }
 
 function MessageBubble ({ message }: { message: ChatMessage }) {
@@ -28,11 +29,13 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
   )
 }
 
-export function ChatView ({ messages }: ChatViewProps) {
+export function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
   const colors = themeManager.getColors()
 
   // Filter out tool messages — they are displayed in ToolCallView instead
   const visibleMessages = messages.filter(msg => msg.role !== 'tool')
+  const hidden = Math.min(scrollOffset, Math.max(0, visibleMessages.length - 1))
+  const shown = hidden > 0 ? visibleMessages.slice(hidden) : visibleMessages
 
   return (
     <Box flexDirection='column' flexGrow={1} paddingX={1}>
@@ -43,17 +46,21 @@ export function ChatView ({ messages }: ChatViewProps) {
             <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
             <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
             <Box marginTop={1}>
-              <Text color={colors.textMuted}>/remember, /forget, /memory | /checkpoint, /restore | /compress | /setup</Text>
-            </Box>
-            <Box marginTop={1}>
-              <Text color={colors.textMuted}>/mcp, /skills, /agents, /stats, /review | /theme, /lang, /extensions</Text>
+              <Text color={colors.textMuted}>/help — команды  |  /setup — настройка</Text>
             </Box>
           </Box>
           )
         : (
-            visibleMessages.map((msg, i) => (
-              <MessageBubble key={i} message={msg} />
-            ))
+          <>
+            {hidden > 0 && (
+              <Box paddingX={1}>
+                <Text dimColor>↑ {hidden} earlier message{hidden > 1 ? 's' : ''} (PageDown to scroll back)</Text>
+              </Box>
+            )}
+            {shown.map((msg, i) => (
+              <MessageBubble key={hidden + i} message={msg} />
+            ))}
+          </>
           )}
     </Box>
   )

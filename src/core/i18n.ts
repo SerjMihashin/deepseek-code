@@ -69,6 +69,7 @@ interface LocaleStrings {
   themeDracula: string;
   themeNord: string;
   themeSolarized: string;
+  themeMatrix: string;
 
   // Agent errors
   agentEmptyResponse: string;
@@ -136,6 +137,7 @@ const EN: LocaleStrings = {
   themeDracula: 'Dracula theme',
   themeNord: 'Nord theme',
   themeSolarized: 'Solarized dark theme',
+  themeMatrix: 'The Matrix — green code rain',
 
   agentEmptyResponse: 'The model returned an empty response. Please try again.',
 }
@@ -202,6 +204,7 @@ const RU: LocaleStrings = {
   themeDracula: 'Тема Дракулы',
   themeNord: 'Тема Nord',
   themeSolarized: 'Тема Solarized',
+  themeMatrix: 'Матрица — зелёный дождь из кода',
 
   agentEmptyResponse: 'Модель вернула пустой ответ. Попробуйте ещё раз.',
 }
@@ -268,6 +271,7 @@ const ZH: LocaleStrings = {
   themeDracula: '德古拉主题',
   themeNord: 'Nord 主题',
   themeSolarized: 'Solarized 深色主题',
+  themeMatrix: '黑客帝国 — 绿色代码雨',
 
   agentEmptyResponse: '模型返回了空响应，请重试。',
 }

@@ -5,6 +5,7 @@ import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
 import { ToolCallView } from './tool-call-view.js'
 import { ReasoningView } from './reasoning-view.js'
+import { MatrixRain } from './matrix-rain.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
 import type { SessionOptions } from '../cli/interactive.js'
@@ -110,9 +111,11 @@ interface LangStepProps {
 }
 
 function LangStep ({ cursor, langOptions, langLabels }: LangStepProps) {
+  const isMatrix = themeManager.theme.name === 'matrix'
   return (
     <FadeIn delay={100}>
       <Box flexDirection='column' alignItems='center' flexGrow={1}>
+        {isMatrix && <MatrixRain />}
         <Logo />
         <Box marginTop={1}>
           <Text bold>{i18n.t('welcomeSubtitle')}</Text>
@@ -188,6 +191,7 @@ function ThemeStep ({ cursor }: ThemeStepProps) {
       dracula: 'themeDracula',
       nord: 'themeNord',
       solarized: 'themeSolarized',
+      matrix: 'themeMatrix',
     }
     return i18n.t((map[name] || 'themeDefault') as never)
   }
@@ -238,9 +242,11 @@ function ModeStep ({ cursor, modeOptions }: ModeStepProps) {
     'auto-edit': i18n.t('modeAutoEdit'),
     yolo: i18n.t('modeYolo'),
   }
+  const isMatrix = themeManager.theme.name === 'matrix'
   return (
     <FadeIn delay={400}>
       <Box flexDirection='column' alignItems='center' flexGrow={1}>
+        {isMatrix && <MatrixRain />}
         <Logo />
         <Box marginTop={1}>
           <Text bold color='magenta'>⚡ {i18n.t('selectMode')}</Text>
@@ -295,6 +301,7 @@ export function App ({ config, options }: AppProps) {
   const initializedRef = useRef(false)
   const [emptyInputHint, setEmptyInputHint] = useState(false)
   const emptyInputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [chatScrollOffset, setChatScrollOffset] = useState(0)
 
   // Check if API key is configured (non-empty) — used early for locale detection
   const hasApiKey = !!(config.apiKey || process.env.DEEPSEEK_API_KEY) &&
@@ -951,6 +958,7 @@ export function App ({ config, options }: AppProps) {
     setStatusText('Processing...')
     setToolCalls([])
     setReasoning('')
+    setChatScrollOffset(0)
 
     try {
       await hooksManager.execute('UserPromptSubmit', {
@@ -1162,6 +1170,14 @@ export function App ({ config, options }: AppProps) {
           return newMode
         })
       }
+      // PageUp/PageDown scroll chat history
+      if (key.pageUp) {
+        const visibleCount = messages.filter(m => m.role !== 'tool').length
+        setChatScrollOffset(prev => Math.min(prev + 3, Math.max(0, visibleCount - 1)))
+      }
+      if (key.pageDown) {
+        setChatScrollOffset(prev => Math.max(0, prev - 3))
+      }
       return
     }
 
@@ -1249,7 +1265,7 @@ export function App ({ config, options }: AppProps) {
               : (
                 <Box flexDirection='column' flexGrow={1}>
                   <Logo />
-                  <ChatView messages={messages} />
+                  <ChatView messages={messages} scrollOffset={chatScrollOffset} />
                   {toolCalls.length > 0 && <ToolCallView toolCalls={toolCalls} maxItems={3} />}
                   {isProcessing && reasoning.length > 0 && showReasoning && (
                     <ReasoningView reasoning={reasoning} isActive />

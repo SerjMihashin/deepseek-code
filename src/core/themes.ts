@@ -144,12 +144,36 @@ const SOLARIZED_THEME: Theme = {
   },
 }
 
+const MATRIX_THEME: Theme = {
+  name: 'matrix',
+  description: 'The Matrix — green code on black',
+  colorMode: 'rgb',
+  colors: {
+    primary: '#00ff41',
+    secondary: '#008f11',
+    success: '#00ff41',
+    warning: '#ffff00',
+    error: '#ff0000',
+    info: '#00cc33',
+    muted: '#003b00',
+    background: 'black',
+    surface: '#001100',
+    border: '#008f11',
+    text: '#00ff41',
+    textMuted: '#005900',
+    userBubble: '#00ff41',
+    assistantBubble: '#00cc33',
+    systemBubble: '#008f11',
+  },
+}
+
 const BUILT_IN_THEMES: Record<string, Theme> = {
   default: DEFAULT_THEME,
   light: LIGHT_THEME,
   dracula: DRACULA_THEME,
   nord: NORD_THEME,
   solarized: SOLARIZED_THEME,
+  matrix: MATRIX_THEME,
 }
 
 export class ThemeManager {

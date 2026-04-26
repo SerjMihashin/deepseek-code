@@ -11,7 +11,7 @@ import type { SessionOptions } from '../cli/interactive.js'
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { AgentLoop, type ToolCallEvent } from '../core/agent-loop.js'
 import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js'
-import { saveSession, getLastSessionId, writeSessionHandoff } from '../core/session.js'
+import { saveSession, getLastSessionId, writeExecutionBundle, writeSessionHandoff } from '../core/session.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
 import { mcpManager } from '../core/mcp.js'
 import { subAgentManager } from '../core/subagent.js'
@@ -791,6 +791,20 @@ export function App ({ config, options }: AppProps) {
 
       const finalResponse = await agentLoopRef.current.run(input, messages)
       const toolHistory = agentLoopRef.current.getToolCallHistory()
+      const bundleFile = await writeExecutionBundle({
+        sessionId: sessionIdRef.current,
+        prompt: input,
+        response: finalResponse,
+        approvalMode,
+        toolCalls: toolHistory.map(toolCall => ({
+          id: toolCall.id,
+          name: toolCall.name,
+          status: toolCall.status,
+          durationMs: toolCall.durationMs,
+          error: toolCall.error,
+          result: toolCall.result,
+        })),
+      })
       const handoffFile = await writeSessionHandoff({
         sessionId: sessionIdRef.current,
         prompt: input,
@@ -813,6 +827,7 @@ export function App ({ config, options }: AppProps) {
         lastResponse: finalResponse,
         summary: finalResponse,
         handoffFile,
+        bundleFile,
       })
     } catch (err) {
       const error = err as Error
@@ -845,6 +860,12 @@ export function App ({ config, options }: AppProps) {
         error: friendlyMsg,
         approvalMode,
       })
+      const bundleFile = await writeExecutionBundle({
+        sessionId: sessionIdRef.current,
+        prompt: input,
+        error: friendlyMsg,
+        approvalMode,
+      })
       await saveSession({
         id: sessionIdRef.current,
         messageCount: messages.length + 2,
@@ -853,6 +874,7 @@ export function App ({ config, options }: AppProps) {
         lastError: friendlyMsg,
         summary: friendlyMsg,
         handoffFile,
+        bundleFile,
       })
     } finally {
       setIsProcessing(false)

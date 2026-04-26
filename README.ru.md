@@ -30,7 +30,8 @@ AI сам решает, какие инструменты использоват
 ### 🔁 Continuation и handoff
 - Сессии теперь сохраняют последний prompt, последний ответ, число tool calls, approval mode и summary.
 - Каждый автономный прогон пишет handoff-файл в `~/.deepseek-code/sessions/<project-hash>/<session-id>.handoff.md`.
-- JSON/headless-вывод теперь включает `sessionId`, `handoffFile` и сводку по tool calls для CI и передачи работы другому агенту.
+- Каждый автономный прогон также пишет machine-readable bundle в `~/.deepseek-code/sessions/<project-hash>/<session-id>.bundle.json`.
+- JSON/headless-вывод теперь включает `sessionId`, `handoffFile`, `bundleFile` и сводку по tool calls для CI и передачи работы другому агенту.
 
 ### 🔒 Режимы разрешений
 | Режим | Описание |

@@ -19,6 +19,7 @@ export interface SessionData {
   lastResponse?: string;
   lastError?: string;
   handoffFile?: string;
+  bundleFile?: string;
 }
 
 export interface SessionHandoffInput {
@@ -32,6 +33,22 @@ export interface SessionHandoffInput {
     status: string;
     durationMs?: number;
     error?: string;
+  }>;
+}
+
+export interface SessionExecutionBundleInput {
+  sessionId: string;
+  prompt: string;
+  response?: string;
+  error?: string;
+  approvalMode?: string;
+  toolCalls?: Array<{
+    id?: string;
+    name: string;
+    status: string;
+    durationMs?: number;
+    error?: string;
+    result?: string;
   }>;
 }
 
@@ -86,6 +103,7 @@ export async function saveSession (data: Partial<SessionData>): Promise<string> 
     lastResponse: summarizeText(data.lastResponse ?? existing.lastResponse),
     lastError: summarizeText(data.lastError ?? existing.lastError),
     handoffFile: data.handoffFile ?? existing.handoffFile,
+    bundleFile: data.bundleFile ?? existing.bundleFile,
   }
 
   await writeFile(filePath, JSON.stringify(session, null, 2), 'utf-8')
@@ -122,6 +140,25 @@ export async function writeSessionHandoff (input: SessionHandoffInput): Promise<
 
   await writeFile(handoffFile, content, 'utf-8')
   return handoffFile
+}
+
+export async function writeExecutionBundle (input: SessionExecutionBundleInput): Promise<string> {
+  const projectDir = await ensureProjectSessionDir()
+  const bundleFile = join(projectDir, `${input.sessionId}.bundle.json`)
+
+  const bundle = {
+    sessionId: input.sessionId,
+    createdAt: new Date().toISOString(),
+    projectDir: process.cwd(),
+    approvalMode: input.approvalMode,
+    prompt: input.prompt,
+    response: input.response,
+    error: input.error,
+    toolCalls: input.toolCalls ?? [],
+  }
+
+  await writeFile(bundleFile, JSON.stringify(bundle, null, 2), 'utf-8')
+  return bundleFile
 }
 
 export async function getLastSessionId (): Promise<string | null> {

@@ -108,7 +108,8 @@ The browser layer is a native part of the agent, not an external add-on.
 
 - Sessions now store last prompt, last response, tool-call count, approval mode, and summary.
 - Each autonomous run writes a handoff file under `~/.deepseek-code/sessions/<project-hash>/<session-id>.handoff.md`.
-- Headless JSON output now includes `sessionId`, `handoffFile`, and tool-call summaries for CI and chaining.
+- Each autonomous run also writes a machine-readable execution bundle under `~/.deepseek-code/sessions/<project-hash>/<session-id>.bundle.json`.
+- Headless JSON output now includes `sessionId`, `handoffFile`, `bundleFile`, and tool-call summaries for CI and chaining.
 
 ## 🎮 How It Works
 

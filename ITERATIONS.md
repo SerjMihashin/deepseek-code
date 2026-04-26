@@ -168,20 +168,25 @@ Commit:
 ---
 
 ## Iteration 6 — Unique Product Layer
-Status: Planned
+Status: In Progress
 
 Goal:
 Add a differentiated workflow that makes DeepSeek Code more than a cheaper clone.
 
-- [ ] Define evidence bundle output for autonomous tasks
+- [x] Define evidence bundle output for autonomous tasks
 - [ ] Add browser-assisted QA recipes or skills
-- [ ] Add reproducible task-run summary output
-- [ ] Improve memory quality and project-specific persistence
-- [ ] Document unique value proposition in README and SPEC
+- [x] Add reproducible task-run summary output
+- [x] Improve memory quality and project-specific persistence
+- [x] Document unique value proposition in README and SPEC
 - [ ] Add commit hash for this iteration
 
 Expected result:
 - a distinctive “coding + browser QA + evidence” CLI agent.
+
+Notes:
+- autonomous runs now produce both human-readable handoff markdown and machine-readable execution bundles;
+- session persistence now captures approval mode, prompt/response summaries, tool-call count, and artifact paths;
+- headless output is now suitable for chaining in CI and for another agent to resume from structured evidence.
 
 ---
 

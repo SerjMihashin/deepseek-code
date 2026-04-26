@@ -1,6 +1,6 @@
 import { loadConfig } from '../config/loader.js'
 import { AgentLoop } from '../core/agent-loop.js'
-import { saveSession, writeSessionHandoff } from '../core/session.js'
+import { saveSession, writeExecutionBundle, writeSessionHandoff } from '../core/session.js'
 import type { SessionOptions } from './interactive.js'
 
 export interface HeadlessToolCallSummary {
@@ -19,6 +19,7 @@ export interface HeadlessResult {
   toolCallCount: number;
   sessionId?: string;
   handoffFile?: string;
+  bundleFile?: string;
   toolCalls?: HeadlessToolCallSummary[];
   error?: string;
 }
@@ -47,6 +48,20 @@ export async function headlessMode (
     const response = await agent.run(prompt)
     const duration = Date.now() - startTime
     const toolCalls = agent.getToolCallHistory()
+    const bundleFile = await writeExecutionBundle({
+      sessionId,
+      prompt,
+      response,
+      approvalMode,
+      toolCalls: toolCalls.map(toolCall => ({
+        id: toolCall.id,
+        name: toolCall.name,
+        status: toolCall.status,
+        durationMs: toolCall.durationMs,
+        error: toolCall.error,
+        result: toolCall.result,
+      })),
+    })
     const handoffFile = await writeSessionHandoff({
       sessionId,
       prompt,
@@ -69,6 +84,7 @@ export async function headlessMode (
       lastResponse: response,
       summary: response,
       handoffFile,
+      bundleFile,
     })
 
     return {
@@ -79,6 +95,7 @@ export async function headlessMode (
       toolCallCount: toolCalls.length,
       sessionId,
       handoffFile,
+      bundleFile,
       toolCalls: toolCalls.map(toolCall => ({
         id: toolCall.id,
         name: toolCall.name,
@@ -89,6 +106,12 @@ export async function headlessMode (
     }
   } catch (err) {
     const error = (err as Error).message
+    const bundleFile = await writeExecutionBundle({
+      sessionId,
+      prompt,
+      error,
+      approvalMode,
+    })
     const handoffFile = await writeSessionHandoff({
       sessionId,
       prompt,
@@ -105,6 +128,7 @@ export async function headlessMode (
       lastError: error,
       summary: error,
       handoffFile,
+      bundleFile,
     })
 
     return {
@@ -115,6 +139,7 @@ export async function headlessMode (
       toolCallCount: 0,
       sessionId,
       handoffFile,
+      bundleFile,
       error,
     }
   }

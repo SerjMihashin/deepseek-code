@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
+import minimatch from 'minimatch'
 
 const IGNORE_FILE_NAME = '.deepseekignore'
 
 /**
  * Check if a path should be ignored based on .deepseekignore patterns.
- * Simple implementation — for production use minimatch or ignore package.
+ * Supports full .gitignore glob syntax via minimatch: *, **, ?, [ranges], ! negation.
  */
 export async function shouldIgnore (relativePath: string): Promise<boolean> {
   const ignorePath = join(process.cwd(), IGNORE_FILE_NAME)
@@ -21,15 +22,21 @@ export async function shouldIgnore (relativePath: string): Promise<boolean> {
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('#'))
 
+    // Process patterns in order; negation patterns (!) override earlier matches
+    let ignored = false
     for (const pattern of patterns) {
-      if (relativePath === pattern) return true
-      if (pattern.endsWith('/') && relativePath.startsWith(pattern)) return true
-      if (pattern.startsWith('*') && relativePath.endsWith(pattern.slice(1))) return true
-      if (pattern.endsWith('*') && relativePath.startsWith(pattern.slice(0, -1))) return true
+      if (pattern.startsWith('!')) {
+        if (minimatch(relativePath, pattern.slice(1), { dot: true, matchBase: true })) {
+          ignored = false
+        }
+      } else {
+        if (minimatch(relativePath, pattern, { dot: true, matchBase: true })) {
+          ignored = true
+        }
+      }
     }
+    return ignored
   } catch {
-    // Ignore errors
+    return false
   }
-
-  return false
 }

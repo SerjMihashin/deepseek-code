@@ -2,6 +2,7 @@ import { readFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 export interface ExtensionManifest {
   name: string;
@@ -49,7 +50,18 @@ export interface ExtensionAPI {
  */
 export class ExtensionManager {
   private extensions: Map<string, ExtensionManifest> = new Map()
+  private extensionDirs: Map<string, string> = new Map()
   private loaded = new Set<string>()
+
+  private createApi (): ExtensionAPI {
+    return {
+      registerTool: (name, handler) => { console.log(`[extension] registerTool: ${name}`, handler) },
+      registerCommand: (name, handler) => { console.log(`[extension] registerCommand: ${name}`, handler) },
+      getConfig: (_key) => undefined,
+      log: (...args) => console.log('[extension]', ...args),
+      services: {} as ExtensionAPI['services'],
+    }
+  }
 
   async discover (): Promise<ExtensionManifest[]> {
     const all: ExtensionManifest[] = []
@@ -71,6 +83,7 @@ export class ExtensionManager {
                 const manifest = JSON.parse(content) as ExtensionManifest
                 manifest.name = entry.name
                 this.extensions.set(entry.name, manifest)
+                this.extensionDirs.set(entry.name, join(baseDir, entry.name))
                 all.push(manifest)
               } catch { /* ignore */ }
             }
@@ -97,6 +110,23 @@ export class ExtensionManager {
             console.error(`Extension "${name}" depends on "${dep}" which could not be loaded`)
             return false
           }
+        }
+      }
+    }
+
+    // Actually import and initialise the extension's main file
+    const extensionDir = this.extensionDirs.get(name)
+    if (extensionDir && manifest.main) {
+      const mainPath = join(extensionDir, manifest.main)
+      if (existsSync(mainPath)) {
+        try {
+          const mod = await import(pathToFileURL(mainPath).href) as Record<string, unknown>
+          if (typeof mod.default === 'function') {
+            (mod.default as (api: ExtensionAPI) => void)(this.createApi())
+          }
+        } catch (err) {
+          console.error(`[extension] Failed to initialise "${name}":`, err)
+          return false
         }
       }
     }

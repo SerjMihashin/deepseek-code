@@ -403,6 +403,48 @@ export function App ({ config, options }: AppProps) {
     const cmd = parts[0]?.toLowerCase()
 
     switch (cmd) {
+      // === Help command ===
+      case '/help': {
+        const helpText = [
+          '**DeepSeek Code — команды**',
+          '',
+          '**Память:**',
+          '  /remember <текст>  — сохранить в память',
+          '  /forget <текст>    — удалить из памяти',
+          '  /memory            — показать все воспоминания',
+          '',
+          '**Код и ревью:**',
+          '  /review            — провести ревью кода',
+          '  /checkpoint        — создать чекпоинт',
+          '  /restore           — восстановить чекпоинт',
+          '  /compress          — сжать историю диалога',
+          '',
+          '**Инструменты:**',
+          '  /sandbox <cmd>     — выполнить в изолированной среде',
+          '  /git <cmd>         — git-команды',
+          '  /mcp               — управление MCP-серверами',
+          '  /skills [name]     — скиллы агента',
+          '  /agents            — список субагентов',
+          '  /extensions        — управление расширениями',
+          '  /loop <n> <задача> — запустить задачу N раз',
+          '',
+          '**Настройки:**',
+          '  /setup             — мастер первоначальной настройки',
+          '  /theme [name]      — сменить тему',
+          '  /lang [code]       — сменить язык (ru/en/zh)',
+          '  /stats             — статистика сессии',
+          '',
+          '**Горячие клавиши:**',
+          '  Tab                — переключить режим разрешений',
+          '  r                  — показать/скрыть рассуждения',
+          '  Ctrl+C             — отменить выполнение',
+          '  Ctrl+L             — очистить диалог',
+          '  PageUp/PageDown    — прокрутить историю чата',
+        ].join('\n')
+        setMessages(prev => [...prev, { role: 'assistant', content: helpText }])
+        return true
+      }
+
       // === Setup command ===
       case '/setup': {
         setSetupStep('lang')

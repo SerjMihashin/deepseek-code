@@ -1,5 +1,11 @@
 import { execSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
+import { sep } from 'node:path'
+
+/** Convert Windows backslash paths to forward-slash paths for Docker mount syntax */
+function toDockerPath (p: string): string {
+  return p.split(sep).join('/')
+}
 
 export interface SandboxOptions {
   /** Docker image to use */
@@ -70,12 +76,12 @@ export class Sandbox {
     ]
 
     if (options.mountProject !== false) {
-      dockerArgs.push('-v', `${process.cwd()}:/workspace`)
+      dockerArgs.push('-v', `${toDockerPath(process.cwd())}:/workspace`)
     }
 
     if (options.mounts) {
       for (const m of options.mounts) {
-        dockerArgs.push('-v', `${m.host}:${m.container}`)
+        dockerArgs.push('-v', `${toDockerPath(m.host)}:${m.container}`)
       }
     }
 

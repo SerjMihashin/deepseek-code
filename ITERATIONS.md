@@ -29,41 +29,52 @@ Commit:
 ---
 
 ## Iteration 1 — Specification Reset
-Status: In Progress
+Status: Completed
 
 Goal:
 Make the specification and iteration files truthful, browser-first, and suitable for autonomous handoff.
 
 - [x] Rewrite `SPEC.md` to define browser as first-class runtime
 - [x] Rewrite `ITERATIONS.md` into an execution checklist and handoff log
-- [ ] Add commit hash for this iteration after commit is created
+- [x] Add commit hash for this iteration after commit is created
 
 Files:
 - `SPEC.md`
 - `ITERATIONS.md`
 
+Commit:
+- `e79df04` — `docs: reset spec and iteration roadmap`
+
 ---
 
 ## Iteration 2 — Stabilization
-Status: Planned
+Status: Completed
 
 Goal:
 Restore trust in the repository by fixing baseline defects and removing false claims.
 
-- [ ] Fix current `eslint` failures
-- [ ] Fix browser tool naming/UI mismatches
-- [ ] Fix browser status indicator so it reflects live runtime state
-- [ ] Fix browser event collection defects in `console` and `network`
-- [ ] Fix browser action defaults that cause wrong behavior
-- [ ] Align registered tools, system prompt, and docs
-- [ ] Verify `typecheck`, `build`, and `lint`
-- [ ] Run tests that are possible in the current environment and document any remaining gaps
+- [x] Fix current `eslint` failures
+- [x] Fix browser tool naming/UI mismatches
+- [x] Fix browser status indicator so it reflects live runtime state
+- [x] Fix browser event collection defects in `console` and `network`
+- [x] Fix browser action defaults that cause wrong behavior
+- [x] Align registered tools, system prompt, and docs
+- [x] Verify `typecheck`, `build`, and `lint`
+- [x] Run tests that are possible in the current environment and document any remaining gaps
 - [ ] Add commit hash for this iteration
 
 Expected result:
 - clean baseline;
 - honest documentation;
 - browser tool working more reliably inside current architecture.
+
+Notes:
+- `npm run lint` passes.
+- `npm run typecheck` passes.
+- `npm run build` passes.
+- direct `node --test src/tools/types.test.ts` is not a valid execution path in this ESM setup;
+- compiled test path `node --test dist/tools/types.test.js` passes;
+- sandboxed `node --test` still needs escalation in this environment because of `spawn EPERM`.
 
 ---
 

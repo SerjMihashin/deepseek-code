@@ -4,7 +4,6 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
-import { getToolsForMode } from '../tools/registry.js'
 
 export interface SubAgentConfig {
   name: string;

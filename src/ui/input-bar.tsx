@@ -52,11 +52,6 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const getSuggestions = (text: string) =>
     text.startsWith('/') ? COMMANDS.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
 
-  const acceptSuggestion = (cmd: string) => {
-    setInput(cmd + ' ')
-    setSuggestionIndex(-1)
-  }
-
   useInput((_input, key) => {
     if (disabled) return
 

@@ -169,7 +169,7 @@ src/
   cli/       — Entry point, Commander CLI, headless mode
   core/      — Agent loop, memory, sessions, MCP, subagents, themes, i18n
   api/       — DeepSeek API client with function calling
-  tools/     — 9 tools: read, write, edit, bash, glob, grep, chrome, web_fetch, list_directory
+  tools/     — 7 native tools: read, write, edit, bash, glob, grep, chrome
   ui/        — Ink/React components (chat, input, status bar, tool calls)
   config/    — Config loader and defaults
   utils/     — Logger, .deepseekignore

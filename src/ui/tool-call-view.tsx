@@ -97,7 +97,7 @@ export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
         const duration = tc.durationMs ? formatDuration(tc.durationMs) : ''
 
         // Chrome-специфичное форматирование
-        const isChrome = tc.name === 'Chrome'
+        const isChrome = tc.name === 'chrome'
         const displayArgs = isChrome ? formatChromeArgs(tc.arguments) : formatArgs(tc.arguments)
 
         return (

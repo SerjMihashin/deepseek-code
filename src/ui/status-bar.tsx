@@ -57,9 +57,16 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  // Check Chrome status once on mount
+  // Keep Chrome status in sync with the runtime.
   useEffect(() => {
     setChromeConnected(chromeManager.isConnected())
+    const handleConnectionChange = (connected: boolean) => {
+      setChromeConnected(connected)
+    }
+    chromeManager.on('connectionChange', handleConnectionChange)
+    return () => {
+      chromeManager.off('connectionChange', handleConnectionChange)
+    }
   }, [])
 
   return (

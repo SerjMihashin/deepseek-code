@@ -1,8 +1,4 @@
-import { execSync, spawn } from 'node:child_process'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { execSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 
 export interface SandboxOptions {

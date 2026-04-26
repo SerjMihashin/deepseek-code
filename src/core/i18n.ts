@@ -1,8 +1,3 @@
-import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'node:path'
-
 export type Locale = 'en' | 'ru' | 'zh'
 
 interface LocaleStrings {

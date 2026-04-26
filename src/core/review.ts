@@ -1,9 +1,7 @@
 import { execSync } from 'node:child_process'
-import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { join, basename } from 'node:path'
-import { homedir } from 'node:os'
-import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { DeepSeekAPI } from '../api/index.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 
 export interface ReviewOptions {

@@ -29,7 +29,9 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
   )
 }
 
-export function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
+// React.memo prevents re-render on every keystroke — only re-renders
+// when messages array length or last message content actually changes.
+export const ChatView = React.memo(function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
   const colors = themeManager.getColors()
 
   // Filter out tool messages — they are displayed in ToolCallView instead
@@ -64,4 +66,4 @@ export function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
           )}
     </Box>
   )
-}
+})

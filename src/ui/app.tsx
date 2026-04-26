@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { Box, Text, useInput, useApp } from 'ink'
 import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
@@ -291,6 +291,8 @@ export function App ({ config, options }: AppProps) {
   const abortControllerRef = useRef<AbortController | null>(null)
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const [reasoning, setReasoning] = useState('')
+  const reasoningPendingRef = useRef('')
+  const reasoningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [showReasoning, setShowReasoning] = useState(false)
   const [pendingApproval, setPendingApproval] = useState<{
     toolName: string;
@@ -989,12 +991,20 @@ export function App ({ config, options }: AppProps) {
             setStatusText(result.success ? `✅ ${result.toolName} done` : `❌ ${result.toolName} failed`)
           },
           onReasoningChunk: (chunk) => {
-            setReasoning(prev => prev + chunk)
+            // Debounce reasoning updates to 100ms to avoid UI jitter
+            reasoningPendingRef.current += chunk
+            if (!reasoningTimerRef.current) {
+              reasoningTimerRef.current = setTimeout(() => {
+                setReasoning(reasoningPendingRef.current)
+                reasoningTimerRef.current = null
+              }, 100)
+            }
           },
           onStreamChunk: (chunk) => {
             setMessages(prev => {
               const last = prev[prev.length - 1]
-              if (last?.role === 'assistant' && last.content !== '') {
+              if (last?.role === 'assistant') {
+                // If last content is empty, replace with chunk; otherwise append
                 const updated = [...prev]
                 updated[updated.length - 1] = { ...last, content: last.content + chunk }
                 return updated
@@ -1002,15 +1012,9 @@ export function App ({ config, options }: AppProps) {
               return [...prev, { role: 'assistant', content: chunk }]
             })
           },
-          onResponse: (response) => {
-            setMessages(prev => {
-              const last = prev[prev.length - 1]
-              if (last?.role === 'assistant' && last.content === response) {
-                return prev
-              }
-              return [...prev, { role: 'assistant', content: response }]
-            })
-          },
+          // onResponse intentionally removed — onStreamChunk handles all text
+          // Avoids duplicate "assistant" message push that caused text doubling
+          onResponse: () => {},
           onError: (error) => {
             setMessages(prev => [...prev, {
               role: 'assistant',
@@ -1120,6 +1124,15 @@ export function App ({ config, options }: AppProps) {
     } finally {
       setIsProcessing(false)
       setStatusText('Ready')
+      // Flush pending reasoning
+      if (reasoningTimerRef.current) {
+        clearTimeout(reasoningTimerRef.current)
+        reasoningTimerRef.current = null
+      }
+      if (reasoningPendingRef.current) {
+        setReasoning(reasoningPendingRef.current)
+        reasoningPendingRef.current = ''
+      }
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null
       }

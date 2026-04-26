@@ -13,7 +13,7 @@ const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', 
  * ReasoningView — отображает рассуждения AI в реальном времени.
  * Показывает спиннер и текст reasoning, который стримится из DeepSeek API.
  */
-export function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
+export const ReasoningView = React.memo(function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
   const [spinnerFrame, setSpinnerFrame] = useState(0)
   const colors = themeManager.getColors()
 
@@ -40,10 +40,10 @@ export function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
       <Box>
         <Text>
           {isActive
-            ? <Text color='yellow'>{SPINNER_FRAMES[spinnerFrame]}</Text>
-            : <Text color='green'>✓</Text>}
+            ? <Text color={colors.warning}>{SPINNER_FRAMES[spinnerFrame]}</Text>
+            : <Text color={colors.success}>✓</Text>}
           {' '}
-          <Text bold color='yellow'>Reasoning</Text>
+          <Text bold color={colors.warning}>Reasoning</Text>
           {truncated && <Text dimColor> (showing last {MAX_LINES} lines)</Text>}
         </Text>
       </Box>
@@ -54,4 +54,4 @@ export function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
       </Box>
     </Box>
   )
-}
+})

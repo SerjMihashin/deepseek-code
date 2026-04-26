@@ -3,8 +3,8 @@ import { Box, Text, useInput, useApp } from 'ink'
 import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
-import { ToolCallView } from './tool-call-view.js'
-import { ReasoningView } from './reasoning-view.js'
+import { ResultsPanel } from './results-panel.js'
+import { FadeIn } from './fade-in.js'
 import { MatrixRain } from './matrix-rain.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
@@ -26,17 +26,8 @@ import { scheduler, Scheduler } from '../core/scheduler.js'
 import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { extensionManager } from '../core/extensions.js'
+import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 
-// Animated fade-in wrapper with proper cleanup
-function FadeIn ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  const [visible, setVisible] = useState(false)
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), delay)
-    return () => clearTimeout(timer) // Cleanup on unmount
-  }, [delay])
-  if (!visible) return <Box />
-  return <Box>{children}</Box>
-}
 
 /** Empty input hint timeout in ms before showing the guide text */
 const EMPTY_INPUT_HINT_DELAY = 2000
@@ -79,201 +70,8 @@ function generateFollowups (lastContent: string): string[] {
   return suggestions
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Setup wizard step components — MUST be at module level, NOT inside App.
-// Defining them inside App creates a new function reference every render,
-// causing React to unmount+remount them, resetting FadeIn to invisible.
-// ────────────────────────────────────────────────────────────────────────────
-
-const LOGO_LINES = (() => {
-  const D = ['██████╗ ', '██╔══██╗', '██║  ██║', '██║  ██║', '██████╔╝', '╚═════╝ ']
-  const E = ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝']
-  const P = ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔═══╝ ', '██║     ', '╚═╝     ']
-  const S = ['███████╗', '██╔════╝', '███████╗', '╚════██║', '███████║', '╚══════╝']
-  const K = ['██╗  ██╗', '██║ ██╔╝', '█████╔╝ ', '██╔═██╗ ', '██║  ██╗', '╚═╝  ╚═╝']
-  return [0, 1, 2, 3, 4, 5].map(i => D[i] + E[i] + E[i] + P[i] + S[i] + E[i] + E[i] + K[i])
-})()
-
-function Logo () {
-  return (
-    <Box flexDirection='column' alignItems='center'>
-      {LOGO_LINES.map((line, i) => (
-        <Text key={i} bold color='blue'>{line}</Text>
-      ))}
-    </Box>
-  )
-}
-
-interface LangStepProps {
-  cursor: number;
-  langOptions: Array<'ru' | 'en' | 'zh'>;
-  langLabels: Record<string, string>;
-}
-
-function LangStep ({ cursor, langOptions, langLabels }: LangStepProps) {
-  const isMatrix = themeManager.theme.name === 'matrix'
-  return (
-    <FadeIn delay={100}>
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        {isMatrix && <MatrixRain />}
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold>{i18n.t('welcomeSubtitle')}</Text>
-        </Box>
-        <Box marginTop={2}>
-          <Text bold>🌐 {i18n.t('selectLanguage')}</Text>
-        </Box>
-        <Box marginTop={1} flexDirection='column' alignItems='center'>
-          {langOptions.map((code, i) => (
-            <Box key={code}>
-              <Text>
-                {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-                <Text color={i === cursor ? 'green' : 'white'}>{langLabels[code]}</Text>
-              </Text>
-            </Box>
-          ))}
-        </Box>
-        <Box marginTop={2}>
-          <Text dimColor>↑↓ {i18n.t('langHint')}</Text>
-        </Box>
-        <Box>
-          <Text dimColor>Enter ✓</Text>
-        </Box>
-      </Box>
-    </FadeIn>
-  )
-}
-
-interface ApiKeyStepProps {
-  apiKeyError: string;
-}
-
-function ApiKeyStep ({ apiKeyError }: ApiKeyStepProps) {
-  return (
-    <FadeIn delay={200}>
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold color='yellow'>🔑 {i18n.t('setupApiKey')}</Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text>{i18n.t('enterApiKey')}</Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>{i18n.t('apiKeyHint')}</Text>
-        </Box>
-        {apiKeyError
-          ? (
-            <Box marginTop={1}>
-              <Text color='red'>{apiKeyError}</Text>
-            </Box>
-            )
-          : null}
-        <Box marginTop={2}>
-          <Text bold color='green'>⬇ {i18n.t('typeKeyAndEnter')}</Text>
-        </Box>
-      </Box>
-    </FadeIn>
-  )
-}
-
-interface ThemeStepProps {
-  cursor: number;
-}
-
-function ThemeStep ({ cursor }: ThemeStepProps) {
-  const themes = themeManager.listThemes()
-  const selectedTheme = themes[cursor]
-  const themeDescKey = (name: string): string => {
-    const map: Record<string, string> = {
-      default: 'themeDefault',
-      light: 'themeLight',
-      dracula: 'themeDracula',
-      nord: 'themeNord',
-      solarized: 'themeSolarized',
-      matrix: 'themeMatrix',
-    }
-    return i18n.t((map[name] || 'themeDefault') as never)
-  }
-  return (
-    <Box flexDirection='column' alignItems='center' flexGrow={1}>
-      <Logo />
-      <Box marginTop={1}>
-        <Text bold color='cyan'>🎨 {i18n.t('selectTheme')}</Text>
-      </Box>
-      <Box marginTop={2} flexDirection='column' alignItems='center'>
-        {themes.map((t, i) => (
-          <Box key={t.name}>
-            <Text>
-              {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-              <Text color={i === cursor ? 'green' : 'white'}>
-                {t.name}{i === cursor ? ' ✓' : ''}
-              </Text>
-              <Text dimColor> — {themeDescKey(t.name)}</Text>
-            </Text>
-          </Box>
-        ))}
-      </Box>
-      {selectedTheme && (
-        <Box marginTop={2}>
-          <Text dimColor>{i18n.t('themePreview')}: </Text>
-          <Text color='green'>{selectedTheme.name}</Text>
-        </Box>
-      )}
-      <Box marginTop={2}>
-        <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
-      </Box>
-      <Box>
-        <Text dimColor>Enter → {i18n.t('next')}</Text>
-      </Box>
-    </Box>
-  )
-}
-
-interface ModeStepProps {
-  cursor: number;
-  modeOptions: ApprovalMode[];
-}
-
-function ModeStep ({ cursor, modeOptions }: ModeStepProps) {
-  const modeLabels: Record<string, string> = {
-    plan: i18n.t('modePlan'),
-    default: i18n.t('modeDefault'),
-    'auto-edit': i18n.t('modeAutoEdit'),
-    yolo: i18n.t('modeYolo'),
-  }
-  const isMatrix = themeManager.theme.name === 'matrix'
-  return (
-    <FadeIn delay={400}>
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        {isMatrix && <MatrixRain />}
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold color='magenta'>⚡ {i18n.t('selectMode')}</Text>
-        </Box>
-        <Box marginTop={2} flexDirection='column' alignItems='center'>
-          {modeOptions.map((mode, i) => (
-            <Box key={mode}>
-              <Text>
-                {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-                <Text color={i === cursor ? 'green' : 'white'}>
-                  {mode}{i === cursor ? ' ✓' : ''}
-                </Text>
-                <Text dimColor> — {modeLabels[mode]}</Text>
-              </Text>
-            </Box>
-          ))}
-        </Box>
-        <Box marginTop={2}>
-          <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
-        </Box>
-        <Box>
-          <Text dimColor>Enter {i18n.t('finishSetup')}</Text>
-        </Box>
-      </Box>
-    </FadeIn>
-  )
-}
+// Setup wizard step components are now in ./setup-wizard.tsx
+// Logo, LangStep, ApiKeyStep, ThemeStep, ModeStep imported from there
 
 export function App ({ config, options }: AppProps) {
   const { exit } = useApp()
@@ -304,6 +102,9 @@ export function App ({ config, options }: AppProps) {
   const [emptyInputHint, setEmptyInputHint] = useState(false)
   const emptyInputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [chatScrollOffset, setChatScrollOffset] = useState(0)
+  const [toolCallScrollOffset, setToolCallScrollOffset] = useState(0)
+  const [contextPercent, setContextPercent] = useState(0)
+  const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
 
   // Check if API key is configured (non-empty) — used early for locale detection
   const hasApiKey = !!(config.apiKey || process.env.DEEPSEEK_API_KEY) &&
@@ -355,6 +156,11 @@ export function App ({ config, options }: AppProps) {
     await saveConfig({ ...config, apiKey: key })
     apiRef.current = new DeepSeekAPI({ ...config, apiKey: key })
     setApiKeyError('')
+    // Add warning about plain-text storage
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '⚠️ **Security Notice:** Your API key is stored in plain text at `~/.deepseek-code/config.json`. For better security, consider using the `DEEPSEEK_API_KEY` environment variable instead.',
+    }])
     setSetupStep('theme')
   }, [config])
 
@@ -401,6 +207,7 @@ export function App ({ config, options }: AppProps) {
         hooksManager.load(),
         lspManager.load().then(() => lspManager.initializeAll()),
         subAgentManager.loadFromDir(),
+        scheduler.load(),
       ])
 
       setStatusText('Ready')
@@ -523,10 +330,40 @@ export function App ({ config, options }: AppProps) {
       // === Context commands ===
       case '/compress': {
         const totalLen = messages.reduce((sum, m) => sum + m.content.length, 0)
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `Context compressed. Previous size: ~${(totalLen / 1024).toFixed(1)}KB across ${messages.length} messages.`,
-        }])
+        const msgCount = messages.length
+
+        // Use API to summarize if we have enough messages
+        if (msgCount > 4 && totalLen > 2000) {
+          setStatusText('Compressing context...')
+          try {
+            const compressApi = new DeepSeekAPI({ ...config, apiKey: localApiKey || config.apiKey || '' })
+            const summaryMessages: ChatMessage[] = [
+              { role: 'system', content: 'Summarize the following conversation concisely. Keep all technical details, errors, decisions, and action items. Output in bullet points.' },
+              ...messages.slice(-10).filter(m => m.role !== 'system'),
+            ]
+            const result = await compressApi.chat(summaryMessages)
+            const summary = result.content || 'Summary unavailable.'
+
+            // Replace old messages with summary
+            const systemMsg = messages.find(m => m.role === 'system')
+            setMessages([
+              ...(systemMsg ? [systemMsg] : []),
+              { role: 'assistant', content: `📦 **Context Compressed**\n\nOriginal: ${msgCount} messages (~${(totalLen / 1024).toFixed(1)}KB)\n\n**Summary:**\n${summary}` },
+            ])
+          } catch {
+            // Fallback: just report size
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `Context compression failed. Current size: ~${(totalLen / 1024).toFixed(1)}KB across ${msgCount} messages.`,
+            }])
+          }
+          setStatusText('Ready')
+        } else {
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `Context is small (~${(totalLen / 1024).toFixed(1)}KB, ${msgCount} messages). No compression needed.`,
+          }])
+        }
         return true
       }
 
@@ -894,7 +731,8 @@ export function App ({ config, options }: AppProps) {
             content: 'No assistant message to suggest followups for.',
           }])
         } else {
-          const suggestions = generateFollowups(lastMsg.content)
+          const msgText = typeof lastMsg.content === 'string' ? lastMsg.content : ''
+          const suggestions = generateFollowups(msgText)
           setMessages(prev => [...prev, {
             role: 'assistant',
             content: `**Suggested Follow-ups:**\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
@@ -954,7 +792,15 @@ export function App ({ config, options }: AppProps) {
     const abortController = new AbortController()
     abortControllerRef.current = abortController
 
-    const userMessage: ChatMessage = { role: 'user', content: input }
+    let userContent: ChatMessage['content'] = input
+    if (pendingImage) {
+      userContent = [
+        { type: 'text', text: input },
+        { type: 'image_url', image_url: { url: `data:${pendingImage.mimeType};base64,${pendingImage.base64}` } },
+      ]
+      setPendingImage(null)
+    }
+    const userMessage: ChatMessage = { role: 'user', content: userContent }
     setMessages(prev => [...prev, userMessage])
     setIsProcessing(true)
     setStatusText('Processing...')
@@ -1123,6 +969,7 @@ export function App ({ config, options }: AppProps) {
       })
     } finally {
       setIsProcessing(false)
+      setToolCallScrollOffset(0)
       setStatusText('Ready')
       // Flush pending reasoning
       if (reasoningTimerRef.current) {
@@ -1183,13 +1030,22 @@ export function App ({ config, options }: AppProps) {
           return newMode
         })
       }
-      // PageUp/PageDown scroll chat history
-      if (key.pageUp) {
-        const visibleCount = messages.filter(m => m.role !== 'tool').length
-        setChatScrollOffset(prev => Math.min(prev + 3, Math.max(0, visibleCount - 1)))
-      }
-      if (key.pageDown) {
-        setChatScrollOffset(prev => Math.max(0, prev - 3))
+      // PageUp/PageDown: scroll tool calls while processing, else scroll chat
+      if (isProcessing && toolCalls.length > 0) {
+        if (key.pageUp) {
+          setToolCallScrollOffset(prev => Math.min(prev + 1, Math.max(0, toolCalls.length - 3)))
+        }
+        if (key.pageDown) {
+          setToolCallScrollOffset(prev => Math.max(0, prev - 1))
+        }
+      } else {
+        if (key.pageUp) {
+          const visibleCount = messages.filter(m => m.role !== 'tool').length
+          setChatScrollOffset(prev => Math.min(prev + 3, Math.max(0, visibleCount - 1)))
+        }
+        if (key.pageDown) {
+          setChatScrollOffset(prev => Math.max(0, prev - 3))
+        }
       }
       return
     }
@@ -1262,32 +1118,39 @@ export function App ({ config, options }: AppProps) {
     }
   })
 
+  // Get context usage percent from AgentLoop metrics
+  useEffect(() => {
+    if (!isProcessing || !agentLoopRef.current) {
+      return
+    }
+    const interval = setInterval(() => {
+      if (agentLoopRef.current) {
+        const metrics = agentLoopRef.current.getMetrics()
+        setContextPercent(metrics.getCurrentWindowPercent())
+      }
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [isProcessing])
+
   const handleClear = useCallback(() => { setMessages([]) }, [])
   const handleExit = useCallback(() => { exit() }, [exit])
 
   return (
     <Box flexDirection='column' height='100%'>
-      {setupStep === 'lang'
-        ? <LangStep cursor={langCursor} langOptions={langOptions} langLabels={langLabels} />
-        : setupStep === 'apikey'
-          ? <ApiKeyStep apiKeyError={apiKeyError} />
-          : setupStep === 'theme'
-            ? <ThemeStep cursor={themeCursor} />
-            : setupStep === 'mode'
-              ? <ModeStep cursor={modeCursor} modeOptions={modeOptions} />
-              : (
+      {setupStep !== 'done'
+        ? <SetupWizard state={{
+            step: setupStep,
+            apiKeyError,
+            langCursor,
+            themeCursor,
+            modeCursor,
+            langOptions,
+            modeOptions,
+          }} />
+        : (
                 <Box flexDirection='column' flexGrow={1}>
                   <Logo />
                   <ChatView messages={messages} scrollOffset={chatScrollOffset} />
-                  {toolCalls.length > 0 && <ToolCallView toolCalls={toolCalls} maxItems={3} />}
-                  {isProcessing && reasoning.length > 0 && showReasoning && (
-                    <ReasoningView reasoning={reasoning} isActive />
-                  )}
-                  {isProcessing && reasoning.length > 0 && !showReasoning && (
-                    <Box marginLeft={2} marginBottom={1}>
-                      <Text dimColor>🤔 Thinking... (press <Text bold>r</Text> to show)</Text>
-                    </Box>
-                  )}
                   {pendingApproval && (
                     <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='yellow'>
                       <Box>
@@ -1310,6 +1173,13 @@ export function App ({ config, options }: AppProps) {
                       </Box>
                     </Box>
                   )}
+                  <ResultsPanel
+                    toolCalls={toolCalls}
+                    reasoning={reasoning}
+                    reasoningActive={isProcessing && reasoning.length > 0}
+                    pendingApproval={pendingApproval !== null}
+                    scrollOffset={toolCallScrollOffset}
+                  />
                 </Box>
                 )}
       <InputBar
@@ -1320,12 +1190,24 @@ export function App ({ config, options }: AppProps) {
         isMasked={setupStep === 'apikey'}
         isSetupMode={setupStep !== 'done'}
         emptyHint={emptyInputHint}
+        onImagePaste={(base64, mimeType) => {
+          const model = config.model ?? ''
+          if (!model.includes('vl') && !model.includes('vision')) {
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              content: `⚠️ Image paste requires a vision-capable model.\nCurrent model: ${model || 'unknown'}\nUse a model with "vl" or "vision" in its name.`,
+            }])
+            return
+          }
+          setPendingImage({ base64, mimeType })
+        }}
       />
       <StatusBar
         mode={approvalMode}
         status={statusText}
         messageCount={messages.length}
         isProcessing={isProcessing}
+        contextPercent={contextPercent}
       />
     </Box>
   )

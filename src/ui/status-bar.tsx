@@ -10,13 +10,7 @@ interface StatusBarProps {
   status: string;
   messageCount: number;
   isProcessing?: boolean;
-}
-
-const modeColors: Record<ApprovalMode, string> = {
-  plan: 'yellow',
-  default: 'blue',
-  'auto-edit': 'green',
-  yolo: 'red',
+  contextPercent?: number;
 }
 
 const modeLabels: Record<ApprovalMode, string> = {
@@ -27,10 +21,16 @@ const modeLabels: Record<ApprovalMode, string> = {
 }
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-const PULSE_COLORS: Array<'yellow' | 'cyan' | 'green' | 'white'> = ['yellow', 'cyan', 'green', 'white']
 
-export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent }: StatusBarProps) {
   const colors = themeManager.getColors()
+  const modeColors: Record<ApprovalMode, string> = {
+    plan: colors.warning,
+    default: colors.info,
+    'auto-edit': colors.success,
+    yolo: colors.error,
+  }
+  const pulseColors = [colors.warning, colors.info, colors.success, colors.text]
   const [chromeState, setChromeState] = useState<ChromeRuntimeState>(chromeManager.getState())
   const [spinnerFrame, setSpinnerFrame] = useState(0)
   const [pulseIdx, setPulseIdx] = useState(0)
@@ -46,7 +46,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
   useEffect(() => {
     if (!isProcessing) return
     const interval = setInterval(() => {
-      setPulseIdx(prev => (prev + 1) % PULSE_COLORS.length)
+      setPulseIdx(prev => (prev + 1) % 4)
     }, 400)
     return () => clearInterval(interval)
   }, [isProcessing])
@@ -65,16 +65,16 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
   return (
     <Box borderStyle='single' borderColor={colors.border} paddingX={1}>
       <Box flexGrow={1}>
-        <Text bold color={modeColors[mode] as 'yellow' | 'blue' | 'green' | 'red'}>
+        <Text bold color={modeColors[mode]}>
           [{modeLabels[mode]}]
         </Text>
         <Text> </Text>
         {isProcessing
           ? (
             <Text>
-              <Text color={PULSE_COLORS[pulseIdx]}>{SPINNER_FRAMES[spinnerFrame]}</Text>
+              <Text color={pulseColors[pulseIdx % pulseColors.length]}>{SPINNER_FRAMES[spinnerFrame]}</Text>
               {' '}
-              <Text color={PULSE_COLORS[pulseIdx]} bold>Thinking...</Text>
+              <Text color={pulseColors[pulseIdx % pulseColors.length]} bold>Thinking...</Text>
             </Text>
             )
           : <Text color={colors.textMuted}>{status}</Text>}
@@ -82,6 +82,11 @@ export function StatusBar ({ mode, status, messageCount, isProcessing }: StatusB
       <Box>
         {chromeState.connected && (
           <Text color='green'> 🌐Chrome{chromeState.headless ? ':H' : ''} </Text>
+        )}
+        {contextPercent !== undefined && contextPercent > 0 && (
+          <Text color={contextPercent > 80 ? colors.error : contextPercent > 50 ? colors.warning : colors.textMuted}>
+            {' '}ctx:{contextPercent}%{' '}
+          </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>
       </Box>

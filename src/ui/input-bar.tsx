@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { themeManager } from '../core/themes.js'
 
@@ -10,6 +10,7 @@ interface InputBarProps {
   isMasked?: boolean;
   isSetupMode?: boolean;
   emptyHint?: boolean;
+  onImagePaste?: (base64: string, mimeType: string) => void;
 }
 
 const COMMANDS = [
@@ -36,13 +37,44 @@ const COMMANDS = [
   '/help',
 ]
 
-export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint }: InputBarProps) {
+export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste }: InputBarProps) {
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [suggestionIndex, setSuggestionIndex] = useState(-1)
+  const [cursorVisible, setCursorVisible] = useState(true)
+  const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
   const inputRef = useRef(input)
   inputRef.current = input
+
+  useEffect(() => {
+    if (disabled) {
+      setCursorVisible(false)
+      return
+    }
+    setCursorVisible(true)
+    const t = setInterval(() => setCursorVisible(v => !v), 530)
+    return () => clearInterval(t)
+  }, [disabled])
+
+  const handleImagePaste = async () => {
+    try {
+      const { readClipboardImage } = await import('../utils/clipboard.js')
+      const buf = await readClipboardImage()
+      if (!buf) {
+        setPendingImageLabel('(no image in clipboard)')
+        setTimeout(() => setPendingImageLabel(null), 2000)
+        return
+      }
+      const base64 = buf.toString('base64')
+      const label = `[image: ${Math.round(buf.length / 1024)}KB]`
+      setPendingImageLabel(label)
+      onImagePaste?.(base64, 'image/png')
+    } catch {
+      setPendingImageLabel('(clipboard error)')
+      setTimeout(() => setPendingImageLabel(null), 2000)
+    }
+  }
 
   // Compute command suggestions from current input
   const suggestions = input.startsWith('/')
@@ -102,6 +134,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         setInput('')
         setHistoryIndex(-1)
         setSuggestionIndex(-1)
+        setPendingImageLabel(null)
         return
       }
     }
@@ -126,6 +159,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       setHistory(prev => [currentInput, ...prev].slice(0, 100))
       setInput('')
       setHistoryIndex(-1)
+      setPendingImageLabel(null)
       setSuggestionIndex(-1)
       return
     }
@@ -148,6 +182,12 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         setHistoryIndex(-1)
         setInput('')
       }
+      return
+    }
+
+    // Alt+V — paste image from clipboard
+    if (key.meta && _input === 'v') {
+      void handleImagePaste()
       return
     }
 
@@ -194,6 +234,8 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
         <Text bold color={colors.primary}>{'>'}</Text>
         <Text color={colors.text}> {input ? displayText : (disabled ? ' Processing...' : ' Type your request...')}</Text>
+        {!disabled && <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>}
+        {pendingImageLabel && <Text color={colors.info}> {pendingImageLabel}</Text>}
         {input.length > 0 && !disabled && (
           <Text color={colors.textMuted}>  (Enter to send)</Text>
         )}

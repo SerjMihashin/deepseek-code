@@ -15,6 +15,11 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
   const label = isUser ? i18n.t('you') : isSystem ? i18n.t('system') : i18n.t('assistant')
   const colors = themeManager.getColors()
 
+  const textContent = typeof message.content === 'string'
+    ? message.content
+    : message.content.filter(b => b.type === 'text').map(b => (b as { type: 'text'; text: string }).text).join('\n')
+  const hasImage = Array.isArray(message.content) && message.content.some(b => b.type === 'image_url')
+
   return (
     <Box flexDirection='column' marginBottom={1}>
       <Box>
@@ -22,19 +27,18 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
           {label}
         </Text>
       </Box>
-      <Box marginLeft={2}>
-        <Text wrap='wrap'>{message.content}</Text>
+      <Box marginLeft={2} flexDirection='column'>
+        <Text wrap='wrap'>{textContent}</Text>
+        {hasImage && <Text color={colors.info}>[📎 image attached]</Text>}
       </Box>
     </Box>
   )
 }
 
-// React.memo prevents re-render on every keystroke — only re-renders
-// when messages array length or last message content actually changes.
-export const ChatView = React.memo(function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
+export const ChatView = React.memo(
+  function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
   const colors = themeManager.getColors()
 
-  // Filter out tool messages — they are displayed in ToolCallView instead
   const visibleMessages = messages.filter(msg => msg.role !== 'tool')
   const hidden = Math.min(scrollOffset, Math.max(0, visibleMessages.length - 1))
   const shown = hidden > 0 ? visibleMessages.slice(hidden) : visibleMessages
@@ -66,4 +70,9 @@ export const ChatView = React.memo(function ChatView ({ messages, scrollOffset =
           )}
     </Box>
   )
-})
+  },
+  (prev, next) =>
+    prev.scrollOffset === next.scrollOffset &&
+    prev.messages.length === next.messages.length &&
+    prev.messages[prev.messages.length - 1]?.content === next.messages[next.messages.length - 1]?.content
+)

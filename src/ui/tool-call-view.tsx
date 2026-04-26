@@ -1,6 +1,8 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import type { ToolCallEvent } from '../core/agent-loop.js'
+import { themeManager } from '../core/themes.js'
+import { FadeIn } from './fade-in.js'
 
 interface ToolCallViewProps {
   toolCalls: ToolCallEvent[];
@@ -13,14 +15,6 @@ const statusIcons: Record<string, string> = {
   completed: '✅',
   failed: '❌',
   rejected: '🚫',
-}
-
-const statusColors: Record<string, string> = {
-  pending: 'yellow',
-  running: 'cyan',
-  completed: 'green',
-  failed: 'red',
-  rejected: 'red',
 }
 
 function formatDuration (ms?: number): string {
@@ -84,7 +78,16 @@ function formatChromeArgs (args: Record<string, unknown>): string {
   return `${label}${parts.length > 0 ? ` ${parts.join(' ')}` : ''}`
 }
 
-export function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
+export const ToolCallView = React.memo(function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
+  const colors = themeManager.getColors()
+  const statusColors: Record<string, string> = {
+    pending: colors.warning,
+    running: colors.info,
+    completed: colors.success,
+    failed: colors.error,
+    rejected: colors.error,
+  }
+
   if (toolCalls.length === 0) return null
 
   const visible = maxItems !== undefined ? toolCalls.slice(-maxItems) : toolCalls
@@ -104,8 +107,15 @@ export function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
         const isChrome = tc.name === 'chrome'
         const displayArgs = isChrome ? formatChromeArgs(tc.arguments) : formatArgs(tc.arguments)
 
+        const inlineResult = tc.status === 'completed' && tc.result && tc.result.length > 0
+          ? ` → ${tc.result.slice(0, 60)}${tc.result.length > 60 ? '…' : ''}`
+          : null
+        const inlineError = tc.status === 'failed' && tc.error
+          ? ` ✗ ${tc.error.slice(0, 100)}`
+          : null
+
         return (
-          <Box key={tc.id} flexDirection='column'>
+          <FadeIn key={tc.id} delay={150}>
             <Box>
               <Text>
                 {'  '}
@@ -114,25 +124,13 @@ export function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
                 <Text bold color={color}>{tc.name}</Text>
                 {displayArgs ? <Text dimColor> {displayArgs}</Text> : null}
                 {duration ? <Text dimColor> - {duration}</Text> : null}
+                {inlineResult ? <Text dimColor>{inlineResult}</Text> : null}
+                {inlineError ? <Text color={colors.error}>{inlineError}</Text> : null}
               </Text>
             </Box>
-            {tc.status === 'failed' && tc.error && (
-              <Box marginLeft={4}>
-                <Text color='red'>{tc.error.slice(0, 200)}</Text>
-              </Box>
-            )}
-            {tc.status === 'completed' && tc.result && tc.result.length > 0 && (
-              <Box marginLeft={4} flexDirection='column'>
-                <Text dimColor>
-                  {tc.result.length > 200
-                    ? `${tc.result.slice(0, 197)}...`
-                    : tc.result}
-                </Text>
-              </Box>
-            )}
-          </Box>
+          </FadeIn>
         )
       })}
     </Box>
   )
-}
+})

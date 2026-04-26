@@ -5,9 +5,13 @@ import type { OpenAITool } from '../tools/types.js'
 // Re-export OpenAI types for convenience
 export type { OpenAITool }
 
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
+  content: string | ContentBlock[];
   tool_call_id?: string;
   tool_calls?: Array<{
     id: string;
@@ -20,12 +24,17 @@ export interface ChatMessage {
 }
 
 export interface StreamChunk {
-  type: 'text' | 'tool_use' | 'tool_result' | 'reasoning';
+  type: 'text' | 'tool_use' | 'tool_result' | 'reasoning' | 'usage';
   content: string;
   toolName?: string;
   toolInput?: Record<string, unknown>;
   toolResult?: string;
   toolCallId?: string;
+  usage?: {
+    input: number;
+    output: number;
+    total: number;
+  };
 }
 
 export interface ToolCallResult {
@@ -107,6 +116,7 @@ export class DeepSeekAPI {
           model: this.model,
           messages: fullMessages,
           stream: true,
+          stream_options: { include_usage: true },
           ...(tools && tools.length > 0 ? { tools, tool_choice: 'auto' as const } : {}),
         },
         { signal: timeoutController.signal }
@@ -121,6 +131,21 @@ export class DeepSeekAPI {
     try {
       for await (const chunk of stream) {
         resetChunkTimer()
+
+        // Usage chunk (last chunk with stream_options.include_usage)
+        if (chunk.usage) {
+          yield {
+            type: 'usage',
+            content: '',
+            usage: {
+              input: chunk.usage.prompt_tokens ?? 0,
+              output: chunk.usage.completion_tokens ?? 0,
+              total: chunk.usage.total_tokens ?? 0,
+            },
+          }
+          continue
+        }
+
         const delta = chunk.choices[0]?.delta
 
         if (!delta) continue
@@ -253,6 +278,17 @@ export class DeepSeekAPI {
       return { valid: false, error: `API error: ${msg}` }
     }
   }
+
+  /**
+   * Get embedding vector for a text string using DeepSeek's embeddings API.
+   */
+  async getEmbedding (text: string): Promise<number[]> {
+    const response = await this.client.embeddings.create({
+      model: 'deepseek-embedding',
+      input: text,
+    })
+    return response.data[0].embedding
+  }
 }
 
 // ─── Helper functions ────────────────────────────────────────────────────────
@@ -265,14 +301,14 @@ function buildMessages (messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMess
     if (m.role === 'tool') {
       return {
         role: 'tool',
-        content: m.content,
+        content: typeof m.content === 'string' ? m.content : '',
         tool_call_id: m.tool_call_id ?? '',
       } satisfies OpenAI.Chat.ChatCompletionToolMessageParam
     }
     if (m.role === 'assistant' && m.tool_calls) {
       return {
         role: 'assistant',
-        content: m.content || null,
+        content: (typeof m.content === 'string' ? m.content : null) || null,
         tool_calls: m.tool_calls.map(tc => ({
           id: tc.id,
           type: 'function' as const,
@@ -283,12 +319,11 @@ function buildMessages (messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMess
         })),
       } satisfies OpenAI.Chat.ChatCompletionAssistantMessageParam
     }
+    // Content can be string or ContentBlock[] (for vision/multimodal messages)
     return {
       role: m.role as 'system' | 'user' | 'assistant',
-      content: m.content,
-    } satisfies OpenAI.Chat.ChatCompletionSystemMessageParam
-      | OpenAI.Chat.ChatCompletionUserMessageParam
-      | OpenAI.Chat.ChatCompletionAssistantMessageParam
+      content: m.content as unknown as string,
+    } as OpenAI.Chat.ChatCompletionUserMessageParam
   })
 }
 

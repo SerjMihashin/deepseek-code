@@ -28,7 +28,12 @@ export function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
 
   if (!reasoning && !isActive) return null
 
-  const displayText = reasoning || 'Thinking...'
+  const MAX_LINES = 7
+  const rawText = reasoning || 'Thinking...'
+  const lines = rawText.split('\n')
+  const truncated = lines.length > MAX_LINES
+  const displayLines = truncated ? lines.slice(-MAX_LINES) : lines
+  const displayText = displayLines.join('\n')
 
   return (
     <Box flexDirection='column' marginLeft={2} marginBottom={1}>
@@ -39,6 +44,7 @@ export function ReasoningView ({ reasoning, isActive }: ReasoningViewProps) {
             : <Text color='green'>✓</Text>}
           {' '}
           <Text bold color='yellow'>Reasoning</Text>
+          {truncated && <Text dimColor> (showing last {MAX_LINES} lines)</Text>}
         </Text>
       </Box>
       <Box marginLeft={3}>

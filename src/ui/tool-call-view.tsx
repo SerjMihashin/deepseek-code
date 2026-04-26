@@ -4,6 +4,7 @@ import type { ToolCallEvent } from '../core/agent-loop.js'
 
 interface ToolCallViewProps {
   toolCalls: ToolCallEvent[];
+  maxItems?: number;
 }
 
 const statusIcons: Record<string, string> = {
@@ -83,12 +84,20 @@ function formatChromeArgs (args: Record<string, unknown>): string {
   return `${label}${parts.length > 0 ? ` ${parts.join(' ')}` : ''}`
 }
 
-export function ToolCallView ({ toolCalls }: ToolCallViewProps) {
+export function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
   if (toolCalls.length === 0) return null
+
+  const visible = maxItems !== undefined ? toolCalls.slice(-maxItems) : toolCalls
+  const hidden = toolCalls.length - visible.length
 
   return (
     <Box flexDirection='column' marginLeft={2}>
-      {toolCalls.map((tc) => {
+      {hidden > 0 && (
+        <Box>
+          <Text dimColor>  ↑ {hidden} more tool call{hidden > 1 ? 's' : ''} above</Text>
+        </Box>
+      )}
+      {visible.map((tc) => {
         const icon = statusIcons[tc.status] ?? '✳'
         const color = statusColors[tc.status] ?? 'white'
         const duration = tc.durationMs ? formatDuration(tc.durationMs) : ''

@@ -26,3 +26,8 @@ Thumbs.db
 # Chrome CLI Tools subproject
 chrome-cli-tools/node_modules/
 chrome-cli-tools/.git/
+
+# Agent session artifacts (never commit)
+*.handoff.md
+*execution-bundle*.json
+*.session.json

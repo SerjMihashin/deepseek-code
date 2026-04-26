@@ -78,6 +78,197 @@ function generateFollowups (lastContent: string): string[] {
   return suggestions
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Setup wizard step components — MUST be at module level, NOT inside App.
+// Defining them inside App creates a new function reference every render,
+// causing React to unmount+remount them, resetting FadeIn to invisible.
+// ────────────────────────────────────────────────────────────────────────────
+
+const LOGO_LINES = (() => {
+  const D = ['██████╗ ', '██╔══██╗', '██║  ██║', '██║  ██║', '██████╔╝', '╚═════╝ ']
+  const E = ['███████╗', '██╔════╝', '█████╗  ', '██╔══╝  ', '███████╗', '╚══════╝']
+  const P = ['██████╗ ', '██╔══██╗', '██████╔╝', '██╔═══╝ ', '██║     ', '╚═╝     ']
+  const S = ['███████╗', '██╔════╝', '███████╗', '╚════██║', '███████║', '╚══════╝']
+  const K = ['██╗  ██╗', '██║ ██╔╝', '█████╔╝ ', '██╔═██╗ ', '██║  ██╗', '╚═╝  ╚═╝']
+  return [0, 1, 2, 3, 4, 5].map(i => D[i] + E[i] + E[i] + P[i] + S[i] + E[i] + E[i] + K[i])
+})()
+
+function Logo () {
+  return (
+    <Box flexDirection='column' alignItems='center'>
+      {LOGO_LINES.map((line, i) => (
+        <Text key={i} bold color='blue'>{line}</Text>
+      ))}
+    </Box>
+  )
+}
+
+interface LangStepProps {
+  cursor: number;
+  langOptions: Array<'ru' | 'en' | 'zh'>;
+  langLabels: Record<string, string>;
+}
+
+function LangStep ({ cursor, langOptions, langLabels }: LangStepProps) {
+  return (
+    <FadeIn delay={100}>
+      <Box flexDirection='column' alignItems='center' flexGrow={1}>
+        <Logo />
+        <Box marginTop={1}>
+          <Text bold>{i18n.t('welcomeSubtitle')}</Text>
+        </Box>
+        <Box marginTop={2}>
+          <Text bold>🌐 {i18n.t('selectLanguage')}</Text>
+        </Box>
+        <Box marginTop={1} flexDirection='column' alignItems='center'>
+          {langOptions.map((code, i) => (
+            <Box key={code}>
+              <Text>
+                {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
+                <Text color={i === cursor ? 'green' : 'white'}>{langLabels[code]}</Text>
+              </Text>
+            </Box>
+          ))}
+        </Box>
+        <Box marginTop={2}>
+          <Text dimColor>↑↓ {i18n.t('langHint')}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>Enter ✓</Text>
+        </Box>
+      </Box>
+    </FadeIn>
+  )
+}
+
+interface ApiKeyStepProps {
+  apiKeyError: string;
+}
+
+function ApiKeyStep ({ apiKeyError }: ApiKeyStepProps) {
+  return (
+    <FadeIn delay={200}>
+      <Box flexDirection='column' alignItems='center' flexGrow={1}>
+        <Logo />
+        <Box marginTop={1}>
+          <Text bold color='yellow'>🔑 {i18n.t('setupApiKey')}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text>{i18n.t('enterApiKey')}</Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor>{i18n.t('apiKeyHint')}</Text>
+        </Box>
+        {apiKeyError
+          ? (
+            <Box marginTop={1}>
+              <Text color='red'>{apiKeyError}</Text>
+            </Box>
+            )
+          : null}
+        <Box marginTop={2}>
+          <Text bold color='green'>⬇ {i18n.t('typeKeyAndEnter')}</Text>
+        </Box>
+      </Box>
+    </FadeIn>
+  )
+}
+
+interface ThemeStepProps {
+  cursor: number;
+}
+
+function ThemeStep ({ cursor }: ThemeStepProps) {
+  const themes = themeManager.listThemes()
+  const selectedTheme = themes[cursor]
+  const themeDescKey = (name: string): string => {
+    const map: Record<string, string> = {
+      default: 'themeDefault',
+      light: 'themeLight',
+      dracula: 'themeDracula',
+      nord: 'themeNord',
+      solarized: 'themeSolarized',
+    }
+    return i18n.t((map[name] || 'themeDefault') as never)
+  }
+  return (
+    <Box flexDirection='column' alignItems='center' flexGrow={1}>
+      <Logo />
+      <Box marginTop={1}>
+        <Text bold color='cyan'>🎨 {i18n.t('selectTheme')}</Text>
+      </Box>
+      <Box marginTop={2} flexDirection='column' alignItems='center'>
+        {themes.map((t, i) => (
+          <Box key={t.name}>
+            <Text>
+              {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
+              <Text color={i === cursor ? 'green' : 'white'}>
+                {t.name}{i === cursor ? ' ✓' : ''}
+              </Text>
+              <Text dimColor> — {themeDescKey(t.name)}</Text>
+            </Text>
+          </Box>
+        ))}
+      </Box>
+      {selectedTheme && (
+        <Box marginTop={2}>
+          <Text dimColor>{i18n.t('themePreview')}: </Text>
+          <Text color='green'>{selectedTheme.name}</Text>
+        </Box>
+      )}
+      <Box marginTop={2}>
+        <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
+      </Box>
+      <Box>
+        <Text dimColor>Enter → {i18n.t('next')}</Text>
+      </Box>
+    </Box>
+  )
+}
+
+interface ModeStepProps {
+  cursor: number;
+  modeOptions: ApprovalMode[];
+}
+
+function ModeStep ({ cursor, modeOptions }: ModeStepProps) {
+  const modeLabels: Record<string, string> = {
+    plan: i18n.t('modePlan'),
+    default: i18n.t('modeDefault'),
+    'auto-edit': i18n.t('modeAutoEdit'),
+    yolo: i18n.t('modeYolo'),
+  }
+  return (
+    <FadeIn delay={400}>
+      <Box flexDirection='column' alignItems='center' flexGrow={1}>
+        <Logo />
+        <Box marginTop={1}>
+          <Text bold color='magenta'>⚡ {i18n.t('selectMode')}</Text>
+        </Box>
+        <Box marginTop={2} flexDirection='column' alignItems='center'>
+          {modeOptions.map((mode, i) => (
+            <Box key={mode}>
+              <Text>
+                {i === cursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
+                <Text color={i === cursor ? 'green' : 'white'}>
+                  {mode}{i === cursor ? ' ✓' : ''}
+                </Text>
+                <Text dimColor> — {modeLabels[mode]}</Text>
+              </Text>
+            </Box>
+          ))}
+        </Box>
+        <Box marginTop={2}>
+          <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
+        </Box>
+        <Box>
+          <Text dimColor>Enter {i18n.t('finishSetup')}</Text>
+        </Box>
+      </Box>
+    </FadeIn>
+  )
+}
+
 export function App ({ config, options }: AppProps) {
   const { exit } = useApp()
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>(
@@ -1003,230 +1194,29 @@ export function App ({ config, options }: AppProps) {
   const handleClear = useCallback(() => { setMessages([]) }, [])
   const handleExit = useCallback(() => { exit() }, [exit])
 
-  // Logo — DEEPSEEK in ASCII art
-  const D = [
-    '██████╗ ',
-    '██╔══██╗',
-    '██║  ██║',
-    '██║  ██║',
-    '██████╔╝',
-    '╚═════╝ ',
-  ]
-  const E = [
-    '███████╗',
-    '██╔════╝',
-    '█████╗  ',
-    '██╔══╝  ',
-    '███████╗',
-    '╚══════╝',
-  ]
-  const P = [
-    '██████╗ ',
-    '██╔══██╗',
-    '██████╔╝',
-    '██╔═══╝ ',
-    '██║     ',
-    '╚═╝     ',
-  ]
-  const S = [
-    '███████╗',
-    '██╔════╝',
-    '███████╗',
-    '╚════██║',
-    '███████║',
-    '╚══════╝',
-  ]
-  const K = [
-    '██╗  ██╗',
-    '██║ ██╔╝',
-    '█████╔╝ ',
-    '██╔═██╗ ',
-    '██║  ██╗',
-    '╚═╝  ╚═╝',
-  ]
-
-  const logoLines = [0, 1, 2, 3, 4, 5].map(i =>
-    D[i] + E[i] + E[i] + P[i] + S[i] + E[i] + E[i] + K[i]
-  )
-
-  const Logo = () => (
-    <Box flexDirection='column' alignItems='center'>
-      {logoLines.map((line, i) => (
-        <Text key={i} bold color='blue'>{line}</Text>
-      ))}
-    </Box>
-  )
-
-  // Step 1: Language selection
-  const LangStep = () => (
-    <FadeIn delay={100}>
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold>{i18n.t('welcomeSubtitle')}</Text>
-        </Box>
-        <Box marginTop={2}>
-          <Text bold>🌐 {i18n.t('selectLanguage')}</Text>
-        </Box>
-        <Box marginTop={1} flexDirection='column' alignItems='center'>
-          {langOptions.map((code, i) => (
-            <Box key={code}>
-              <Text>
-                {i === langCursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-                <Text color={i === langCursor ? 'green' : 'white'}>{langLabels[code]}</Text>
-              </Text>
-            </Box>
-          ))}
-        </Box>
-        <Box marginTop={2}>
-          <Text dimColor>↑↓ {i18n.t('langHint')}</Text>
-        </Box>
-        <Box>
-          <Text dimColor>Enter ✓</Text>
-        </Box>
-      </Box>
-    </FadeIn>
-  )
-
-  // Step 2: API Key input
-  const ApiKeyStep = () => (
-    <FadeIn delay={200}>
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold color='yellow'>🔑 {i18n.t('setupApiKey')}</Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text>{i18n.t('enterApiKey')}</Text>
-        </Box>
-        <Box marginTop={1}>
-          <Text dimColor>{i18n.t('apiKeyHint')}</Text>
-        </Box>
-        {apiKeyError
-          ? (
-            <Box marginTop={1}>
-              <Text color='red'>{apiKeyError}</Text>
-            </Box>
-            )
-          : null}
-        <Box marginTop={2}>
-          <Text bold color='green'>⬇ {i18n.t('typeKeyAndEnter')}</Text>
-        </Box>
-      </Box>
-    </FadeIn>
-  )
-
-  // Step 3: Theme selection (separate step)
-  const ThemeStep = () => {
-    const themes = themeManager.listThemes()
-    const selectedTheme = themes[themeCursor]
-    const themeDescKey = (name: string): string => {
-      const map: Record<string, string> = {
-        default: 'themeDefault',
-        light: 'themeLight',
-        dracula: 'themeDracula',
-        nord: 'themeNord',
-        solarized: 'themeSolarized',
-      }
-      return i18n.t((map[name] || 'themeDefault') as any)
-    }
-    return (
-      <Box flexDirection='column' alignItems='center' flexGrow={1}>
-        <Logo />
-        <Box marginTop={1}>
-          <Text bold color='cyan'>🎨 {i18n.t('selectTheme')}</Text>
-        </Box>
-        <Box marginTop={2} flexDirection='column' alignItems='center'>
-          {themes.map((t, i) => (
-            <Box key={t.name}>
-              <Text>
-                {i === themeCursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-                <Text color={i === themeCursor ? 'green' : 'white'}>
-                  {t.name}{i === themeCursor ? ' ✓' : ''}
-                </Text>
-                <Text dimColor> — {themeDescKey(t.name)}</Text>
-              </Text>
-            </Box>
-          ))}
-        </Box>
-        {selectedTheme && (
-          <Box marginTop={2}>
-            <Text dimColor>{i18n.t('themePreview')}: </Text>
-            <Text color='green'>{selectedTheme.name}</Text>
-          </Box>
-        )}
-        <Box marginTop={2}>
-          <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
-        </Box>
-        <Box>
-          <Text dimColor>Enter → {i18n.t('next')}</Text>
-        </Box>
-      </Box>
-    )
-  }
-
-  // Step 4: Mode selection (separate step)
-  const ModeStep = () => {
-    const modeLabels: Record<string, string> = {
-      plan: i18n.t('modePlan'),
-      default: i18n.t('modeDefault'),
-      'auto-edit': i18n.t('modeAutoEdit'),
-      yolo: i18n.t('modeYolo'),
-    }
-    return (
-      <FadeIn delay={400}>
-        <Box flexDirection='column' alignItems='center' flexGrow={1}>
-          <Logo />
-          <Box marginTop={1}>
-            <Text bold color='magenta'>⚡ {i18n.t('selectMode')}</Text>
-          </Box>
-          <Box marginTop={2} flexDirection='column' alignItems='center'>
-            {modeOptions.map((mode, i) => (
-              <Box key={mode}>
-                <Text>
-                  {i === modeCursor ? <Text bold color='green'>▸ </Text> : <Text>  </Text>}
-                  <Text color={i === modeCursor ? 'green' : 'white'}>
-                    {mode}{i === modeCursor ? ' ✓' : ''}
-                  </Text>
-                  <Text dimColor> — {modeLabels[mode]}</Text>
-                </Text>
-              </Box>
-            ))}
-          </Box>
-          <Box marginTop={2}>
-            <Text dimColor>↑↓ {i18n.t('navigate')}</Text>
-          </Box>
-          <Box>
-            <Text dimColor>Enter {i18n.t('finishSetup')}</Text>
-          </Box>
-        </Box>
-      </FadeIn>
-    )
-  }
-
   return (
     <Box flexDirection='column' height='100%'>
       {setupStep === 'lang'
-        ? <LangStep />
+        ? <LangStep cursor={langCursor} langOptions={langOptions} langLabels={langLabels} />
         : setupStep === 'apikey'
-          ? <ApiKeyStep />
+          ? <ApiKeyStep apiKeyError={apiKeyError} />
           : setupStep === 'theme'
-            ? <ThemeStep />
+            ? <ThemeStep cursor={themeCursor} />
             : setupStep === 'mode'
-              ? <ModeStep />
+              ? <ModeStep cursor={modeCursor} modeOptions={modeOptions} />
               : (
                 <Box flexDirection='column' flexGrow={1}>
                   <Logo />
                   <ChatView messages={messages} />
+                  {toolCalls.length > 0 && <ToolCallView toolCalls={toolCalls} maxItems={3} />}
                   {isProcessing && reasoning.length > 0 && showReasoning && (
                     <ReasoningView reasoning={reasoning} isActive />
                   )}
                   {isProcessing && reasoning.length > 0 && !showReasoning && (
                     <Box marginLeft={2} marginBottom={1}>
-                      <Text dimColor>🤔 Reasoning active (press <Text bold>r</Text> to show)</Text>
+                      <Text dimColor>🤔 Thinking... (press <Text bold>r</Text> to show)</Text>
                     </Box>
                   )}
-                  {toolCalls.length > 0 && <ToolCallView toolCalls={toolCalls} />}
                   {pendingApproval && (
                     <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='yellow'>
                       <Box>

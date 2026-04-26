@@ -168,7 +168,7 @@ Commit:
 ---
 
 ## Iteration 6 — Unique Product Layer
-Status: In Progress
+Status: Partial (browser-qa skill pending)
 
 Goal:
 Add a differentiated workflow that makes DeepSeek Code more than a cheaper clone.
@@ -190,6 +190,82 @@ Notes:
 
 Progress commit:
 - `2a5157f` — `feat: add execution bundles for autonomous runs`
+
+---
+
+---
+
+## Iteration 7 — UX Overhaul
+Status: Completed
+
+Goal:
+Fix three blocking UX bugs identified by DeepSeek self-audit.
+
+- [x] Fix setup wizard arrow-key flickering: extract Logo, LangStep, ApiKeyStep, ThemeStep,
+      ModeStep to module level — they were inner arrow functions causing React to
+      unmount/remount them (and reset FadeIn) on every App render
+- [x] Fix reasoning visibility: swap ToolCallView/ReasoningView order so reasoning stays
+      near the bottom; limit ToolCallView to last 3 items with "↑ N more" indicator
+- [x] Limit ReasoningView to last 7 lines with truncation indicator
+- [x] Verify typecheck, build, lint
+
+Commit:
+- `a4a30c7` — `fix: eliminate setup wizard flicker and improve reasoning visibility`
+
+---
+
+## Iteration 8 — API Stability
+Status: Completed
+
+Goal:
+Make DeepSeek API calls resilient to transient failures.
+
+- [x] Add withRetry() with exponential backoff (max 3 attempts, 30s cap) for 429/5xx/network errors
+- [x] Wrap streamChat() and chat() API calls with withRetry()
+- [x] Add per-chunk streaming timeout (60s) via AbortController — prevents hung streams
+- [x] Replace hardcoded Russian fallback string with i18n.t('agentEmptyResponse')
+- [x] Add agentEmptyResponse key to EN, RU, ZH locales
+- [x] Verify typecheck, build, lint
+
+Commit:
+- `39e94c5` — `feat: add API retry, stream timeout, and localized error fallback`
+
+---
+
+## Iteration 9 — Platform & Core Fixes
+Status: Completed
+
+Goal:
+Fix Windows-specific bugs, broken ExtensionManager, primitive ignore patterns, missing /help.
+
+- [x] sandbox.ts: normalize Docker volume mount paths to forward slashes on Windows
+- [x] extensions.ts: actually import and call extension main file via dynamic import()
+- [x] ignore.ts: replace primitive pattern matching with minimatch (full .gitignore syntax)
+- [x] app.tsx: implement /help slash command with categorized command list + keyboard hints
+- [x] Install @types/minimatch as devDependency
+- [x] Verify typecheck, build, lint
+
+Commit:
+- `5e5e5d1` — `fix: platform bugs, extension execution, glob patterns, /help command`
+
+---
+
+## Iteration 10 — Matrix Theme + Chat Scroll
+Status: Completed
+
+Goal:
+Add Matrix aesthetic theme with animation; add chat history scrolling.
+
+- [x] Add Matrix theme (#00ff41 green on black) to themes.ts and i18n (EN/RU/ZH)
+- [x] Create MatrixRain component: animated katakana/digit columns, 120ms tick
+- [x] Show MatrixRain in LangStep and ModeStep when matrix theme is active
+- [x] Add chatScrollOffset state in App; handle PageUp/PageDown for scrolling
+- [x] ChatView: scrollOffset prop, "↑ N earlier messages" indicator
+- [x] Reset scroll offset to 0 when new message is sent
+- [x] Verify typecheck, build, lint
+
+Commit:
+- `a6db3dc` — `feat: Matrix theme with animated rain and chat scroll via PageUp/PageDown`
 
 ---
 

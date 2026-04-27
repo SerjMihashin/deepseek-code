@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
-import { Box, Text, useInput, useApp } from 'ink'
+import { Box, Text, useInput, useApp, useStdin } from 'ink'
 import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
@@ -87,6 +87,7 @@ export function App ({ config, options }: AppProps) {
   const apiRef = useRef(new DeepSeekAPI({ ...config, apiKey: config.apiKey || '' }))
   const agentLoopRef = useRef<AgentLoop | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const pendingApprovalResolveRef = useRef<((value: boolean) => void) | null>(null)
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const [reasoning, setReasoning] = useState('')
   const reasoningPendingRef = useRef('')
@@ -102,6 +103,9 @@ export function App ({ config, options }: AppProps) {
   const [emptyInputHint, setEmptyInputHint] = useState(false)
   const emptyInputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [chatScrollOffset, setChatScrollOffset] = useState(0)
+  const [scrollMode, setScrollMode] = useState<'follow' | 'paused'>('follow')
+  const [newMessagesWhilePaused, setNewMessagesWhilePaused] = useState(false)
+  const visibleMessageCountRef = useRef(0)
   const [toolCallScrollOffset, setToolCallScrollOffset] = useState(0)
   const [contextPercent, setContextPercent] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
@@ -213,6 +217,53 @@ export function App ({ config, options }: AppProps) {
       setStatusText('Ready')
     })()
   }, [])
+
+  // Register soft-cancel hook for the SIGINT handler in interactive.ts.
+  // While isProcessing, interactive.ts's onSIGINT calls this instead of process.exit().
+  useEffect(() => {
+    const proc = process as NodeJS.Process & { __agentSoftCancel?: () => void }
+    if (isProcessing) {
+      proc.__agentSoftCancel = () => {
+        abortControllerRef.current?.abort()
+        if (pendingApprovalResolveRef.current) {
+          pendingApprovalResolveRef.current(false)
+          pendingApprovalResolveRef.current = null
+        }
+      }
+    } else {
+      proc.__agentSoftCancel = undefined
+    }
+    return () => { proc.__agentSoftCancel = undefined }
+  }, [isProcessing])
+
+  const { stdin } = useStdin()
+
+  // Compensate scroll offset when new visible messages arrive while paused
+  useEffect(() => {
+    const visible = messages.filter(m => m.role !== 'tool').length
+    if (scrollMode === 'paused' && visible > visibleMessageCountRef.current) {
+      const diff = visible - visibleMessageCountRef.current
+      setChatScrollOffset(prev => prev + diff)
+      setNewMessagesWhilePaused(true)
+    }
+    visibleMessageCountRef.current = visible
+  }, [messages.length, scrollMode])
+
+  // Detect End key from raw stdin (Ink does not expose it in useInput)
+  useEffect(() => {
+    if (!stdin) return
+    const handler = (data: Buffer) => {
+      if (setupStepRef.current !== 'done') return
+      const seq = data.toString()
+      if (seq === '\x1b[F' || seq === '\x1b[4~' || seq === '\x1b[8~' || seq === '\x1bOF') {
+        setChatScrollOffset(0)
+        setScrollMode('follow')
+        setNewMessagesWhilePaused(false)
+      }
+    }
+    stdin.on('data', handler)
+    return () => { stdin.off('data', handler) }
+  }, [stdin])
 
   const handleSlashCommand = useCallback(async (input: string): Promise<boolean> => {
     const parts = input.trim().split(/\s+/)
@@ -807,6 +858,8 @@ export function App ({ config, options }: AppProps) {
     setToolCalls([])
     setReasoning('')
     setChatScrollOffset(0)
+    setScrollMode('follow')
+    setNewMessagesWhilePaused(false)
 
     try {
       await hooksManager.execute('UserPromptSubmit', {
@@ -874,6 +927,7 @@ export function App ({ config, options }: AppProps) {
 
             // Default mode — ask user for confirmation
             return new Promise<boolean>((resolve) => {
+              pendingApprovalResolveRef.current = resolve
               setPendingApproval({ toolName, args, resolve })
             })
           },
@@ -881,6 +935,19 @@ export function App ({ config, options }: AppProps) {
       )
 
       const finalResponse = await agentLoopRef.current.run(input, messages)
+
+      // Reset UI immediately — agent is done, disk I/O must not block the UX
+      setIsProcessing(false)
+      setStatusText('Ready')
+      if (reasoningTimerRef.current) {
+        clearTimeout(reasoningTimerRef.current)
+        reasoningTimerRef.current = null
+      }
+      if (reasoningPendingRef.current) {
+        setReasoning(reasoningPendingRef.current)
+        reasoningPendingRef.current = ''
+      }
+
       const toolHistory = agentLoopRef.current.getToolCallHistory()
       const bundleFile = await writeExecutionBundle({
         sessionId: sessionIdRef.current,
@@ -968,9 +1035,16 @@ export function App ({ config, options }: AppProps) {
         bundleFile,
       })
     } finally {
+      // Safety net: ensure UI is always reset regardless of exit path
       setIsProcessing(false)
       setToolCallScrollOffset(0)
       setStatusText('Ready')
+      // Clear any pending approval (covers error/abort exit paths)
+      if (pendingApprovalResolveRef.current) {
+        pendingApprovalResolveRef.current(false)
+        pendingApprovalResolveRef.current = null
+      }
+      setPendingApproval(null)
       // Flush pending reasoning
       if (reasoningTimerRef.current) {
         clearTimeout(reasoningTimerRef.current)
@@ -989,14 +1063,21 @@ export function App ({ config, options }: AppProps) {
   useInput((_input, key) => {
     const step = setupStepRef.current
 
-    // Ctrl+C to abort current processing (not exit)
+    // Ctrl+C: soft-cancel during active run, clean exit otherwise.
+    // exitOnCtrlC: false means Ink won't auto-exit — we must handle both cases.
     if (key.ctrl && _input === 'c') {
       if (isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort()
         setStatusText('Cancelled')
+        if (pendingApprovalResolveRef.current) {
+          pendingApprovalResolveRef.current(false)
+          pendingApprovalResolveRef.current = null
+        }
+        setPendingApproval(null)
         return
       }
-      // If not processing, let default Ctrl+C behavior (exit)
+      // Not processing — exit cleanly via Ink (exitOnCtrlC: false, so must be explicit)
+      exit()
       return
     }
 
@@ -1007,10 +1088,12 @@ export function App ({ config, options }: AppProps) {
         if (_input === 'y' || _input === 'Y' || key.return) {
           const resolve = pendingApproval.resolve
           setPendingApproval(null)
+          pendingApprovalResolveRef.current = null
           resolve(true)
         } else if (_input === 'n' || _input === 'N' || key.escape) {
           const resolve = pendingApproval.resolve
           setPendingApproval(null)
+          pendingApprovalResolveRef.current = null
           resolve(false)
         }
         return
@@ -1039,12 +1122,19 @@ export function App ({ config, options }: AppProps) {
           setToolCallScrollOffset(prev => Math.max(0, prev - 1))
         }
       } else {
-        if (key.pageUp) {
+        if (key.pageUp || key.upArrow) {
           const visibleCount = messages.filter(m => m.role !== 'tool').length
-          setChatScrollOffset(prev => Math.min(prev + 3, Math.max(0, visibleCount - 1)))
+          const next = Math.min(chatScrollOffset + 3, Math.max(0, visibleCount - 1))
+          if (next > 0) setScrollMode('paused')
+          setChatScrollOffset(next)
         }
         if (key.pageDown) {
-          setChatScrollOffset(prev => Math.max(0, prev - 3))
+          const next = Math.max(0, chatScrollOffset - 3)
+          setChatScrollOffset(next)
+          if (next === 0) {
+            setScrollMode('follow')
+            setNewMessagesWhilePaused(false)
+          }
         }
       }
       return
@@ -1132,7 +1222,12 @@ export function App ({ config, options }: AppProps) {
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  const handleClear = useCallback(() => { setMessages([]) }, [])
+  const handleClear = useCallback(() => {
+    setMessages([])
+    setScrollMode('follow')
+    setNewMessagesWhilePaused(false)
+    setChatScrollOffset(0)
+  }, [])
   const handleExit = useCallback(() => { exit() }, [exit])
 
   return (
@@ -1150,7 +1245,7 @@ export function App ({ config, options }: AppProps) {
         : (
                 <Box flexDirection='column' flexGrow={1}>
                   <Logo />
-                  <ChatView messages={messages} scrollOffset={chatScrollOffset} />
+                  <ChatView messages={messages} scrollOffset={chatScrollOffset} hasNewMessages={newMessagesWhilePaused} />
                   {pendingApproval && (
                     <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='yellow'>
                       <Box>

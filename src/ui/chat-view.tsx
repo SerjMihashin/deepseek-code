@@ -9,6 +9,7 @@ import { MatrixRain } from './matrix-rain.js'
 interface ChatViewProps {
   messages: ChatMessage[];
   scrollOffset?: number;
+  hasNewMessages?: boolean;
 }
 
 function MessageBubble ({ message }: { message: ChatMessage }) {
@@ -40,22 +41,40 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
 }
 
 export const ChatView = React.memo(
-  function ChatView ({ messages, scrollOffset = 0 }: ChatViewProps) {
+  function ChatView ({ messages, scrollOffset = 0, hasNewMessages = false }: ChatViewProps) {
   const colors = themeManager.getColors()
+  const isMatrix = themeManager.theme.name === 'matrix'
 
   const visibleMessages = messages.filter(msg => msg.role !== 'tool')
-  const hidden = Math.min(scrollOffset, Math.max(0, visibleMessages.length - 1))
-  const shown = hidden > 0 ? visibleMessages.slice(hidden) : visibleMessages
+  const WINDOW = 15
+  const total = visibleMessages.length
+  const endIdx = Math.max(WINDOW, total - scrollOffset)
+  const startIdx = Math.max(0, endIdx - WINDOW)
+  const shown = visibleMessages.slice(startIdx, endIdx)
+  const hiddenAbove = startIdx
+  const hiddenBelow = total - endIdx
 
   return (
     <Box flexDirection='column' flexGrow={1} paddingX={1}>
-      {visibleMessages.length === 0
+      {total === 0
         ? (
           <Box flexDirection='column' alignItems='center' marginTop={2}>
-            {themeManager.theme.name === 'matrix' && <MatrixRain />}
-            <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
-            <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
-            <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
+            {isMatrix
+              ? (
+                <>
+                  <MatrixRain />
+                  <Text bold color={colors.primary}>Wake up, Neo...</Text>
+                  <Text color={colors.secondary}>The Matrix has you.</Text>
+                  <Text color={colors.textMuted}>Follow the white rabbit.</Text>
+                </>
+                )
+              : (
+                <>
+                  <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
+                  <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
+                  <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
+                </>
+                )}
             <Box marginTop={1}>
               <Text color={colors.textMuted}>/help — commands  |  /setup — settings  |  Alt+V — paste image</Text>
             </Box>
@@ -63,14 +82,21 @@ export const ChatView = React.memo(
           )
         : (
           <>
-            {hidden > 0 && (
+            {hiddenAbove > 0 && (
               <Box paddingX={1}>
-                <Text dimColor>↑ {hidden} earlier message{hidden > 1 ? 's' : ''} (PageDown to scroll back)</Text>
+                <Text dimColor>↑ {hiddenAbove} older message{hiddenAbove > 1 ? 's' : ''} — PageUp</Text>
               </Box>
             )}
             {shown.map((msg, i) => (
-              <MessageBubble key={hidden + i} message={msg} />
+              <MessageBubble key={startIdx + i} message={msg} />
             ))}
+            {hiddenBelow > 0 && (
+              <Box paddingX={1}>
+                {hasNewMessages
+                  ? <Text bold color='yellow'>↓ New messages ({hiddenBelow}) — End to follow</Text>
+                  : <Text dimColor>↓ {hiddenBelow} newer message{hiddenBelow > 1 ? 's' : ''} — PageDown</Text>}
+              </Box>
+            )}
           </>
           )}
     </Box>
@@ -78,6 +104,7 @@ export const ChatView = React.memo(
   },
   (prev, next) =>
     prev.scrollOffset === next.scrollOffset &&
+    prev.hasNewMessages === next.hasNewMessages &&
     prev.messages.length === next.messages.length &&
     prev.messages[prev.messages.length - 1]?.content === next.messages[next.messages.length - 1]?.content
 )

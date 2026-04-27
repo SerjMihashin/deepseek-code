@@ -1113,28 +1113,19 @@ export function App ({ config, options }: AppProps) {
           return newMode
         })
       }
-      // PageUp/PageDown: scroll tool calls while processing, else scroll chat
-      if (isProcessing && toolCalls.length > 0) {
-        if (key.pageUp) {
-          setToolCallScrollOffset(prev => Math.min(prev + 1, Math.max(0, toolCalls.length - 3)))
-        }
-        if (key.pageDown) {
-          setToolCallScrollOffset(prev => Math.max(0, prev - 1))
-        }
-      } else {
-        if (key.pageUp || key.upArrow) {
-          const visibleCount = messages.filter(m => m.role !== 'tool').length
-          const next = Math.min(chatScrollOffset + 3, Math.max(0, visibleCount - 1))
-          if (next > 0) setScrollMode('paused')
-          setChatScrollOffset(next)
-        }
-        if (key.pageDown) {
-          const next = Math.max(0, chatScrollOffset - 3)
-          setChatScrollOffset(next)
-          if (next === 0) {
-            setScrollMode('follow')
-            setNewMessagesWhilePaused(false)
-          }
+      // PageUp/ArrowUp/PageDown: always scroll chat history regardless of processing state
+      if (key.pageUp || key.upArrow) {
+        const visibleCount = messages.filter(m => m.role !== 'tool').length
+        const next = Math.min(chatScrollOffset + 3, Math.max(0, visibleCount - 1))
+        if (next > 0) setScrollMode('paused')
+        setChatScrollOffset(next)
+      }
+      if (key.pageDown) {
+        const next = Math.max(0, chatScrollOffset - 3)
+        setChatScrollOffset(next)
+        if (next === 0) {
+          setScrollMode('follow')
+          setNewMessagesWhilePaused(false)
         }
       }
       return
@@ -1268,13 +1259,25 @@ export function App ({ config, options }: AppProps) {
                       </Box>
                     </Box>
                   )}
-                  <ResultsPanel
-                    toolCalls={toolCalls}
-                    reasoning={reasoning}
-                    reasoningActive={isProcessing && reasoning.length > 0}
-                    pendingApproval={pendingApproval !== null}
-                    scrollOffset={toolCallScrollOffset}
-                  />
+                  {scrollMode === 'paused'
+                    ? toolCalls.length > 0 && (
+                      <Box paddingX={1}>
+                        <Text dimColor>
+                          {isProcessing
+                            ? `⚡ ${toolCalls.length} tool call${toolCalls.length !== 1 ? 's' : ''} in progress`
+                            : `✓ ${toolCalls.length} tool call${toolCalls.length !== 1 ? 's' : ''} completed`}
+                          {' — End to follow'}
+                        </Text>
+                      </Box>
+                    )
+                    : <ResultsPanel
+                        toolCalls={toolCalls}
+                        reasoning={reasoning}
+                        reasoningActive={isProcessing && reasoning.length > 0}
+                        pendingApproval={pendingApproval !== null}
+                        scrollOffset={toolCallScrollOffset}
+                      />
+                  }
                 </Box>
                 )}
       <InputBar

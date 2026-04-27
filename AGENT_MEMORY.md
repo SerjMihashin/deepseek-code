@@ -23,26 +23,27 @@ The project has completed a stabilization pass covering:
 - **Execution Summary**: compact format (no ASCII art, grouped tool breakdown)
 - **InputBar**: multiline (Shift+Enter), wrap, max 5 rows, internal scroll
 - **Scroll**: PageUp/PageDown by 10, ArrowUp/Down by 1 (during processing), End to follow
+- **Jitter fix**: blinking cursor removed, final setState batched, FadeIn removed
+- **Markdown**: safe table rendering (CJK/emoji-aware), code block fallback for narrow terminals
 - **Documentation**: README/README.ru updated with Known Issues and correct commands
 
 ## What Is Already Done
 
 - Iterations 1–11 complete (see CHANGELOG.md)
 - Iterations 12–16 complete (Trust Layer documentation + stabilization pass)
-- Stabilization pass 2026-04-27: Ctrl+C, lifecycle, scroll, tool calls, InputBar
+- Stabilization pass 2026-04-27: Ctrl+C, lifecycle, scroll, tool calls, InputBar, jitter, markdown
 - Known Issues documented in README.md and README.ru.md
+- GitHub repo cleaned: chrome-cli-tools/ removed
+
+## What to Do Next
+
+See `PLAN.md` for full roadmap. Next iteration:
+**Iteration 17 — Tests: migrate to vitest + npm test**
 
 ## What NOT to Do
 
-- Do not modify `package.json`, `package-lock.json`, build configs
+- Do not modify `package.json`, `package-lock.json`, build configs (except npm test script)
 - Do not add new dependencies without explicit user request
 - Do not claim "done" without running verification commands
 - Do not run auto-format on the whole project
-- Do not attempt major architectural refactoring (app.tsx split, etc.)
-
-## Memory Update Protocol
-
-After each iteration completes:
-1. Edit this file → update "Current Active Iteration" to next iteration number
-2. Replace NEXT_ITERATION.md with the next iteration spec from ITERATIONS.md
-3. Commit: `git add -A && git commit -m "docs/fix: iteration N complete"`
+- Do not attempt major architectural refactoring (app.tsx split, etc.) without user request

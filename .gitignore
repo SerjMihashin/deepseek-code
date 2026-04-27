@@ -30,3 +30,12 @@ chrome-cli-tools/
 *.handoff.md
 *execution-bundle*.json
 *.session.json
+
+# Internal development artifacts (not for open-source)
+CHANGELOG.md
+ITERATIONS.md
+NEXT_ITERATION.md
+SPEC.md
+audit.md
+PLAN.md
+screenshot.png

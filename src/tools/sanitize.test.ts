@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest'
 import { sanitizeArgs, type ToolParameter } from './types.js'
 
 describe('sanitizeArgs', () => {
@@ -17,78 +16,71 @@ describe('sanitizeArgs', () => {
       offset: 10,
       replace_all: true,
     }, params)
-    assert.equal(result.file_path, '/path/to/file.txt')
-    assert.equal(result.offset, 10)
-    assert.equal(result.replace_all, true)
+    expect(result.file_path).toBe('/path/to/file.txt')
+    expect(result.offset).toBe(10)
+    expect(result.replace_all).toBe(true)
   })
 
   it('should throw for missing required param', () => {
-    assert.throws(() => sanitizeArgs({}, params), /Missing required/)
+    expect(() => sanitizeArgs({}, params)).toThrow(/Missing required/)
   })
 
   it('should throw for wrong type (string instead of number)', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', offset: 'ten' as any }, params),
-      /expected number/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', offset: 'ten' as any }, params)
+    ).toThrow(/expected number/)
   })
 
   it('should throw for wrong type (number instead of boolean)', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', replace_all: 1 as any }, params),
-      /expected boolean/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', replace_all: 1 as any }, params)
+    ).toThrow(/expected boolean/)
   })
 
   it('should throw for wrong type (string instead of array)', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', tags: 'not-array' as any }, params),
-      /expected array/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', tags: 'not-array' as any }, params)
+    ).toThrow(/expected array/)
   })
 
   it('should throw for wrong type (array instead of object)', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', metadata: [1, 2] as any }, params),
-      /expected object/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', metadata: [1, 2] as any }, params)
+    ).toThrow(/expected object/)
   })
 
   it('should throw for non-finite number', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', offset: Infinity as any }, params),
-      /finite number/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', offset: Infinity as any }, params)
+    ).toThrow(/finite number/)
   })
 
   it('should throw for NaN', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: '/path', offset: NaN as any }, params),
-      /finite number/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: '/path', offset: NaN as any }, params)
+    ).toThrow(/finite number/)
   })
 
   it('should pass optional params omitted', () => {
     const result = sanitizeArgs({ file_path: '/path' }, params)
-    assert.equal(result.file_path, '/path')
-    assert.equal(result.offset, undefined)
+    expect(result.file_path).toBe('/path')
+    expect(result.offset).toBeUndefined()
   })
 
   it('should pass valid array', () => {
     const result = sanitizeArgs({ file_path: '/path', tags: ['a', 'b'] }, params)
-    assert.deepEqual(result.tags, ['a', 'b'])
+    expect(result.tags).toEqual(['a', 'b'])
   })
 
   it('should pass valid object', () => {
     const result = sanitizeArgs({ file_path: '/path', metadata: { key: 'val' } }, params)
-    assert.deepEqual(result.metadata, { key: 'val' })
+    expect(result.metadata).toEqual({ key: 'val' })
   })
 
   it('should throw for null required param', () => {
-    assert.throws(
-      () => sanitizeArgs({ file_path: null as any }, params),
-      /Missing required/
-    )
+    expect(
+      () => sanitizeArgs({ file_path: null as any }, params)
+    ).toThrow(/Missing required/)
   })
 
   it('should handle all param types at once', () => {
@@ -106,10 +98,10 @@ describe('sanitizeArgs', () => {
       a: [1, 2, 3],
       o: { foo: 'bar' },
     }, allParams)
-    assert.equal(result.s, 'hello')
-    assert.equal(result.n, 42)
-    assert.equal(result.b, false)
-    assert.deepEqual(result.a, [1, 2, 3])
-    assert.deepEqual(result.o, { foo: 'bar' })
+    expect(result.s).toBe('hello')
+    expect(result.n).toBe(42)
+    expect(result.b).toBe(false)
+    expect(result.a).toEqual([1, 2, 3])
+    expect(result.o).toEqual({ foo: 'bar' })
   })
 })

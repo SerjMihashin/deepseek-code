@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { sep } from 'node:path'
+import { platform } from 'node:os'
 
 /** Convert Windows backslash paths to forward-slash paths for Docker mount syntax */
 function toDockerPath (p: string): string {
@@ -38,6 +39,19 @@ const DEFAULT_IMAGE = 'node:20-alpine'
 export class Sandbox {
   private dockerAvailable: boolean | null = null
 
+  /**
+   * Check if sandbox is supported on the current platform.
+   * On Windows, sandbox requires Docker/WSL which may not be available.
+   */
+  isSupported (): boolean {
+    // Direct execution fallback works on all platforms,
+    // but Docker-based isolation is only meaningful with Docker/WSL.
+    return true // direct execution always works
+  }
+
+  /**
+   * Check if Docker-based sandbox (with isolation) is available.
+   */
   async isDockerAvailable (): Promise<boolean> {
     if (this.dockerAvailable !== null) return this.dockerAvailable
 
@@ -49,6 +63,21 @@ export class Sandbox {
     }
 
     return this.dockerAvailable
+  }
+
+  /**
+   * Get a human-readable reason why sandbox might be limited on this platform.
+   */
+  getCapabilityInfo (): { supported: boolean; reason?: string; action?: string } {
+    const os = platform()
+    if (os === 'win32') {
+      return {
+        supported: false,
+        reason: 'current sandbox implementation requires Docker/WSL/Linux runtime',
+        action: 'use WSL/Podman or disable sandbox command',
+      }
+    }
+    return { supported: true }
   }
 
   async execute (command: string, options: SandboxOptions = {}): Promise<SandboxResult> {

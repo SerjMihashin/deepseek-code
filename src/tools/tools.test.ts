@@ -1,5 +1,4 @@
-import { describe, it, before, after } from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -24,92 +23,92 @@ function createTempFile (name: string, content: string): string {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('read_file tool', () => {
-  before(() => {
+  beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
   })
 
-  after(() => {
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
   it('should read a file', async () => {
     const filePath = createTempFile('test.txt', 'Hello World\nLine 2\nLine 3')
     const result = await readTool.execute({ file_path: filePath })
-    assert.ok(result.success)
-    assert.equal(result.output, 'Hello World\nLine 2\nLine 3')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('Hello World\nLine 2\nLine 3')
   })
 
   it('should read with offset', async () => {
     const filePath = createTempFile('offset_test.txt', 'Line 0\nLine 1\nLine 2\nLine 3')
     const result = await readTool.execute({ file_path: filePath, offset: 2 })
-    assert.ok(result.success, `Failed: ${result.error}`)
-    assert.equal(result.output, 'Line 2\nLine 3')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('Line 2\nLine 3')
   })
 
   it('should read with offset 0 (default)', async () => {
     const filePath = createTempFile('test2.txt', 'Line 0\nLine 1\nLine 2\nLine 3')
     const result = await readTool.execute({ file_path: filePath })
-    assert.ok(result.success)
-    assert.equal(result.output, 'Line 0\nLine 1\nLine 2\nLine 3')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('Line 0\nLine 1\nLine 2\nLine 3')
   })
 
   it('should read with offset and limit', async () => {
     const filePath = createTempFile('test.txt', 'Line 0\nLine 1\nLine 2\nLine 3\nLine 4')
     const result = await readTool.execute({ file_path: filePath, offset: 1, limit: 2 })
-    assert.ok(result.success)
-    assert.equal(result.output, 'Line 1\nLine 2')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('Line 1\nLine 2')
   })
 
   it('should fail for nonexistent file', async () => {
     const result = await readTool.execute({ file_path: '/nonexistent/path/file.txt' })
-    assert.ok(!result.success)
-    assert.ok(result.error)
+    expect(result.success).toBe(false)
+    expect(result.error).toBeTruthy()
   })
 })
 
 describe('write_file tool', () => {
-  before(() => {
+  beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
   })
 
-  after(() => {
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
   it('should write a file', async () => {
     const filePath = join(tmpDir, 'new-file.txt')
     const result = await writeTool.execute({ file_path: filePath, content: 'Hello World' })
-    assert.ok(result.success)
-    assert.ok(result.output.includes('bytes'))
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('bytes')
   })
 
   it('should create parent directories', async () => {
     const filePath = join(tmpDir, 'nested', 'dir', 'file.txt')
     const result = await writeTool.execute({ file_path: filePath, content: 'nested' })
-    assert.ok(result.success)
-    assert.ok(result.output.includes('nested'))
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('nested')
   })
 
   it('should reject files over 1MB', async () => {
     const filePath = join(tmpDir, 'large.txt')
     const largeContent = 'x'.repeat(1_048_577) // > 1MB
     const result = await writeTool.execute({ file_path: filePath, content: largeContent })
-    assert.ok(!result.success)
-    assert.ok(result.error?.includes('1MB'))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('1MB')
   })
 
   it('should fail for invalid path', async () => {
     const result = await writeTool.execute({ file_path: '', content: 'test' })
-    assert.ok(!result.success)
+    expect(result.success).toBe(false)
   })
 })
 
 describe('edit tool', () => {
-  before(() => {
+  beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
   })
 
-  after(() => {
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
@@ -120,8 +119,8 @@ describe('edit tool', () => {
       old_string: 'World',
       new_string: 'Universe',
     })
-    assert.ok(result.success)
-    assert.ok(result.output.includes('edited'))
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('edited')
   })
 
   it('should fail if string not found', async () => {
@@ -131,8 +130,8 @@ describe('edit tool', () => {
       old_string: 'Nonexistent',
       new_string: 'Replacement',
     })
-    assert.ok(!result.success)
-    assert.ok(result.error?.includes('not found'))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('not found')
   })
 
   it('should replace all occurrences', async () => {
@@ -143,8 +142,8 @@ describe('edit tool', () => {
       new_string: 'baz',
       replace_all: true,
     })
-    assert.ok(result.success)
-    assert.ok(result.output.includes('all'))
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('all')
   })
 
   it('should fail for nonexistent file', async () => {
@@ -153,89 +152,89 @@ describe('edit tool', () => {
       old_string: 'foo',
       new_string: 'bar',
     })
-    assert.ok(!result.success)
+    expect(result.success).toBe(false)
   })
 })
 
 describe('bash tool', () => {
   it('should execute a simple command', async () => {
     const result = await bashTool.execute({ command: 'echo hello' })
-    assert.ok(result.success)
-    assert.ok(result.output.includes('hello'))
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('hello')
   })
 
   it('should handle timeout', async () => {
     const result = await bashTool.execute({ command: 'echo quick', timeout: 1000 })
-    assert.ok(result.success)
+    expect(result.success).toBe(true)
   })
 
   it('should reject dangerous commands', async () => {
     const result = await bashTool.execute({ command: 'rm -rf /' })
-    assert.ok(!result.success)
-    assert.ok(result.error?.includes('dangerous'))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('dangerous')
   })
 
   it('should reject fork bomb', async () => {
     const result = await bashTool.execute({ command: ':(){ :|:& };:' })
-    assert.ok(!result.success)
-    assert.ok(result.error?.includes('dangerous'))
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('dangerous')
   })
 
   it('should handle command failure', async () => {
     const result = await bashTool.execute({ command: 'nonexistent_command_xyz' })
-    assert.ok(!result.success)
+    expect(result.success).toBe(false)
   })
 })
 
 describe('glob tool', () => {
-  before(() => {
+  beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
     createTempFile('src/index.ts', '')
     createTempFile('src/utils/helper.ts', '')
     createTempFile('README.md', '')
   })
 
-  after(() => {
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
   it('should find files matching pattern', async () => {
     const result = await globTool.execute({ pattern: join(tmpDir, 'src/**/*.ts') })
-    assert.ok(result.success)
-    assert.ok(result.output.length > 0)
+    expect(result.success).toBe(true)
+    expect(result.output.length).toBeGreaterThan(0)
   })
 
   it('should return empty for no matches', async () => {
     const result = await globTool.execute({ pattern: join(tmpDir, '*.nonexistent') })
-    assert.ok(result.success)
-    assert.equal(result.output, 'No files found matching pattern')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('No files found matching pattern')
   })
 })
 
 describe('grep_search tool', () => {
-  before(() => {
+  beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
     createTempFile('search.txt', 'hello world\nfoo bar\nHELLO')
   })
 
-  after(() => {
+  afterAll(() => {
     rmSync(tmpDir, { recursive: true, force: true })
   })
 
   it('should find matching lines', async () => {
     const result = await grepTool.execute({ pattern: 'hello', path: tmpDir })
-    assert.ok(result.success)
-    assert.ok(result.output.length > 0)
+    expect(result.success).toBe(true)
+    expect(result.output.length).toBeGreaterThan(0)
   })
 
   it('should return no matches for nonexistent pattern', async () => {
     const result = await grepTool.execute({ pattern: 'zzz_nonexistent_zzz', path: tmpDir })
-    assert.ok(result.success)
-    assert.equal(result.output, 'No matches found')
+    expect(result.success).toBe(true)
+    expect(result.output).toBe('No matches found')
   })
 
   it('should filter by glob', async () => {
     const result = await grepTool.execute({ pattern: 'hello', glob: '*.txt', path: tmpDir })
-    assert.ok(result.success)
+    expect(result.success).toBe(true)
   })
 })

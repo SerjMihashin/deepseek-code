@@ -1,6 +1,5 @@
 import { execSync } from 'node:child_process'
-import { platform } from 'node:os'
-import { tmpdir } from 'node:os'
+import { platform, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { existsSync, unlinkSync, readFileSync } from 'node:fs'
 
@@ -16,10 +15,10 @@ export async function readClipboardImage (): Promise<Buffer | null> {
     if (p === 'darwin') {
       execSync(
         `osascript -e 'set theFile to "${tmpFile}"' ` +
-        `-e 'set theData to the clipboard as «class PNGf»' ` +
-        `-e 'set fileRef to open for access POSIX file theFile with write permission' ` +
-        `-e 'write theData to fileRef' ` +
-        `-e 'close access fileRef'`,
+        '-e \'set theData to the clipboard as «class PNGf»\' ' +
+        '-e \'set fileRef to open for access POSIX file theFile with write permission\' ' +
+        '-e \'write theData to fileRef\' ' +
+        '-e \'close access fileRef\'',
         { timeout: 3000, stdio: 'ignore' }
       )
     } else if (p === 'linux') {

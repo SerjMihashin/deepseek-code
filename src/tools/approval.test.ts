@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest'
 import { AgentLoop } from '../core/agent-loop.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 
@@ -33,7 +32,7 @@ describe('Approval dialog flow', () => {
     })
 
     let callIndex = 0
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       callIndex++
       if (callIndex === 1) {
         yield {
@@ -63,8 +62,8 @@ describe('Approval dialog flow', () => {
     }
 
     await agent.run('write file')
-    assert.equal(approvals.length, 1)
-    assert.equal(approvals[0].toolName, 'write_file')
+    expect(approvals).toHaveLength(1)
+    expect(approvals[0].toolName).toBe('write_file')
   })
 
   it('should reject tool when onApprovalRequest returns false', async () => {
@@ -79,7 +78,7 @@ describe('Approval dialog flow', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield {
         type: 'tool_use',
         content: '',
@@ -99,7 +98,7 @@ describe('Approval dialog flow', () => {
 
     await agent.run('write file')
     const history = agent.getToolCallHistory()
-    assert.equal(history[0].status, 'rejected')
+    expect(history[0].status).toBe('rejected')
   })
 
   it('should skip approval for read-only tools in default mode', async () => {
@@ -119,8 +118,7 @@ describe('Approval dialog flow', () => {
       onError: () => {},
     })
 
-    // Mock streamChat to return a read_file tool call (no approval needed)
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield {
         type: 'tool_use',
         content: '',
@@ -139,8 +137,7 @@ describe('Approval dialog flow', () => {
     })
 
     await agent.run('read file')
-    // onApprovalRequest should NOT be called for read-only tools
-    assert.equal(approvals.length, 0)
+    expect(approvals).toHaveLength(0)
   })
 
   it('should auto-approve write/edit/chrome in auto-edit mode', async () => {
@@ -161,7 +158,7 @@ describe('Approval dialog flow', () => {
     })
 
     let callIndex = 0
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       callIndex++
       if (callIndex === 1) {
         yield {
@@ -191,8 +188,7 @@ describe('Approval dialog flow', () => {
     }
 
     await agent.run('write file')
-    // In auto-edit mode, write_file is 'auto' — still calls onApprovalRequest
-    assert.equal(approvals.length, 1)
+    expect(approvals).toHaveLength(1)
   })
 
   it('should reject all tools in plan mode', async () => {
@@ -207,7 +203,7 @@ describe('Approval dialog flow', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield {
         type: 'tool_use',
         content: '',
@@ -225,10 +221,8 @@ describe('Approval dialog flow', () => {
       }],
     })
 
-    // In plan mode, only read-only tools are available (approval='never')
-    // So onApprovalRequest should NOT be called for read_file
     const result = await agent.run('read file')
-    assert.ok(result)
+    expect(result).toBeTruthy()
   })
 
   it('should handle concurrent approval requests sequentially', async () => {
@@ -249,7 +243,7 @@ describe('Approval dialog flow', () => {
     })
 
     let callIndex = 0
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       callIndex++
       if (callIndex === 1) {
         yield {
@@ -293,8 +287,8 @@ describe('Approval dialog flow', () => {
     }
 
     await agent.run('write two files')
-    assert.equal(approvals.length, 2)
-    assert.equal(approvals[0], 'write_file')
-    assert.equal(approvals[1], 'edit')
+    expect(approvals).toHaveLength(2)
+    expect(approvals[0]).toBe('write_file')
+    expect(approvals[1]).toBe('edit')
   })
 })

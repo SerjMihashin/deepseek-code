@@ -37,25 +37,11 @@ function visualWidth (s: string): number {
   return w
 }
 
-/** Truncate string to fit within `maxWidth` visual columns */
-function truncateVisual (s: string, maxWidth: number): string {
-  if (visualWidth(s) <= maxWidth) return s
-  let w = 0
-  let result = ''
-  for (const ch of s) {
-    const cw = visualWidth(ch)
-    if (w + cw > maxWidth - 1) { result += '…'; break }
-    result += ch
-    w += cw
-  }
-  return result
-}
-
 // ─── Inline formatter ────────────────────────────────────────────────────────
 
 function renderInline (text: string, colors: Colors): React.ReactNode {
   if (!text) return null
-  if (!/[`*_\[]/.test(text)) return text
+  if (!/[`*_[]/.test(text)) return text
 
   // Split by inline code spans first (highest priority)
   const codeParts = text.split(/(`[^`\n]+`)/g)
@@ -151,7 +137,7 @@ function renderTableRow (line: string, isHeader: boolean, colors: Colors): React
             <Text bold={isHeader} color={isHeader ? colors.primary : undefined}>
               {padded}
             </Text>
-            <Text>{'|'}</Text>
+            <Text>|</Text>
           </React.Fragment>
         )
       })}

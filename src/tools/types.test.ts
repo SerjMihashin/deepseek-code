@@ -1,5 +1,4 @@
-import { describe, it } from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest'
 import { type Tool, toOpenAITools } from './types.js'
 
 describe('toOpenAITools', () => {
@@ -18,15 +17,15 @@ describe('toOpenAITools', () => {
 
     const result = toOpenAITools([{ tool, approval: 'never' }])
 
-    assert.strictEqual(result.length, 1)
-    assert.strictEqual(result[0].function.name, 'read_file')
-    assert.strictEqual(result[0].function.description, 'Read a file')
+    expect(result).toHaveLength(1)
+    expect(result[0].function.name).toBe('read_file')
+    expect(result[0].function.description).toBe('Read a file')
 
     const props = result[0].function.parameters.properties as Record<string, { type: string }>
-    assert.strictEqual(props.file_path.type, 'string')
+    expect(props.file_path.type).toBe('string')
 
     const required = result[0].function.parameters.required as string[]
-    assert.strictEqual(required.includes('file_path'), true)
+    expect(required.includes('file_path')).toBe(true)
   })
 
   it('should handle tools with no required parameters', () => {
@@ -43,6 +42,6 @@ describe('toOpenAITools', () => {
 
     const result = toOpenAITools([{ tool, approval: 'never' }])
 
-    assert.strictEqual(result[0].function.parameters.required?.length, 0)
+    expect(result[0].function.parameters.required).toHaveLength(0)
   })
 })

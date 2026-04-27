@@ -1,5 +1,4 @@
-import { describe, it, before, after } from 'node:test'
-import assert from 'node:assert/strict'
+import { describe, it, expect } from 'vitest'
 import { AgentLoop } from './agent-loop.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 import type { ChatMessage, StreamChunk } from '../api/index.js'
@@ -17,10 +16,6 @@ const TEST_CONFIG: DeepSeekConfig = {
   temperature: 0.7,
 }
 
-/**
- * Helper to create a minimal valid StreamChunk for tool_use type.
- * StreamChunk requires `content` for all types, but tool_use uses toolName/toolCallId.
- */
 function toolUseChunk (toolName: string, toolCallId: string, toolInput?: Record<string, unknown>): StreamChunk {
   return {
     type: 'tool_use',
@@ -50,37 +45,36 @@ function reasoningChunk (content: string): StreamChunk {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AgentLoop', () => {
-
   it('should create an instance with default options', () => {
     const agent = new AgentLoop(TEST_CONFIG)
-    assert.ok(agent instanceof AgentLoop)
-    assert.equal(agent.getIterationCount(), 0)
-    assert.equal(agent.getMessages().length, 0)
-    assert.equal(agent.getToolCallHistory().length, 0)
+    expect(agent).toBeInstanceOf(AgentLoop)
+    expect(agent.getIterationCount()).toBe(0)
+    expect(agent.getMessages()).toHaveLength(0)
+    expect(agent.getToolCallHistory()).toHaveLength(0)
   })
 
   it('should return empty messages initially', () => {
     const agent = new AgentLoop(TEST_CONFIG)
-    assert.deepEqual(agent.getMessages(), [])
+    expect(agent.getMessages()).toEqual([])
   })
 
   it('should return empty tool call history initially', () => {
     const agent = new AgentLoop(TEST_CONFIG)
-    assert.deepEqual(agent.getToolCallHistory(), [])
+    expect(agent.getToolCallHistory()).toEqual([])
   })
 
   it('should return metrics collector', () => {
     const agent = new AgentLoop(TEST_CONFIG)
     const metrics = agent.getMetrics()
-    assert.ok(metrics)
-    assert.equal(metrics.toolCalls, 0)
-    assert.equal(metrics.totalTokens, 0)
+    expect(metrics).toBeTruthy()
+    expect(metrics.toolCalls).toBe(0)
+    expect(metrics.totalTokens).toBe(0)
   })
 
   it('should set approval mode and update tools', () => {
     const agent = new AgentLoop(TEST_CONFIG, { approvalMode: 'plan' })
     agent.setApprovalMode('yolo')
-    assert.ok(true) // No crash
+    expect(true).toBe(true) // No crash
   })
 
   it('should handle cancellation via signal', async () => {
@@ -98,7 +92,7 @@ describe('AgentLoop', () => {
 
     ac.abort()
     const result = await agent.run('test prompt')
-    assert.ok(result.includes('cancelled'))
+    expect(result).toContain('отменено')
   })
 
   it('should handle max iterations', async () => {
@@ -113,14 +107,10 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    // Mock streamChat to return a tool call (loop will continue)
-    let callCount = 0
-    ;(agent as any).api.streamChat = async function* () {
-      callCount++
+    ;(agent as any).api.streamChat = async function * () {
       yield toolUseChunk('read_file', 'call_1', { file_path: '/test/file.txt' })
     }
 
-    // Mock chat (non-streaming fallback) to also return tool call
     ;(agent as any).api.chat = async () => ({
       content: '',
       toolCalls: [{
@@ -131,7 +121,7 @@ describe('AgentLoop', () => {
     })
 
     const result = await agent.run('test')
-    assert.ok(result.includes('maximum iterations'))
+    expect(result).toContain('итераций')
   })
 
   it('should handle streaming text response', async () => {
@@ -146,18 +136,16 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    // Mock streamChat to yield text chunks
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield textChunk('Hello')
       yield textChunk(' World')
       yield usageChunk(10, 5)
     }
 
     const result = await agent.run('say hello')
-    assert.ok(result.startsWith('Hello World'))
-    // streamChunks includes the summary at the end — just check it starts with our text
-    assert.ok(streamChunks.join('').startsWith('Hello World'))
-    assert.equal(agent.getMetrics().totalTokens, 15)
+    expect(result.startsWith('Hello World')).toBe(true)
+    expect(streamChunks.join('').startsWith('Hello World')).toBe(true)
+    expect(agent.getMetrics().totalTokens).toBe(15)
   })
 
   it('should handle tool calls and execute them', async () => {
@@ -173,7 +161,7 @@ describe('AgentLoop', () => {
     })
 
     let callCount = 0
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       callCount++
       if (callCount === 1) {
         yield toolUseChunk('read_file', 'call_1', { file_path: '/test/file.txt' })
@@ -182,7 +170,6 @@ describe('AgentLoop', () => {
       }
     }
 
-    // Non-streaming fallback for first call
     ;(agent as any).api.chat = async () => {
       if (callCount === 1) {
         return {
@@ -198,14 +185,13 @@ describe('AgentLoop', () => {
     }
 
     const result = await agent.run('read file')
-    assert.ok(result)
-    assert.ok(toolCalls.length > 0)
-    assert.equal(toolCalls[0].name, 'read_file')
+    expect(result).toBeTruthy()
+    expect(toolCalls.length).toBeGreaterThan(0)
+    expect(toolCalls[0].name).toBe('read_file')
 
-    // Tool call should have been executed (status completed)
     const history = agent.getToolCallHistory()
-    assert.ok(history.length > 0)
-    assert.equal(history[0].name, 'read_file')
+    expect(history.length).toBeGreaterThan(0)
+    expect(history[0].name).toBe('read_file')
   })
 
   it('should handle tool execution errors', async () => {
@@ -219,9 +205,8 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    // Mock streamChat to return a tool call for an unknown tool (will fail)
     let callCount = 0
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       callCount++
       if (callCount === 1) {
         yield toolUseChunk('nonexistent_tool', 'call_1', {})
@@ -245,17 +230,16 @@ describe('AgentLoop', () => {
     }
 
     const result = await agent.run('test')
-    assert.ok(result)
+    expect(result).toBeTruthy()
     const history = agent.getToolCallHistory()
-    // Unknown tool should fail
-    assert.equal(history[0].status, 'failed')
-    assert.ok(history[0].error)
+    expect(history[0].status).toBe('failed')
+    expect(history[0].error).toBeTruthy()
   })
 
   it('should handle approval rejection', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
       approvalMode: 'default',
-      onApprovalRequest: async () => false, // Always reject
+      onApprovalRequest: async () => false,
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -264,7 +248,7 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield toolUseChunk('write_file', 'call_1', { file_path: '/test/file.txt', content: 'test' })
     }
 
@@ -278,11 +262,10 @@ describe('AgentLoop', () => {
     })
 
     const result = await agent.run('write file')
-    assert.ok(result)
+    expect(result).toBeTruthy()
 
-    // Tool should be rejected
     const history = agent.getToolCallHistory()
-    assert.equal(history[0].status, 'rejected')
+    expect(history[0].status).toBe('rejected')
   })
 
   it('should handle empty response with fallback', async () => {
@@ -296,17 +279,15 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    // Stream returns nothing
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       // No yield — empty stream
     }
 
-    // Non-streaming also returns empty
     ;(agent as any).api.chat = async () => ({ content: '', toolCalls: undefined })
 
     const result = await agent.run('test')
-    assert.ok(result)
-    assert.ok(result.length > 0) // Should have fallback
+    expect(result).toBeTruthy()
+    expect(result.length).toBeGreaterThan(0)
   })
 
   it('should track metrics during execution', async () => {
@@ -320,17 +301,17 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield textChunk('Hello')
       yield usageChunk(50, 25)
     }
 
     await agent.run('test')
     const metrics = agent.getMetrics()
-    assert.equal(metrics.totalTokens, 75)
-    assert.equal(metrics.inputTokens, 50)
-    assert.equal(metrics.outputTokens, 25)
-    assert.ok(metrics.elapsedMs > 0)
+    expect(metrics.totalTokens).toBe(75)
+    expect(metrics.inputTokens).toBe(50)
+    expect(metrics.outputTokens).toBe(25)
+    expect(metrics.elapsedMs).toBeGreaterThan(0)
   })
 
   it('should provide context usage percentage', async () => {
@@ -344,15 +325,15 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield textChunk('Test')
       yield usageChunk(64000, 64000)
     }
 
     await agent.run('test')
     const metrics = agent.getMetrics()
-    assert.equal(metrics.getContextUsagePercent(), 100)
-    assert.equal(metrics.getContextUsagePercent(256000), 50)
+    expect(metrics.getContextUsagePercent()).toBe(100)
+    expect(metrics.getContextUsagePercent(256000)).toBe(50)
   })
 
   it('should emit reasoning chunks', async () => {
@@ -367,16 +348,16 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield reasoningChunk('Thinking step 1...')
       yield reasoningChunk('Thinking step 2...')
       yield textChunk('Final answer')
     }
 
     await agent.run('test')
-    assert.equal(reasoningChunks.length, 2)
-    assert.equal(reasoningChunks[0], 'Thinking step 1...')
-    assert.equal(reasoningChunks[1], 'Thinking step 2...')
+    expect(reasoningChunks).toHaveLength(2)
+    expect(reasoningChunks[0]).toBe('Thinking step 1...')
+    expect(reasoningChunks[1]).toBe('Thinking step 2...')
   })
 
   it('should handle continueWithMessages', async () => {
@@ -390,7 +371,7 @@ describe('AgentLoop', () => {
       onError: () => {},
     })
 
-    ;(agent as any).api.streamChat = async function* () {
+    ;(agent as any).api.streamChat = async function * () {
       yield textChunk('Continued response')
     }
 
@@ -400,6 +381,6 @@ describe('AgentLoop', () => {
     ]
 
     const result = await agent.continueWithMessages(messages)
-    assert.equal(result, 'Continued response')
+    expect(result).toBe('Continued response')
   })
 })

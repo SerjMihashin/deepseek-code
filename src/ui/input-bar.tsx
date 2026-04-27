@@ -40,11 +40,15 @@ const COMMANDS = [
 /** Max visible rows for the input area before internal scroll kicks in */
 const MAX_VISIBLE_ROWS = 5
 
+/** Max visible suggestions in the dropdown before scrolling */
+const SUGGESTIONS_MAX_VISIBLE = 8
+
 export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste }: InputBarProps) {
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [suggestionIndex, setSuggestionIndex] = useState(-1)
+  const [suggestionsScrollOffset, setSuggestionsScrollOffset] = useState(0)
   const [cursorVisible, setCursorVisible] = useState(true)
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
   const [inputScrollOffset, setInputScrollOffset] = useState(0)
@@ -55,12 +59,17 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     setCursorVisible(!disabled)
   }, [disabled])
 
+  // Reset suggestions scroll when input changes (suggestions list rebuilt)
+  useEffect(() => {
+    setSuggestionsScrollOffset(0)
+  }, [input])
+
   const handleImagePaste = async () => {
     try {
       const { readClipboardImage } = await import('../utils/clipboard.js')
       const buf = await readClipboardImage()
       if (!buf) {
-        setPendingImageLabel('(no image in clipboard)')
+        setPendingImageLabel('(изображение не найдено)')
         setTimeout(() => setPendingImageLabel(null), 2000)
         return
       }
@@ -69,7 +78,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       setPendingImageLabel(label)
       onImagePaste?.(base64, 'image/png')
     } catch {
-      setPendingImageLabel('(clipboard error)')
+      setPendingImageLabel('(ошибка буфера обмена)')
       setTimeout(() => setPendingImageLabel(null), 2000)
     }
   }
@@ -114,25 +123,46 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     const hasSuggestions = currentSuggestions.length > 0
 
     if (hasSuggestions) {
-      // Arrows cycle through suggestions
+      // Arrows cycle through suggestions — only change index, NOT input
       if (key.downArrow) {
         const newIdx = (suggestionIndex + 1) % currentSuggestions.length
         setSuggestionIndex(newIdx)
-        setInput(currentSuggestions[newIdx] + ' ')
+        // Scroll down if active item goes below visible area
+        setSuggestionsScrollOffset(prev => {
+          if (newIdx >= prev + SUGGESTIONS_MAX_VISIBLE) {
+            return newIdx - SUGGESTIONS_MAX_VISIBLE + 1
+          }
+          return prev
+        })
         return
       }
       if (key.upArrow) {
         const newIdx = suggestionIndex <= 0 ? currentSuggestions.length - 1 : suggestionIndex - 1
         setSuggestionIndex(newIdx)
-        setInput(currentSuggestions[newIdx] + ' ')
+        // Scroll up if active item goes above visible area
+        setSuggestionsScrollOffset(prev => {
+          if (newIdx < prev) {
+            return Math.max(0, newIdx)
+          }
+          // Wrap-around from top to bottom
+          if (suggestionIndex <= 0 && newIdx >= SUGGESTIONS_MAX_VISIBLE) {
+            return Math.max(0, newIdx - SUGGESTIONS_MAX_VISIBLE + 1)
+          }
+          return prev
+        })
         return
       }
       if (key.tab) {
         const newIdx = (suggestionIndex + 1) % currentSuggestions.length
         setSuggestionIndex(newIdx)
-        setInput(currentSuggestions[newIdx] + ' ')
         return
       }
+      // Escape closes suggestions
+      if (key.escape) {
+        setSuggestionIndex(-1)
+        return
+      }
+      // Enter submits the selected command (or current input if no selection)
       if (key.return && currentInput.trim()) {
         const cmd = suggestionIndex >= 0 ? currentSuggestions[suggestionIndex] : currentInput.trim()
         onSubmit(cmd)
@@ -144,9 +174,11 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         setInputScrollOffset(0)
         return
       }
+      // Backspace/delete while suggestions are open — let normal input handling proceed
+      // (falls through to the backspace handler below)
     }
 
-    // Backspace / delete (also handled when no suggestions)
+    // Backspace / delete
     if (key.backspace || key.delete) {
       setInput(prev => prev.slice(0, -1))
       setSuggestionIndex(-1)
@@ -157,19 +189,18 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     if (_input && !key.ctrl && !key.meta && !key.return && !key.tab && !key.escape && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow && !key.backspace && !key.delete) {
       setInput(prev => prev + _input)
       setSuggestionIndex(-1)
-      // Auto-scroll to bottom when typing
       if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
       return
     }
 
-    // Shift+Enter = newline, Enter = send (when no suggestions)
+    // Shift+Enter = newline
     if (key.return && key.shift) {
       setInput(prev => prev + '\n')
       setSuggestionIndex(-1)
-      // Auto-scroll to bottom
       if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
       return
     }
+    // Enter = send (when no suggestions OR when suggestions exist but we fall back here)
     if (key.return && currentInput.trim()) {
       onSubmit(currentInput)
       setHistory(prev => [currentInput, ...prev].slice(0, 100))
@@ -181,33 +212,35 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       return
     }
 
-    // History navigation (only when no suggestions)
-    if (key.upArrow) {
-      if (history.length > 0) {
-        const newIndex = Math.min(historyIndex + 1, history.length - 1)
-        setHistoryIndex(newIndex)
-        setInput(history[newIndex])
-        setInputScrollOffset(0)
+    // History navigation (only when no suggestions active)
+    if (!hasSuggestions) {
+      if (key.upArrow) {
+        if (history.length > 0) {
+          const newIndex = Math.min(historyIndex + 1, history.length - 1)
+          setHistoryIndex(newIndex)
+          setInput(history[newIndex])
+          setInputScrollOffset(0)
+        }
+        return
       }
-      return
-    }
-    if (key.downArrow) {
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1
-        setHistoryIndex(newIndex)
-        setInput(history[newIndex])
-        setInputScrollOffset(0)
-      } else {
-        setHistoryIndex(-1)
-        setInput('')
-        setInputScrollOffset(0)
+      if (key.downArrow) {
+        if (historyIndex > 0) {
+          const newIndex = historyIndex - 1
+          setHistoryIndex(newIndex)
+          setInput(history[newIndex])
+          setInputScrollOffset(0)
+        } else {
+          setHistoryIndex(-1)
+          setInput('')
+          setInputScrollOffset(0)
+        }
+        return
       }
-      return
     }
 
     // Alt+V — paste image from clipboard
     if (key.meta && _input === 'v') {
-      void handleImagePaste()
+      handleImagePaste().catch(() => {})
       return
     }
 
@@ -246,51 +279,57 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       {/* Command suggestions */}
       {suggestions.length > 0 && (
         <Box flexDirection='column' marginLeft={1} marginBottom={0}>
-          {suggestions.slice(0, 6).map((cmd, i) => (
-            <Text key={cmd}>
-              {i === suggestionIndex || (suggestionIndex < 0 && i === 0)
-                ? <Text bold color={colors.primary}>▸ </Text>
-                : <Text>  </Text>}
-              <Text color={i === suggestionIndex || (suggestionIndex < 0 && i === 0) ? colors.primary : colors.textMuted}>
-                {cmd}
+          {suggestions.slice(suggestionsScrollOffset, suggestionsScrollOffset + SUGGESTIONS_MAX_VISIBLE).map((cmd, i) => {
+            const actualIndex = suggestionsScrollOffset + i
+            const isActive = actualIndex === suggestionIndex || (suggestionIndex < 0 && actualIndex === 0)
+            return (
+              <Text key={cmd}>
+                {isActive
+                  ? <Text bold color={colors.primary}>▸ </Text>
+                  : <Text>  </Text>}
+                <Text color={isActive ? colors.primary : colors.textMuted}>
+                  {cmd}
+                </Text>
               </Text>
-            </Text>
-          ))}
-          {suggestions.length > 6 && (
-            <Text color={colors.textMuted}>  ...and {suggestions.length - 6} more</Text>
+            )
+          })}
+          {suggestions.length > suggestionsScrollOffset + SUGGESTIONS_MAX_VISIBLE && (
+            <Text color={colors.textMuted}>  ...and {suggestions.length - suggestionsScrollOffset - SUGGESTIONS_MAX_VISIBLE} more</Text>
           )}
         </Box>
       )}
       {/* Empty input hint */}
       {emptyHint && !input && (
         <Box marginLeft={1} marginBottom={0}>
-          <Text dimColor>Type a message or /help for commands</Text>
+          <Text dimColor>Введите сообщение или /help для списка команд</Text>
         </Box>
       )}
       <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
         <Box flexDirection='column' width='100%'>
-          {input.length === 0 && !disabled ? (
-            <Box>
-              <Text bold color={colors.primary}>{'>'}</Text>
-              <Text color={colors.textMuted}> Type your request...</Text>
-              <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
-            </Box>
-          ) : (
-            visibleLines.map((line, i) => (
-              <Box key={i}>
-                {i === 0 && <Text bold color={colors.primary}>{'>'}</Text>}
-                {i > 0 && <Text> </Text>}
-                <Text wrap='wrap' color={colors.text}>{line || ' '}</Text>
-                {i === visibleLines.length - 1 && !disabled && (
-                  <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
-                )}
+          {input.length === 0 && !disabled
+            ? (
+              <Box>
+                <Text bold color={colors.primary}>{'>'}</Text>
+                <Text color={colors.textMuted}> Введите запрос...</Text>
+                <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
               </Box>
-            ))
-          )}
+              )
+            : (
+                visibleLines.map((line, i) => (
+                  <Box key={i}>
+                    {i === 0 && <Text bold color={colors.primary}>{'>'}</Text>}
+                    {i > 0 && <Text> </Text>}
+                    <Text wrap='wrap' color={colors.text}>{line || ' '}</Text>
+                    {i === visibleLines.length - 1 && !disabled && (
+                      <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
+                    )}
+                  </Box>
+                ))
+              )}
         </Box>
         {pendingImageLabel && <Text color={colors.info}> {pendingImageLabel}</Text>}
         {input.length > 0 && !disabled && (
-          <Text color={colors.textMuted}>  (Enter to send)</Text>
+          <Text color={colors.textMuted}>  (Enter — отправить)</Text>
         )}
         {needsScroll && (
           <Text color={colors.textMuted}>  ↑↓ scroll</Text>

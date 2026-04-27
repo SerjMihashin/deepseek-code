@@ -257,7 +257,7 @@ export class AgentLoop extends EventEmitter {
 
         // Check for cancellation
         if (this.options.signal?.aborted) {
-          const cancelledMsg = 'Agent execution was cancelled.'
+          const cancelledMsg = 'Выполнение агента отменено.'
           this.messages.push({ role: 'assistant', content: cancelledMsg })
           this.options.onResponse(cancelledMsg)
           return cancelledMsg
@@ -266,7 +266,7 @@ export class AgentLoop extends EventEmitter {
         for await (const chunk of stream) {
           // Check for cancellation during streaming
           if (this.options.signal?.aborted) {
-            const cancelledMsg = 'Agent execution was cancelled.'
+            const cancelledMsg = 'Выполнение агента отменено.'
             this.messages.push({ role: 'assistant', content: cancelledMsg })
             this.options.onResponse(cancelledMsg)
             return cancelledMsg
@@ -346,7 +346,7 @@ export class AgentLoop extends EventEmitter {
                 this.toolCallHistory.set(tc.id, toolCallEvent)
                 this.messages.push({
                   role: 'tool',
-                  content: `Tool call "${tc.function.name}" was rejected by the user.`,
+                  content: `Tool call "${tc.function.name}" отклонён пользователем.`,
                   tool_call_id: tc.id,
                 })
                 continue
@@ -408,7 +408,7 @@ export class AgentLoop extends EventEmitter {
 
               this.messages.push({
                 role: 'tool',
-                content: `Error executing "${tc.function.name}": ${errorMsg}`,
+                content: `Ошибка выполнения "${tc.function.name}": ${errorMsg}`,
                 tool_call_id: tc.id,
               })
             }
@@ -445,7 +445,7 @@ export class AgentLoop extends EventEmitter {
     }
 
     // Max iterations reached
-    const timeoutMsg = `Agent reached maximum iterations (${this.options.maxIterations}). The task may be incomplete.`
+    const timeoutMsg = `Агент достиг максимального числа итераций (${this.options.maxIterations}). Задача может быть не завершена.`
     this.messages.push({ role: 'assistant', content: timeoutMsg })
     this.options.onResponse(timeoutMsg)
     return timeoutMsg
@@ -479,7 +479,7 @@ export class AgentLoop extends EventEmitter {
   ): Promise<{ success: boolean; output: string; error?: string }> {
     const def = this.tools.find(t => t.tool.name === name)
     if (!def) {
-      return { success: false, output: '', error: `Unknown tool: "${name}"` }
+      return { success: false, output: '', error: `Неизвестный инструмент: "${name}"` }
     }
 
     // Sanitize arguments before execution
@@ -489,7 +489,7 @@ export class AgentLoop extends EventEmitter {
       return {
         success: false,
         output: '',
-        error: `Argument validation failed for "${name}": ${(err as Error).message}`,
+        error: `Ошибка валидации аргументов для "${name}": ${(err as Error).message}`,
       }
     }
 
@@ -522,13 +522,13 @@ export class AgentLoop extends EventEmitter {
 
     if (output.length > maxOutputLength) {
       output = output.slice(0, maxOutputLength) +
-        `\n\n... [truncated ${output.length - maxOutputLength} more characters]`
+        `\n\n... [усечено ${output.length - maxOutputLength} символов]`
     }
 
     if (!result.success) {
-      return `Tool execution failed (${durationMs}ms):\n${result.error ?? result.output}`
+      return `Ошибка выполнения инструмента (${durationMs}ms):\n${result.error ?? result.output}`
     }
 
-    return `Tool output (${durationMs}ms):\n${output}`
+    return `Вывод инструмента (${durationMs}ms):\n${output}`
   }
 }

@@ -160,10 +160,11 @@ export interface SetupWizardActions {
 
 export function useSetupWizard (
   config: DeepSeekConfig,
+  initialStep: SetupStep = 'lang',
   onSetupComplete: (updatedConfig: DeepSeekConfig) => void,
   onMessage: (msg: ChatMessage) => void
 ): [SetupWizardState, SetupWizardActions] {
-  const [step, setStep] = useState<SetupStep>('lang')
+  const [step, setStep] = useState<SetupStep>(initialStep)
   const [apiKeyError, setApiKeyError] = useState('')
   const [langCursor, setLangCursor] = useState(0)
   const [themeCursor, setThemeCursor] = useState(0)
@@ -187,7 +188,7 @@ export function useSetupWizard (
     setApiKeyError('')
     onMessage({
       role: 'assistant',
-      content: '⚠️ **Security Notice:** Your API key is stored in plain text at `~/.deepseek-code/config.json`. For better security, consider using the `DEEPSEEK_API_KEY` environment variable instead.',
+      content: '⚠️ **Безопасность:** API-ключ хранится локально в `~/.deepseek-code/config.json`. Безопаснее использовать переменную окружения `DEEPSEEK_API_KEY`.',
     })
     setStep('theme')
   }, [config, onMessage])

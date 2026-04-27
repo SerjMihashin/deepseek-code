@@ -74,7 +74,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
             <Text>
               <Text color={pulseColors[pulseIdx % pulseColors.length]}>{SPINNER_FRAMES[spinnerFrame]}</Text>
               {' '}
-              <Text color={pulseColors[pulseIdx % pulseColors.length]} bold>Thinking...</Text>
+              <Text color={pulseColors[pulseIdx % pulseColors.length]} bold>Думаю...</Text>
             </Text>
             )
           : <Text color={colors.textMuted}>{status}</Text>}

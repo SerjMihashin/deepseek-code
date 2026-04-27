@@ -16,6 +16,8 @@ import { DeepSeekAPI } from '../api/index.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
 import type { SetupStep } from '../ui/setup-wizard.js'
+import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
+import { browserTest, getLastBrowserTestResult } from '../tools/chrome.js'
 
 // ─── Help text ───────────────────────────────────────────────────────────────
 
@@ -43,6 +45,10 @@ const HELP_TEXT = `Available commands:
   /followup          Сгенерировать предложения продолжения
   /logs              Показать журнал действий
   /plan              Показать план работы
+  /tools             Показать доступные инструменты и их статус
+  /capabilities      Показать полные возможности агента
+  /browser-test      Протестировать Chrome browser tools
+  /last-browser-test  Показать последний отчёт browser-test
   /clear             Очистить чат`
 
 // ─── Command handler type ────────────────────────────────────────────────────
@@ -56,6 +62,8 @@ export interface SlashCommandContext {
   setSetupStep: (step: SetupStep) => void
   /** Called when /theme is entered without arguments — opens interactive picker */
   onThemePicker?: () => void
+  /** Show a transient service notice (does NOT add to chat messages, does NOT break empty-state) */
+  addServiceNotice?: (text: string) => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -615,10 +623,12 @@ async function cmdTheme (ctx: SlashCommandContext, input: string): Promise<boole
     return true
   }
   const success = themeManager.setTheme(themeName)
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: success ? `🎨 Theme changed to: **${themeName}**` : `❌ Theme "${themeName}" not found.`,
-  }])
+  if (success) {
+    ctx.addServiceNotice?.(`🎨 Тема изменена: ${themeName}`)
+    ctx.setStatusText(`Тема: ${themeName}`)
+  } else {
+    ctx.addServiceNotice?.(`❌ Тема "${themeName}" не найдена`)
+  }
   return true
 }
 
@@ -633,10 +643,7 @@ async function cmdLang (ctx: SlashCommandContext, input: string): Promise<boolea
   }
   i18n.setLocale(code)
   await saveConfig({ ...ctx.config, language: code })
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: `🌐 Language changed to: **${code}**`,
-  }])
+  ctx.addServiceNotice?.(`🌐 Язык изменён: ${code}`)
   return true
 }
 
@@ -731,6 +738,164 @@ async function cmdPlan (ctx: SlashCommandContext): Promise<boolean> {
   return true
 }
 
+async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
+  const allTools = getDefaultTools()
+  const modeTools = getToolsForMode(ctx.approvalMode)
+  const modeToolNames = new Set(modeTools.map(t => t.tool.name))
+
+  const toolLines = allTools.map(def => {
+    const t = def.tool
+    const inMode = modeToolNames.has(t.name) ? '✅' : '⛔'
+    let approvalLabel: string
+    if (def.approval === 'never') {
+      approvalLabel = 'read-only'
+    } else if (def.approval === 'auto') {
+      approvalLabel = 'auto-approve'
+    } else {
+      approvalLabel = 'ask'
+    }
+    return `  ${inMode} **${t.name}** — ${t.description} (${approvalLabel})`
+  })
+
+  const content = [
+    `**Инструменты агента (${allTools.length} всего, ${modeTools.length} в текущем режиме)**\n`,
+    ...toolLines,
+    '',
+    `**Текущий режим:** \`${ctx.approvalMode}\``,
+    ...(ctx.approvalMode === 'plan'
+      ? ['> ⚠️ В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/yolo.']
+      : []),
+  ].filter(Boolean).join('\n')
+
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content,
+  }])
+  return true
+}
+
+async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  // Parse flags: /browser-test --headed or /browser-test --headless
+  const parts = input.trim().split(/\s+/)
+  const flag = parts.length > 1 ? parts[1].toLowerCase() : ''
+
+  let headless: boolean
+  if (flag === '--headed') {
+    headless = false
+  } else if (flag === '--headless') {
+    headless = true
+  } else {
+    headless = false // default: headed (видимое окно)
+  }
+
+  ctx.setStatusText('🧪 Запуск browser test...')
+
+  try {
+    const report = await browserTest({ headless })
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: report,
+    }])
+  } catch (err) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `## ❌ Browser Test Error\n\n\`\`\`\n${String(err)}\n\`\`\``,
+    }])
+  }
+
+  ctx.setStatusText('')
+  return true
+}
+
+async function cmdLastBrowserTest (ctx: SlashCommandContext): Promise<boolean> {
+  const result = getLastBrowserTestResult()
+
+  if (!result) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: '## 📋 Последний browser test\n\nНет сохранённого отчёта последнего теста. Запустите `/browser-test` сначала.',
+    }])
+    return true
+  }
+
+  const lines: string[] = [
+    '## 📋 Последний browser test',
+    '',
+    `> **Timestamp:** ${result.timestamp}`,
+    '> **Источник:** сохранённый structured result (не LLM-реконструкция)',
+    '',
+    '| Шаг | Статус | Длительность |',
+    '|-----|--------|-------------|',
+  ]
+
+  for (const step of result.steps) {
+    const icon = step.status === 'passed' ? '✅' : step.status === 'failed' ? '❌' : '⏭️'
+    const dur = step.durationMs > 0 ? `${step.durationMs}ms` : '—'
+    lines.push(`| ${icon} ${step.name} | ${step.status} | ${dur} |`)
+  }
+
+  lines.push('')
+  lines.push(`**Итого:** ${result.summary.passed} passed, ${result.summary.failed} failed, ${result.summary.skipped} skipped`)
+
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: lines.join('\n'),
+  }])
+  return true
+}
+
+async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
+  const allTools = getDefaultTools()
+  const modeTools = getToolsForMode(ctx.approvalMode)
+
+  const readTools = allTools.filter(t => t.approval === 'never')
+  const writeTools = allTools.filter(t => t.approval !== 'never')
+
+  const modeReadTools = modeTools.filter(t => t.approval === 'never')
+  const modeWriteTools = modeTools.filter(t => t.approval !== 'never')
+
+  const lines: string[] = [
+    '## Возможности агента',
+    '',
+    `**Режим:** \`${ctx.approvalMode}\``,
+    '',
+    '### Чтение и поиск',
+    ...modeReadTools.map(t => `  - ✅ \`${t.tool.name}\` — ${t.tool.description}`),
+    ...readTools
+      .filter(t => !modeReadTools.some(mt => mt.tool.name === t.tool.name))
+      .map(t => `  - ⛔ \`${t.tool.name}\` — заблокирован в PLAN mode`),
+    '',
+    '### Запись и исполнение',
+    ...modeWriteTools.map(t => `  - ✅ \`${t.tool.name}\` — ${t.tool.description} (${t.approval === 'auto' ? 'авто-подтверждение' : 'требует подтверждения'})`),
+    ...writeTools
+      .filter(t => !modeWriteTools.some(mt => mt.tool.name === t.tool.name))
+      .map(t => `  - ⛔ \`${t.tool.name}\` — заблокирован в PLAN mode`),
+    '',
+  ]
+
+  if (ctx.approvalMode === 'plan') {
+    lines.push(
+      '> ⚠️ **Вы в PLAN mode.**',
+      '> У меня есть инструменты write_file и edit, но в этом режиме они отключены.',
+      '> Я могу предложить изменения, но не могу применить их напрямую.',
+      '> Используйте `/setup` и выберите другой режим (default, auto-edit, yolo) для включения записи.',
+      ''
+    )
+  }
+
+  lines.push('### Дополнительно')
+  lines.push('  - 🌐 **MCP серверы** — подключаемые внешние инструменты')
+  lines.push('  - 🧩 **Расширения** — плагины, добавляющие функциональность')
+  lines.push('  - 🧠 **Навыки (Skills)** — предустановленные сценарии работы')
+  lines.push('  - 🤖 **Под-агенты** — дочерние агенты для параллельных задач')
+
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: lines.join('\n'),
+  }])
+  return true
+}
+
 // ─── Command registry ────────────────────────────────────────────────────────
 
 interface CommandEntry {
@@ -762,6 +927,10 @@ const commands: CommandEntry[] = [
   { name: '/followup', handler: cmdFollowup },
   { name: '/logs', handler: cmdLogs },
   { name: '/plan', handler: cmdPlan },
+  { name: '/tools', handler: cmdTools },
+  { name: '/capabilities', handler: cmdCapabilities },
+  { name: '/browser-test', handler: cmdBrowserTest },
+  { name: '/last-browser-test', handler: cmdLastBrowserTest },
 ]
 
 const commandMap = new Map<string, CommandEntry>()

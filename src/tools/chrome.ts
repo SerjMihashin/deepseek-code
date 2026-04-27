@@ -1,4 +1,5 @@
 import { mkdir } from 'node:fs/promises'
+import { createServer, type Server } from 'node:http'
 import { dirname, isAbsolute, join } from 'node:path'
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer'
 import type { Tool, ToolParameter, ToolResult } from './types.js'
@@ -198,7 +199,7 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
   const timeout = args.timeout ?? 10000
   const sameTab = args.sameTab ?? false
   if (args.headless !== undefined) {
-    chromeManager.setHeadlessMode(args.headless)
+    await chromeManager.ensureMode(args.headless)
   }
   const page = await chromeManager.getPage(sameTab)
 
@@ -653,6 +654,388 @@ const chromeParameters: ToolParameter[] = [
     required: false,
   },
 ]
+
+// ─── Browser Test structured result ──────────────────────────────────────────
+
+export interface BrowserTestStep {
+  name: string;
+  status: 'passed' | 'failed' | 'skipped';
+  durationMs: number;
+  details: string;
+}
+
+export interface BrowserTestResult {
+  timestamp: string;
+  mode: 'headless' | 'headed';
+  steps: BrowserTestStep[];
+  summary: { passed: number; failed: number; skipped: number };
+  stoppedEarly: boolean;
+  stoppedReason?: string;
+}
+
+let lastBrowserTestResult: BrowserTestResult | null = null
+
+export function getLastBrowserTestResult (): BrowserTestResult | null {
+  return lastBrowserTestResult
+}
+
+export interface BrowserTestOptions {
+  headless?: boolean;
+  signal?: AbortSignal;
+}
+
+/**
+ * Start a temporary HTTP server serving the browser test page.
+ * Returns the server and the URL.
+ */
+async function startTestServer (): Promise<{ server: Server; url: string }> {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Browser Test Page</title></head>
+<body>
+  <h1 id="test-title">Browser Test</h1>
+  <p id="test-paragraph">Hello, world!</p>
+  <button id="test-button" onclick="document.getElementById('test-output').textContent='clicked'">Click Me</button>
+  <input id="test-input" type="text" placeholder="Type here">
+  <label><input type="checkbox" id="test-checkbox" checked> Checkbox</label>
+  <label><input type="radio" name="test-radio" id="radio-1" checked> Radio 1</label>
+  <label><input type="radio" name="test-radio" id="radio-2"> Radio 2</label>
+  <div id="test-output"></div>
+  <script>
+    console.log('Browser test page loaded');
+    console.error('Test error message');
+    localStorage.setItem('test-key', 'test-value');
+    sessionStorage.setItem('session-key', 'session-value');
+    document.cookie = 'test-cookie=chocolate-chip; path=/';
+  </script>
+</body>
+</html>`
+
+  return new Promise((resolve, reject) => {
+    const server = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+      res.end(html)
+    })
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address()
+      if (!addr || typeof addr === 'string') {
+        server.close()
+        reject(new Error('Failed to get server address'))
+        return
+      }
+      resolve({ server, url: `http://127.0.0.1:${addr.port}` })
+    })
+    server.unref()
+    server.on('error', reject)
+  })
+}
+
+/**
+ * Run a controlled browser test on a local HTTP page.
+ *
+ * @param options - Optional: headless mode, abort signal
+ * @returns Markdown report string
+ *
+ * Features:
+ * - All steps use sameTab: true on a single page via local HTTP server
+ * - Each step has a timeout (30s max)
+ * - A single step failure does NOT abort the entire test
+ * - Supports --headless and --headed modes
+ * - Supports abort via AbortSignal
+ * - Always produces a final structured report
+ * - Saves structured result for /last-browser-test
+ */
+export async function browserTest (options?: BrowserTestOptions): Promise<string> {
+  const desiredHeadless = options?.headless ?? false // default: headed (visible)
+  const signal = options?.signal
+  const requestedMode = desiredHeadless ? 'headless' : 'headed'
+
+  const steps: BrowserTestStep[] = []
+
+  // Ensure browser is in the correct mode — closes and re-launches if needed
+  let initFailed = false
+  let actualHeadless = desiredHeadless
+  try {
+    await chromeManager.ensureMode(desiredHeadless)
+    const state = chromeManager.getState()
+    actualHeadless = state.headless
+  } catch (err) {
+    // If we can't even ensure the mode, add a step for it
+    initFailed = true
+    steps.push({
+      name: 'browser init',
+      status: 'failed',
+      durationMs: 0,
+      details: `Не удалось запустить Chrome: ${String(err)}. Проверьте, не занят ли порт 9222 другим процессом Chrome.`,
+    })
+    return buildBrowserTestReport(steps, requestedMode, actualHeadless, signal?.aborted ?? false, undefined, initFailed)
+  }
+
+  // Start temporary HTTP server
+  let server: Server | null = null
+  let testUrl: string | null = null
+  let serverError: string | null = null
+
+  try {
+    const result = await startTestServer()
+    server = result.server
+    testUrl = result.url
+  } catch (err) {
+    serverError = String(err)
+  }
+
+  if (!testUrl) {
+    // Fall back to data: URL for basic tests, skip storage/network
+    const dataUrl = `data:text/html,<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Browser Test Page</title></head>
+<body>
+  <h1 id="test-title">Browser Test</h1>
+  <p id="test-paragraph">Hello, world!</p>
+  <button id="test-button" onclick="document.getElementById('test-output').textContent='clicked'">Click Me</button>
+  <input id="test-input" type="text" placeholder="Type here">
+  <label><input type="checkbox" id="test-checkbox" checked> Checkbox</label>
+  <label><input type="radio" name="test-radio" id="radio-1" checked> Radio 1</label>
+  <label><input type="radio" name="test-radio" id="radio-2"> Radio 2</label>
+  <div id="test-output"></div>
+  <script>
+    console.log('Browser test page loaded');
+    console.error('Test error message');
+  </script>
+</body>
+</html>`
+
+    const baseArgs: Partial<ChromeToolArgs> = { url: dataUrl, sameTab: true, timeout: 30000 }
+
+    async function runDataStep (name: string, action: ChromeAction, extraArgs: Partial<ChromeToolArgs>): Promise<void> {
+      if (signal?.aborted) {
+        steps.push({ name, status: 'skipped', durationMs: 0, details: 'тест отменён' })
+        return
+      }
+      const start = Date.now()
+      try {
+        const result = await Promise.race<ToolResult>([
+          executeAction({ ...baseArgs, ...extraArgs, action } as ChromeToolArgs),
+          new Promise<ToolResult>((_resolve, _reject) =>
+            setTimeout(() => _reject(new Error('timeout 30s')), 30000)
+          ),
+        ])
+        steps.push({ name, status: result.success ? 'passed' : 'failed', durationMs: Date.now() - start, details: result.success ? (result.output || '').slice(0, 200) : (result.error || 'unknown error') })
+      } catch (err) {
+        steps.push({ name, status: 'failed', durationMs: Date.now() - start, details: String(err) })
+      }
+    }
+
+    await runDataStep('open', 'open', {})
+    await runDataStep('html', 'html', {})
+    await runDataStep('eval', 'eval', { code: 'document.title' })
+    await runDataStep('fill', 'fill', { selector: '#test-input', text: 'test input value' })
+    await runDataStep('click (button)', 'click', { selector: '#test-button' })
+    await runDataStep('text (after click)', 'text', { selector: '#test-output' })
+    await runDataStep('click (checkbox)', 'click', { selector: '#test-checkbox' })
+    await runDataStep('click (radio)', 'click', { selector: '#radio-2' })
+    await runDataStep('console', 'console', {})
+    steps.push({ name: 'storage (local)', status: 'skipped', durationMs: 0, details: `HTTP-сервер не удалось поднять: ${serverError}. Storage недоступен на data: URL` })
+    steps.push({ name: 'storage (session)', status: 'skipped', durationMs: 0, details: `HTTP-сервер не удалось поднять: ${serverError}. Storage недоступен на data: URL` })
+    steps.push({ name: 'cookies', status: 'skipped', durationMs: 0, details: `HTTP-сервер не удалось поднять: ${serverError}. Cookies недоступны на data: URL` })
+    await runDataStep('screenshot', 'shot', {})
+    steps.push({ name: 'network', status: 'skipped', durationMs: 0, details: `HTTP-сервер не удалось поднять: ${serverError}. Network/fetch не проверен` })
+    return buildBrowserTestReport(steps, requestedMode, actualHeadless, signal?.aborted ?? false, serverError)
+  } else {
+    // Full test with HTTP server
+    const baseArgs: Partial<ChromeToolArgs> = { url: testUrl, sameTab: true, timeout: 30000 }
+
+    async function runStep (name: string, action: ChromeAction, extraArgs: Partial<ChromeToolArgs>): Promise<void> {
+      if (signal?.aborted) {
+        steps.push({ name, status: 'skipped', durationMs: 0, details: 'тест отменён' })
+        return
+      }
+      const start = Date.now()
+      try {
+        const result = await Promise.race<ToolResult>([
+          executeAction({ ...baseArgs, ...extraArgs, action } as ChromeToolArgs),
+          new Promise<ToolResult>((_resolve, _reject) =>
+            setTimeout(() => _reject(new Error('timeout 30s')), 30000)
+          ),
+        ])
+        steps.push({ name, status: result.success ? 'passed' : 'failed', durationMs: Date.now() - start, details: result.success ? (result.output || '').slice(0, 200) : (result.error || 'unknown error') })
+      } catch (err) {
+        steps.push({ name, status: 'failed', durationMs: Date.now() - start, details: String(err) })
+      }
+    }
+
+    // 1. open
+    await runStep('open', 'open', {})
+
+    // 2. html — read full DOM
+    await runStep('html', 'html', {})
+
+    // 3. eval
+    await runStep('eval', 'eval', { code: 'document.title' })
+
+    // 4. fill
+    await runStep('fill', 'fill', { selector: '#test-input', text: 'test input value' })
+
+    // 5. click button
+    await runStep('click (button)', 'click', { selector: '#test-button' })
+
+    // 6. text — read result after click
+    await runStep('text (after click)', 'text', { selector: '#test-output' })
+
+    // 7. click checkbox
+    await runStep('click (checkbox)', 'click', { selector: '#test-checkbox' })
+
+    // 8. click radio
+    await runStep('click (radio)', 'click', { selector: '#radio-2' })
+
+    // 9. console
+    await runStep('console', 'console', {})
+
+    // 10. storage (localStorage)
+    await runStep('storage (local)', 'storage', { local: true })
+
+    // 11. storage (sessionStorage)
+    await runStep('storage (session)', 'storage', { session: true })
+
+    // 12. cookies
+    await runStep('cookies', 'cookies', {})
+
+    // 13. screenshot
+    await runStep('screenshot', 'shot', {})
+
+    // 14. network
+    await runStep('network', 'network', { api: true })
+
+    // Close the HTTP server
+    server!.close()
+  }
+
+  return buildBrowserTestReport(steps, requestedMode, actualHeadless, signal?.aborted ?? false, serverError)
+}
+
+/**
+ * Build the markdown report from collected steps.
+ * Extracted so it can be called both from the normal flow and from early-exit on browser init failure.
+ */
+function buildBrowserTestReport (
+  steps: BrowserTestStep[],
+  requestedMode: string,
+  actualHeadless: boolean,
+  stoppedEarly: boolean,
+  serverError?: string | null,
+  initFailed?: boolean
+): string {
+  const actualMode = initFailed ? 'не запущен' : (actualHeadless ? 'headless' : 'headed')
+  const modeMatch = !initFailed && requestedMode === actualMode
+  const stoppedReason = stoppedEarly ? 'тест отменён пользователем' : undefined
+
+  // Build summary
+  const passed = steps.filter(s => s.status === 'passed').length
+  const failed = steps.filter(s => s.status === 'failed').length
+  const skipped = steps.filter(s => s.status === 'skipped').length
+
+  // Save structured result
+  lastBrowserTestResult = {
+    timestamp: new Date().toISOString(),
+    mode: initFailed ? 'headless' : actualMode as 'headless' | 'headed',
+    steps,
+    summary: { passed, failed, skipped },
+    stoppedEarly,
+    stoppedReason,
+  }
+
+  // Get PID for the report
+  const state = chromeManager.getState()
+  const pid = initFailed ? undefined : state.managedProcessPid
+
+  // Build markdown report
+  const lines: string[] = [
+    '## 🧪 Browser Test Report',
+    '',
+    '> **Verified** — все результаты подтверждены реальными chrome tool calls.',
+    `> **Запрошенный режим:** ${requestedMode}`,
+    `> **Фактический режим:** ${actualMode}`,
+    `> **PID процесса:** ${pid ?? '—'}`,
+    '',
+  ]
+
+  if (initFailed) {
+    lines.push('> ❌ **Chrome не удалось запустить.** Browser test не выполнялся.')
+    lines.push('')
+  } else if (!modeMatch) {
+    lines.push(`> ❌ **Режимы не совпадают.** Запрошен ${requestedMode}, но Chrome работает в ${actualMode}. Browser test считается failed.`)
+    lines.push('')
+  }
+
+  if (stoppedEarly) {
+    lines.push('> ⚠️ **Тест остановлен досрочно.** Причина: отмена пользователем.')
+    lines.push(`> Проверено шагов: ${steps.filter(s => s.status !== 'skipped').length} / ${steps.length}`)
+    lines.push('')
+  }
+
+  if (serverError) {
+    lines.push(`> ⚠️ **HTTP-сервер не поднят:** ${serverError}. Storage/cookies/network пропущены.`)
+    lines.push('')
+  }
+
+  lines.push('| Шаг | Статус | Длительность | Детали |')
+  lines.push('|------|--------|-------------|--------|')
+
+  for (const step of steps) {
+    const icon = step.status === 'passed' ? '✅' : step.status === 'failed' ? '❌' : '⏭️'
+    const dur = step.durationMs > 0 ? `${step.durationMs}ms` : '—'
+    // Escape pipes for markdown table — each step is one row
+    let detail = step.details.replace(/\|/g, '\\|')
+    if (detail.length > 100) {
+      detail = detail.slice(0, 100) + '…'
+    }
+    lines.push(`| ${icon} ${step.name} | ${step.status} | ${dur} | ${detail} |`)
+  }
+
+  lines.push('')
+  lines.push(`**Итого:** ${passed} passed, ${failed} failed, ${skipped} skipped`)
+
+  // ✅ What works
+  const working = steps.filter(s => s.status === 'passed').map(s => s.name)
+  if (working.length > 0) {
+    lines.push('')
+    lines.push('### ✅ Что работает')
+    for (const name of working) {
+      lines.push(`- **${name}**`)
+    }
+  }
+
+  // ❌ What fails
+  const failing = steps.filter(s => s.status === 'failed')
+  if (failing.length > 0) {
+    lines.push('')
+    lines.push('### ❌ Что не работает')
+    for (const step of failing) {
+      lines.push(`- **${step.name}**: ${step.details}`)
+    }
+  }
+
+  // 🔧 What to fix
+  if (failing.length > 0) {
+    lines.push('')
+    lines.push('### 🔧 Что доработать')
+    for (const step of failing) {
+      lines.push(`- Исправить \`${step.name}\`: ${step.details}`)
+    }
+  }
+
+  // ⏭️ What is skipped
+  const skippedSteps = steps.filter(s => s.status === 'skipped')
+  if (skippedSteps.length > 0) {
+    lines.push('')
+    lines.push('### ⏭️ Что пропущено')
+    for (const step of skippedSteps) {
+      lines.push(`- **${step.name}**: ${step.details}`)
+    }
+  }
+
+  return lines.join('\n')
+}
 
 export const chromeTool: Tool = {
   name: 'chrome',

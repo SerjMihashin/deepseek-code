@@ -1,11 +1,32 @@
 import { EventEmitter } from 'node:events'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { createServer as netCreateServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { type Browser, type Page, type LaunchOptions, launch } from 'puppeteer'
 
 export interface ChromeRuntimeState {
   connected: boolean;
   headless: boolean;
   debugPort: number;
+  managedProcessPid?: number;
   currentUrl?: string;
+}
+
+/**
+ * Check if a TCP port is in use (IPv4 only).
+ * Returns true if the port is already occupied.
+ */
+function isPortInUse (port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = netCreateServer()
+    server.once('error', () => resolve(true))
+    server.once('listening', () => {
+      server.close()
+      resolve(false)
+    })
+    server.listen(port, '127.0.0.1')
+  })
 }
 
 class ChromeManager extends EventEmitter {
@@ -13,16 +34,43 @@ class ChromeManager extends EventEmitter {
   private currentPage: Page | null = null
   private debugPort = 9222
   private headlessMode = false
+  private userDataDir: string | null = null
 
   getState (): ChromeRuntimeState {
     return {
       connected: this.isConnected(),
       headless: this.headlessMode,
       debugPort: this.debugPort,
+      managedProcessPid: this.browser?.process()?.pid,
       currentUrl: this.currentPage && !this.currentPage.isClosed()
         ? this.currentPage.url()
         : undefined,
     }
+  }
+
+  /**
+   * Ensure the browser is running in the desired mode.
+   * If the mode differs or browser is not connected, fully close and re-launch.
+   * Each launch gets a fresh userDataDir to avoid profile contamination.
+   */
+  async ensureMode (desiredHeadless: boolean): Promise<void> {
+    // If already running in the correct mode, nothing to do
+    if (this.browser?.connected && this.headlessMode === desiredHeadless) {
+      return
+    }
+
+    // Check debug port before launching
+    const portInUse = await isPortInUse(this.debugPort)
+    if (portInUse && !this.browser?.connected) {
+      throw new Error(
+        `Порт ${this.debugPort} уже занят другим процессом Chrome. ` +
+        'Закройте все процессы Chrome вручную или укажите другой порт через port=<номер>.'
+      )
+    }
+
+    this.headlessMode = desiredHeadless
+    await this.close()
+    await this.launch()
   }
 
   async getBrowser (): Promise<Browser> {
@@ -37,10 +85,16 @@ class ChromeManager extends EventEmitter {
       await this.close()
     }
 
+    // Create a fresh temporary user data directory for each managed launch
+    // This prevents profile contamination between headed/headless sessions
+    const tmpDir = mkdtempSync(join(tmpdir(), 'deepseek-code-chrome-'))
+    this.userDataDir = tmpDir
+
     const launchOptions: LaunchOptions = {
       headless: this.headlessMode,
       args: [
         `--remote-debugging-port=${this.debugPort}`,
+        `--user-data-dir=${tmpDir}`,
         '--no-first-run',
         '--no-default-browser-check',
         '--disable-extensions',
@@ -87,6 +141,11 @@ class ChromeManager extends EventEmitter {
   async close (): Promise<void> {
     if (this.browser?.connected) {
       try {
+        // Kill the browser process first to ensure it's fully terminated
+        const proc = this.browser.process()
+        if (proc) {
+          proc.kill('SIGKILL')
+        }
         await this.browser.close()
       } catch {
         // Ignore close errors during shutdown.
@@ -94,6 +153,17 @@ class ChromeManager extends EventEmitter {
     }
     this.browser = null
     this.currentPage = null
+
+    // Clean up the temporary user data directory
+    if (this.userDataDir && existsSync(this.userDataDir)) {
+      try {
+        rmSync(this.userDataDir, { recursive: true, force: true })
+      } catch {
+        // Ignore cleanup errors
+      }
+      this.userDataDir = null
+    }
+
     this.emitState()
   }
 

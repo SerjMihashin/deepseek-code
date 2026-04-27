@@ -126,9 +126,10 @@ export const ChatView = React.memo(
                 ? (
                   <>
                     <MatrixRain />
-                    <Text bold color={colors.primary}>Wake up, Neo...</Text>
-                    <Text color={colors.secondary}>The Matrix has you.</Text>
-                    <Text color={colors.textMuted}>Follow the white rabbit.</Text>
+                    <Box position='absolute' flexDirection='column' alignItems='center'>
+                      <Text bold color={colors.primary}>deepseek-code</Text>
+                      <Text color={colors.textMuted}>/help — помощь  |  /setup — настройки  |  Alt+V — вставить изображение</Text>
+                    </Box>
                   </>
                   )
                 : (
@@ -136,11 +137,11 @@ export const ChatView = React.memo(
                     <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
                     <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
                     <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
+                    <Box marginTop={1}>
+                      <Text color={colors.textMuted}>/help — помощь  |  /setup — настройки  |  Alt+V — вставить изображение</Text>
+                    </Box>
                   </>
                   )}
-              <Box marginTop={1}>
-                <Text color={colors.textMuted}>/help — помощь  |  /setup — настройки  |  Alt+V — вставить изображение</Text>
-              </Box>
             </Box>
             )
           : (

@@ -1,9 +1,11 @@
 import React from 'react'
 import { Box, Text } from 'ink'
 import type { ChatMessage } from '../api/index.js'
+import type { ToolCallEvent } from '../core/agent-loop.js'
 import { i18n } from '../core/i18n.js'
 import { themeManager } from '../core/themes.js'
 import { MarkdownView } from './markdown-view.js'
+import { ToolActivityCard } from './tool-activity-card.js'
 import { MatrixRain } from './matrix-rain.js'
 
 interface ChatViewProps {
@@ -15,8 +17,21 @@ interface ChatViewProps {
 function MessageBubble ({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
-  const label = isUser ? i18n.t('you') : isSystem ? i18n.t('system') : i18n.t('assistant')
+  const isTool = message.role === 'tool'
+  const label = isUser ? i18n.t('you') : isSystem ? i18n.t('system') : isTool ? '' : i18n.t('assistant')
   const colors = themeManager.getColors()
+
+  // Tool activity card — render inline in chat
+  if (isTool) {
+    try {
+      const parsed = typeof message.content === 'string' ? JSON.parse(message.content) : message.content
+      if (parsed?.type === 'tool_activity_card') {
+        return <ToolActivityCard toolCalls={parsed.toolCalls as ToolCallEvent[]} status={parsed.status as 'live' | 'compact' | undefined} />
+      }
+    } catch {
+      // fall through to normal rendering
+    }
+  }
 
   const textContent = typeof message.content === 'string'
     ? message.content
@@ -45,7 +60,18 @@ export const ChatView = React.memo(
   const colors = themeManager.getColors()
   const isMatrix = themeManager.theme.name === 'matrix'
 
-  const visibleMessages = messages.filter(msg => msg.role !== 'tool')
+  const visibleMessages = messages.filter(msg => {
+    // Hide raw tool results, show tool activity cards
+    if (msg.role === 'tool') {
+      try {
+        const parsed = typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content
+        return parsed?.type === 'tool_activity_card'
+      } catch {
+        return false
+      }
+    }
+    return true
+  })
   const WINDOW = 15
   const total = visibleMessages.length
   const endIdx = Math.max(WINDOW, total - scrollOffset)
@@ -93,8 +119,8 @@ export const ChatView = React.memo(
             {hiddenBelow > 0 && (
               <Box paddingX={1}>
                 {hasNewMessages
-                  ? <Text bold color='yellow'>↓ New messages ({hiddenBelow}) — End to follow</Text>
-                  : <Text dimColor>↓ {hiddenBelow} newer message{hiddenBelow > 1 ? 's' : ''} — PageDown</Text>}
+                  ? <Text bold color='yellow'>↓ {hiddenBelow} new — End to follow</Text>
+                  : <Text dimColor>↓ {hiddenBelow} newer — PageDown</Text>}
               </Box>
             )}
           </>
@@ -103,8 +129,7 @@ export const ChatView = React.memo(
   )
   },
   (prev, next) =>
+    prev.messages === next.messages &&
     prev.scrollOffset === next.scrollOffset &&
-    prev.hasNewMessages === next.hasNewMessages &&
-    prev.messages.length === next.messages.length &&
-    prev.messages[prev.messages.length - 1]?.content === next.messages[next.messages.length - 1]?.content
+    prev.hasNewMessages === next.hasNewMessages
 )

@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { existsSync } from 'node:fs'
-import minimatch from 'minimatch'
+import { minimatch } from 'minimatch'
 
 const IGNORE_FILE_NAME = '.deepseekignore'
 

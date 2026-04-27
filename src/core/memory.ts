@@ -2,6 +2,8 @@ import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, basename, extname } from 'node:path'
+import { DeepSeekAPI } from '../api/index.js'
+import type { DeepSeekConfig } from '../config/defaults.js'
 
 const MEMORY_DIR = join(homedir(), '.deepseek-code', 'memory')
 const INDEX_FILE = join(MEMORY_DIR, 'MEMORY.md')
@@ -127,6 +129,93 @@ export async function searchMemories (query: string): Promise<MemoryIndexEntry[]
       entry.description.toLowerCase().includes(lowerQuery)
   )
 }
+
+// ─── Semantic Search via Embeddings ──────────────────────────────────────────
+
+let embedApi: DeepSeekAPI | null = null
+
+/**
+ * Initialize the embeddings API client.
+ */
+export function initEmbeddings (config: DeepSeekConfig): void {
+  embedApi = new DeepSeekAPI(config)
+}
+
+/**
+ * Compute cosine similarity between two vectors.
+ */
+function cosineSimilarity (a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0
+  let dot = 0, magA = 0, magB = 0
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]
+    magA += a[i] * a[i]
+    magB += b[i] * b[i]
+  }
+  const denom = Math.sqrt(magA) * Math.sqrt(magB)
+  return denom === 0 ? 0 : dot / denom
+}
+
+/**
+ * Get embedding vector for a text string via DeepSeek API.
+ */
+async function getEmbedding (text: string): Promise<number[]> {
+  if (!embedApi) {
+    throw new Error('Embeddings API not initialized. Call initEmbeddings(config) first.')
+  }
+  return embedApi.getEmbedding(text)
+}
+
+/**
+ * Search memories using semantic similarity (embeddings).
+ * Falls back to substring search if embeddings are not available.
+ * Returns up to `topK` results sorted by relevance.
+ */
+export async function semanticSearchMemories (
+  query: string,
+  topK: number = 5
+): Promise<Array<MemoryIndexEntry & { score: number }>> {
+  if (!embedApi) {
+    // Fallback to substring search
+    const results = await searchMemories(query)
+    return results.slice(0, topK).map(r => ({ ...r, score: 1 }))
+  }
+
+  try {
+    const [queryEmbedding, allEntries] = await Promise.all([
+      getEmbedding(query),
+      listMemories(),
+    ])
+
+    // Get embeddings for all memory entries
+    const entryEmbeddings = await Promise.all(
+      allEntries.map(async (entry) => {
+        const fullEntry = await readMemory(join(MEMORY_DIR, sanitizeFileName(entry.name)))
+        const text = fullEntry ? `${fullEntry.description}\n${fullEntry.content}` : entry.description
+        try {
+          const embedding = await getEmbedding(text.slice(0, 2000)) // Limit to 2000 chars
+          return { entry, embedding, score: cosineSimilarity(queryEmbedding, embedding) }
+        } catch {
+          return { entry, embedding: [] as number[], score: 0 }
+        }
+      })
+    )
+
+    // Sort by similarity score descending
+    entryEmbeddings.sort((a, b) => b.score - a.score)
+
+    return entryEmbeddings.slice(0, topK).map(e => ({
+      ...e.entry,
+      score: e.score,
+    }))
+  } catch {
+    // Fallback to substring search on error
+    const results = await searchMemories(query)
+    return results.slice(0, topK).map(r => ({ ...r, score: 1 }))
+  }
+}
+
+export { cosineSimilarity }
 
 async function readMemoryFile (filePath: string): Promise<MemoryEntry | null> {
   try {

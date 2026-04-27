@@ -1,6 +1,58 @@
 # Audit — DeepSeek Code v0.2.0
 
-> Аудит проекта. Обновлён: 2026-04-26.
+> Аудит проекта. Обновлён: 2026-04-27.
+
+---
+
+## UX Trust Audit — 2026-04-26
+
+> Новый слой аудита: фокус на пользовательском опыте во время работы агента.
+> Диагноз: технически агент умеет многое, но пользователь не понимает, что происходит.
+
+### Главная проблема
+
+DeepSeek Code уже умеет: tool calling, TUI, Chrome, sessions, handoff, approval modes, memory, headless mode.
+Но пользовательский опыт во время выполнения сломан: **Trust Layer отсутствует**.
+
+Пользователь не знает:
+- работает агент прямо сейчас или завис?
+- закончил он или всё ещё что-то делает?
+- сколько действий выполнено?
+- можно ли уже вводить следующий запрос?
+- что именно сломалось, если была ошибка?
+
+### Найденные проблемы
+
+| # | Проблема | Симптом | Серьёзность | Статус |
+|---|----------|---------|-------------|--------|
+| 1 | **Tool call spam** | read_file / read_file / read_file занимает весь экран | Critical | ✅ Fixed (grouped display) |
+| 2 | **Нет стабильного Done/Ready lifecycle** | После финального ответа интерфейс выглядит как будто агент всё ещё работает | Critical | ✅ Fixed (finally block) |
+| 3 | **Forced autoscroll** | Пользователь читает историю — скролл сбрасывается вниз при новом событии | High | ✅ Fixed (paused mode) |
+| 4 | **Screen shaking** | При стриминге экран дёргается, читать невозможно | High | ✅ Fixed (React.memo + debounce) |
+| 5 | **InputBar cursor/wrap bug** | Длинный ввод переносится неправильно, курсор визуально не там | High | ✅ Fixed (wrap + internal scroll) |
+| 6 | **Settings/Setup scroll bug** | ArrowDown может сделать список пустым или сломать отображение | Medium | ⏳ Iteration 17 |
+| 7 | **ctx% ambiguity** | Показывает накопленные токены сессии, а не размер текущего контекстного окна | Medium | ⏳ Iteration 18 |
+| 8 | **Debug trace as primary UI** | Полный лог инструментов отображается как основной интерфейс | Medium | ✅ Fixed (grouped, capped) |
+| 9 | **No verification evidence** | После завершения нет сводки: что изменено, что проверено, что не удалось | Medium | ✅ Fixed (compact summary) |
+| 10 | **Forced Ctrl+C** | Пользователь вынужден нажимать Ctrl+C после завершения работы агента | High | ✅ Fixed (auto-Ready)
+
+### Требуемый Trust Layer
+
+Пользователь должен всегда понимать:
+1. что агент делает сейчас — **Activity Timeline**
+2. работает он или закончил — **Stable Lifecycle**
+3. сколько действий выполнено — **Compact Tool Counter**
+4. где смотреть детали — **Full trace via /logs**
+5. можно ли вводить следующий запрос — **Ready state indicator**
+6. какие проверки прошли — **Evidence Ledger**
+7. что сломалось — **Failure report**
+
+### Roadmap ответ
+
+Итерации 13–22 адресуют эти проблемы.
+Порядок: lifecycle → scroll → compact tools → input → settings → metrics → timeline → evidence → diff → tests.
+
+---
 
 ---
 

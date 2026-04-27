@@ -3,8 +3,7 @@ import { Box, Text, useInput, useApp, useStdin } from 'ink'
 import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
-import { ResultsPanel } from './results-panel.js'
-import { FadeIn } from './fade-in.js'
+import { ToolActivityCard } from './tool-activity-card.js'
 import { MatrixRain } from './matrix-rain.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
@@ -88,6 +87,8 @@ export function App ({ config, options }: AppProps) {
   const agentLoopRef = useRef<AgentLoop | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const pendingApprovalResolveRef = useRef<((value: boolean) => void) | null>(null)
+  const liveToolMessageIndexRef = useRef(-1)
+  const prevToolCallsRef = useRef<ToolCallEvent[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const [reasoning, setReasoning] = useState('')
   const reasoningPendingRef = useRef('')
@@ -106,7 +107,6 @@ export function App ({ config, options }: AppProps) {
   const [scrollMode, setScrollMode] = useState<'follow' | 'paused'>('follow')
   const [newMessagesWhilePaused, setNewMessagesWhilePaused] = useState(false)
   const visibleMessageCountRef = useRef(0)
-  const [toolCallScrollOffset, setToolCallScrollOffset] = useState(0)
   const [contextPercent, setContextPercent] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
 
@@ -248,6 +248,11 @@ export function App ({ config, options }: AppProps) {
     }
     visibleMessageCountRef.current = visible
   }, [messages.length, scrollMode])
+
+  // Sync prevToolCallsRef with toolCalls state
+  useEffect(() => {
+    prevToolCallsRef.current = toolCalls
+  }, [toolCalls])
 
   // Detect End key from raw stdin (Ink does not expose it in useInput)
   useEffect(() => {
@@ -857,6 +862,7 @@ export function App ({ config, options }: AppProps) {
     setStatusText('Processing...')
     setToolCalls([])
     setReasoning('')
+    liveToolMessageIndexRef.current = -1
     setChatScrollOffset(0)
     setScrollMode('follow')
     setNewMessagesWhilePaused(false)
@@ -875,16 +881,25 @@ export function App ({ config, options }: AppProps) {
           cwd: process.cwd(),
           signal: abortController.signal,
           onToolCall: (tc) => {
-            setToolCalls(prev => {
-              const existing = prev.findIndex(t => t.id === tc.id)
-              if (existing >= 0) {
+            const updatedCalls = [...prevToolCallsRef.current, tc]
+            prevToolCallsRef.current = updatedCalls
+            setToolCalls(updatedCalls)
+            setStatusText(`🔧 ${tc.name}...`)
+
+            // Add/update live tool activity card in chat messages
+            setMessages(prev => {
+              const idx = liveToolMessageIndexRef.current
+              const card = { type: 'tool_activity_card', toolCalls: updatedCalls, status: 'live' as const }
+              if (idx >= 0 && idx < prev.length && prev[idx]?.role === 'tool') {
+                // Update existing card
                 const updated = [...prev]
-                updated[existing] = tc
+                updated[idx] = { role: 'tool', content: JSON.stringify(card) }
                 return updated
               }
-              return [...prev, tc]
+              // Add new card
+              liveToolMessageIndexRef.current = prev.length
+              return [...prev, { role: 'tool', content: JSON.stringify(card) }]
             })
-            setStatusText(`🔧 ${tc.name}...`)
           },
           onToolResult: (result) => {
             setStatusText(result.success ? `✅ ${result.toolName} done` : `❌ ${result.toolName} failed`)
@@ -936,17 +951,13 @@ export function App ({ config, options }: AppProps) {
 
       const finalResponse = await agentLoopRef.current.run(input, messages)
 
-      // Reset UI immediately — agent is done, disk I/O must not block the UX
-      setIsProcessing(false)
-      setStatusText('Ready')
+      // Flush pending reasoning before any I/O
       if (reasoningTimerRef.current) {
         clearTimeout(reasoningTimerRef.current)
         reasoningTimerRef.current = null
       }
-      if (reasoningPendingRef.current) {
-        setReasoning(reasoningPendingRef.current)
-        reasoningPendingRef.current = ''
-      }
+      const finalReasoning = reasoningPendingRef.current
+      reasoningPendingRef.current = ''
 
       const toolHistory = agentLoopRef.current.getToolCallHistory()
       const bundleFile = await writeExecutionBundle({
@@ -987,6 +998,28 @@ export function App ({ config, options }: AppProps) {
         handoffFile,
         bundleFile,
       })
+
+      // Single batch: all final UI updates at once (no await between setState calls)
+      if (finalReasoning) setReasoning(finalReasoning)
+      setIsProcessing(false)
+      setStatusText('Ready')
+
+      // Convert live tool activity card to compact summary
+      if (liveToolMessageIndexRef.current >= 0 && toolHistory.length > 0) {
+        setMessages(prev => {
+          const idx = liveToolMessageIndexRef.current
+          if (idx >= 0 && idx < prev.length && prev[idx]?.role === 'tool') {
+            const updated = [...prev]
+            updated[idx] = {
+              role: 'tool',
+              content: JSON.stringify({ type: 'tool_activity_card', toolCalls: toolHistory, status: 'compact' as const }),
+            }
+            return updated
+          }
+          return prev
+        })
+      }
+      liveToolMessageIndexRef.current = -1
     } catch (err) {
       const error = err as Error
       // Don't show error on cancellation
@@ -1037,7 +1070,6 @@ export function App ({ config, options }: AppProps) {
     } finally {
       // Safety net: ensure UI is always reset regardless of exit path
       setIsProcessing(false)
-      setToolCallScrollOffset(0)
       setStatusText('Ready')
       // Clear any pending approval (covers error/abort exit paths)
       if (pendingApprovalResolveRef.current) {
@@ -1063,8 +1095,10 @@ export function App ({ config, options }: AppProps) {
   useInput((_input, key) => {
     const step = setupStepRef.current
 
-    // Ctrl+C: soft-cancel during active run, clean exit otherwise.
-    // exitOnCtrlC: false means Ink won't auto-exit — we must handle both cases.
+    // Ctrl+C: delegate to interactive.ts SIGINT handler.
+    // - During processing: soft cancel (via __agentSoftCancel)
+    // - During Ready: double Ctrl+C guard (first shows hint, second exits)
+    // - Never call exit() here — that would bypass the double-Ctrl+C guard.
     if (key.ctrl && _input === 'c') {
       if (isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort()
@@ -1076,8 +1110,10 @@ export function App ({ config, options }: AppProps) {
         setPendingApproval(null)
         return
       }
-      // Not processing — exit cleanly via Ink (exitOnCtrlC: false, so must be explicit)
-      exit()
+      // When not processing: set flag so SIGINT handler can exit immediately
+      // (interactive.ts checks __pendingExit for immediate exit after agent finishes)
+      const proc = process as NodeJS.Process & { __pendingExit?: boolean }
+      proc.__pendingExit = true
       return
     }
 
@@ -1113,20 +1149,42 @@ export function App ({ config, options }: AppProps) {
           return newMode
         })
       }
-      // PageUp/ArrowUp/PageDown: always scroll chat history regardless of processing state
-      if (key.pageUp || key.upArrow) {
+      // Scroll chat history — always works regardless of processing state.
+      // PageUp: scroll up by ~half a screen
+      if (key.pageUp) {
         const visibleCount = messages.filter(m => m.role !== 'tool').length
-        const next = Math.min(chatScrollOffset + 3, Math.max(0, visibleCount - 1))
+        const next = Math.min(chatScrollOffset + 10, Math.max(0, visibleCount - 1))
         if (next > 0) setScrollMode('paused')
         setChatScrollOffset(next)
+        return
       }
+      // PageDown: scroll down by ~half a screen
       if (key.pageDown) {
-        const next = Math.max(0, chatScrollOffset - 3)
+        const next = Math.max(0, chatScrollOffset - 10)
         setChatScrollOffset(next)
         if (next === 0) {
           setScrollMode('follow')
           setNewMessagesWhilePaused(false)
         }
+        return
+      }
+      // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
+      // When InputBar is active, arrows belong to input history/suggestions.
+      if (key.upArrow && isProcessing) {
+        const visibleCount = messages.filter(m => m.role !== 'tool').length
+        const next = Math.min(chatScrollOffset + 1, Math.max(0, visibleCount - 1))
+        if (next > 0) setScrollMode('paused')
+        setChatScrollOffset(next)
+        return
+      }
+      if (key.downArrow && isProcessing) {
+        const next = Math.max(0, chatScrollOffset - 1)
+        setChatScrollOffset(next)
+        if (next === 0) {
+          setScrollMode('follow')
+          setNewMessagesWhilePaused(false)
+        }
+        return
       }
       return
     }
@@ -1259,25 +1317,6 @@ export function App ({ config, options }: AppProps) {
                       </Box>
                     </Box>
                   )}
-                  {scrollMode === 'paused'
-                    ? toolCalls.length > 0 && (
-                      <Box paddingX={1}>
-                        <Text dimColor>
-                          {isProcessing
-                            ? `⚡ ${toolCalls.length} tool call${toolCalls.length !== 1 ? 's' : ''} in progress`
-                            : `✓ ${toolCalls.length} tool call${toolCalls.length !== 1 ? 's' : ''} completed`}
-                          {' — End to follow'}
-                        </Text>
-                      </Box>
-                    )
-                    : <ResultsPanel
-                        toolCalls={toolCalls}
-                        reasoning={reasoning}
-                        reasoningActive={isProcessing && reasoning.length > 0}
-                        pendingApproval={pendingApproval !== null}
-                        scrollOffset={toolCallScrollOffset}
-                      />
-                  }
                 </Box>
                 )}
       <InputBar

@@ -83,31 +83,27 @@ export class MetricsCollector {
     const mins = Math.floor(elapsed / 60)
     const secs = elapsed % 60
 
-    const lines: string[] = [
-      '',
-      '╭──────────────────────────────────────────────────╮',
-      '│            Execution Summary                     │',
-      '├──────────────────────────────────────────────────┤',
-      `│  Tool uses:  ${this._toolCalls.toString().padStart(8)}                      │`,
-      `│  Total:      ${this.totalTokens.toLocaleString().padStart(8)} tokens              │`,
-      `│  Input:      ${this._inputTokens.toLocaleString().padStart(8)} tokens              │`,
-      `│  Output:     ${this._outputTokens.toLocaleString().padStart(8)} tokens              │`,
-      `│  Time:       ${mins}m ${secs}s                      │`,
-      '╰──────────────────────────────────────────────────╯',
-      '',
-    ]
+    let summary = `\n\n━━━ Execution Summary ━━━\n`
+    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}, out: ${this._outputTokens.toLocaleString()}) · Time: ${mins}m ${secs}s\n`
 
-    // Add tool call breakdown if there were calls
+    // Add compact tool breakdown if there were calls
     if (this.toolCallLog.length > 0) {
-      lines.push('Tool Call Breakdown:')
+      // Group by tool name for compact display
+      const groups = new Map<string, { count: number; totalDuration: number; success: number; fail: number }>()
       for (const call of this.toolCallLog) {
-        const icon = call.success ? '✓' : '✗'
-        lines.push(`  ${icon} ${call.tool.padEnd(20)} ${call.duration}ms`)
+        const g = groups.get(call.tool) ?? { count: 0, totalDuration: 0, success: 0, fail: 0 }
+        g.count++
+        g.totalDuration += call.duration
+        if (call.success) { g.success++ } else { g.fail++ }
+        groups.set(call.tool, g)
       }
-      lines.push('')
+      summary += `Tools: ${Array.from(groups.entries()).map(([name, g]) =>
+        `${name} ×${g.count}${g.fail > 0 ? ` (${g.success}✓ ${g.fail}✗)` : ''}`
+      ).join(', ')}\n`
     }
 
-    return lines.join('\n')
+    summary += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`
+    return summary
   }
 
   reset(): void {

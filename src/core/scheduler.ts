@@ -1,4 +1,10 @@
 import { EventEmitter } from 'node:events'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+
+const SCHEDULER_FILE = join(homedir(), '.deepseek-code', 'scheduler-tasks.json')
 
 export interface ScheduledTask {
   id: string;
@@ -103,7 +109,9 @@ export class Scheduler extends EventEmitter {
       clearInterval(timer)
       this.timers.delete(id)
     }
-    return this.tasks.delete(id)
+    const removed = this.tasks.delete(id)
+    if (removed) this.save().catch(() => {})
+    return removed
   }
 
   /**
@@ -123,6 +131,7 @@ export class Scheduler extends EventEmitter {
       this.timers.delete(id)
     }
     this.tasks.clear()
+    this.save().catch(() => {})
   }
 
   /**
@@ -130,6 +139,55 @@ export class Scheduler extends EventEmitter {
    */
   get count (): number {
     return this.tasks.size
+  }
+
+  /**
+   * Save tasks to disk for persistence across restarts.
+   */
+  async save (): Promise<void> {
+    const dir = join(homedir(), '.deepseek-code')
+    if (!existsSync(dir)) {
+      await mkdir(dir, { recursive: true })
+    }
+    const tasks = Array.from(this.tasks.values()).map(t => ({
+      ...t,
+      // Don't save timer references
+    }))
+    await writeFile(SCHEDULER_FILE, JSON.stringify(tasks, null, 2), 'utf-8')
+  }
+
+  /**
+   * Load tasks from disk and re-activate them.
+   */
+  async load (callback?: TaskCallback): Promise<void> {
+    if (!existsSync(SCHEDULER_FILE)) return
+
+    try {
+      const content = await readFile(SCHEDULER_FILE, 'utf-8')
+      const tasks = JSON.parse(content) as ScheduledTask[]
+
+      for (const task of tasks) {
+        // Re-activate tasks that haven't expired
+        if (task.maxRuns && task.runCount >= task.maxRuns) continue
+
+        // Calculate remaining interval
+        const now = Date.now()
+        const elapsed = now - task.lastRun
+        const remaining = Math.max(0, task.interval - elapsed)
+
+        if (remaining > 0) {
+          // Re-schedule with remaining time
+          setTimeout(() => {
+            this.addTask(task.prompt, task.interval, task.maxRuns)
+          }, remaining)
+        } else {
+          // Already past due, schedule immediately
+          this.addTask(task.prompt, task.interval, task.maxRuns)
+        }
+      }
+    } catch {
+      // Ignore load errors
+    }
   }
 }
 

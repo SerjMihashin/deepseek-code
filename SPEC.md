@@ -45,7 +45,26 @@ This document is the source of truth going forward.
 ### 4.1 Tool-First Agent
 The model must solve tasks through tools, not by pretending to know file contents or runtime state.
 
-### 4.2 Browser as First-Class Runtime
+### 4.2 Trust Layer / Evidence-First UX
+
+The agent must not only execute actions — it must make its work legible to the user at all times.
+
+The user must always understand:
+1. **What the agent is doing right now** — shown via Activity Timeline, not a raw tool call list
+2. **Whether the agent is working or done** — stable Done/Ready lifecycle; no zombie spinner
+3. **How many actions have been completed** — compact tool counter (read_file × 34)
+4. **Where to see details** — full debug trace accessible via `/logs` or Ctrl+L, not shown by default
+5. **Whether input is available** — InputBar unblocked the moment the agent finishes
+6. **What verifications passed** — Evidence Ledger after Execution Summary
+7. **What failed** — failures surfaced explicitly, never hidden
+
+Implementation principles:
+- Autoscroll must not override user scroll position (smart follow/paused modes)
+- ctx% must reflect the active context window, not cumulative session tokens
+- Long input must wrap and position cursor correctly
+- After final response: spinner stopped, InputBar enabled, Ctrl+C = soft cancel only
+
+### 4.3 Browser as First-Class Runtime
 The browser layer is not an optional add-on. It is a native capability of the agent.
 
 If a task implies:
@@ -57,10 +76,10 @@ If a task implies:
 
 the agent should understand that it can use the browser tool proactively without the user explicitly saying “open browser”.
 
-### 4.3 Honest State
+### 4.4 Honest State
 Documentation, tool registry, system prompts, and UI must match real behavior.
 
-### 4.4 Handoff-Friendly Work
+### 4.5 Handoff-Friendly Work
 Every finished iteration must leave:
 - updated checklists;
 - committed code;

@@ -1,5 +1,5 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
-import { type ToolDefinition, type ApprovalRequirement, toOpenAITools } from '../tools/types.js'
+import { type ToolDefinition, type ApprovalRequirement, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getToolsForMode } from '../tools/registry.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
@@ -7,6 +7,8 @@ import { i18n } from './i18n.js'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { platform, release, type } from 'node:os'
+import { MetricsCollector } from './metrics.js'
+import { hooksManager } from './hooks.js'
 
 export interface AgentLoopOptions {
   /** Maximum number of tool call iterations before stopping (default: 25) */
@@ -146,6 +148,7 @@ export class AgentLoop extends EventEmitter {
   private options: Required<Omit<AgentLoopOptions, 'signal'>> & { signal?: AbortSignal }
   private messages: ChatMessage[] = []
   private toolCallHistory: Map<string, ToolCallEvent> = new Map()
+  private metrics: MetricsCollector = new MetricsCollector()
   private iterationCount = 0
 
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
@@ -184,6 +187,11 @@ export class AgentLoop extends EventEmitter {
   /** Get the current iteration count */
   getIterationCount (): number {
     return this.iterationCount
+  }
+
+  /** Get the metrics collector for this session */
+  getMetrics (): MetricsCollector {
+    return this.metrics
   }
 
   /**
@@ -227,6 +235,13 @@ export class AgentLoop extends EventEmitter {
   private async executeLoop (): Promise<string> {
     const openAITools = toOpenAITools(this.tools)
 
+    // Execute hooks at start of loop
+    await hooksManager.execute('AgentLoopStart', {
+      event: 'AgentLoopStart',
+      projectDir: this.options.cwd,
+      messageCount: this.messages.length,
+    }).catch(() => {})
+
     while (this.iterationCount < this.options.maxIterations) {
       this.iterationCount++
 
@@ -257,7 +272,9 @@ export class AgentLoop extends EventEmitter {
             return cancelledMsg
           }
 
-          if (chunk.type === 'reasoning') {
+          if (chunk.type === 'usage' && chunk.usage) {
+            this.metrics.recordTokens(chunk.usage.input, chunk.usage.output)
+          } else if (chunk.type === 'reasoning') {
             this.options.onReasoningChunk(chunk.content)
           } else if (chunk.type === 'text') {
             responseContent += chunk.content
@@ -316,9 +333,9 @@ export class AgentLoop extends EventEmitter {
             this.toolCallHistory.set(tc.id, toolCallEvent)
             this.options.onToolCall(toolCallEvent)
 
-            // Check approval
+            // Check approval — skip only for 'never' (read-only tools)
             const approval = this.getToolApproval(tc.function.name)
-            if (approval === 'always') {
+            if (approval !== 'never') {
               const approved = await this.options.onApprovalRequest(
                 tc.function.name,
                 args,
@@ -339,11 +356,14 @@ export class AgentLoop extends EventEmitter {
             // Execute the tool
             toolCallEvent.status = 'running'
             this.toolCallHistory.set(tc.id, toolCallEvent)
+            this.metrics.recordToolCallStart(tc.function.name)
 
             const startTime = Date.now()
             try {
               const toolResult = await this.executeTool(tc.function.name, args)
               const duration = Date.now() - startTime
+
+              this.metrics.recordToolCallEnd(tc.function.name, toolResult.success)
 
               toolCallEvent.status = toolResult.success ? 'completed' : 'failed'
               toolCallEvent.result = toolResult.output
@@ -369,6 +389,8 @@ export class AgentLoop extends EventEmitter {
             } catch (err) {
               const duration = Date.now() - startTime
               const errorMsg = (err as Error).message
+
+              this.metrics.recordToolCallEnd(tc.function.name, false)
 
               toolCallEvent.status = 'failed'
               toolCallEvent.error = errorMsg
@@ -403,10 +425,17 @@ export class AgentLoop extends EventEmitter {
           const fallback = 'Я выполнил запрошенные действия. Что ещё нужно сделать?'
           this.messages.push({ role: 'assistant', content: fallback })
           this.options.onResponse(fallback)
+          const summary = this.metrics.getSummary()
+          this.options.onStreamChunk(summary)
           return fallback
         }
         this.messages.push({ role: 'assistant', content: responseContent })
         this.options.onResponse(responseContent)
+
+        // Output execution summary
+        const summary = this.metrics.getSummary()
+        this.options.onStreamChunk(summary)
+
         return responseContent
       } catch (err) {
         const error = err as Error
@@ -451,6 +480,17 @@ export class AgentLoop extends EventEmitter {
     const def = this.tools.find(t => t.tool.name === name)
     if (!def) {
       return { success: false, output: '', error: `Unknown tool: "${name}"` }
+    }
+
+    // Sanitize arguments before execution
+    try {
+      args = sanitizeArgs(args, def.tool.parameters)
+    } catch (err) {
+      return {
+        success: false,
+        output: '',
+        error: `Argument validation failed for "${name}": ${(err as Error).message}`,
+      }
     }
 
     try {

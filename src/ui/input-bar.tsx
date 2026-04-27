@@ -37,6 +37,9 @@ const COMMANDS = [
   '/help',
 ]
 
+/** Max visible rows for the input area before internal scroll kicks in */
+const MAX_VISIBLE_ROWS = 5
+
 export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste }: InputBarProps) {
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>([])
@@ -44,17 +47,12 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const [suggestionIndex, setSuggestionIndex] = useState(-1)
   const [cursorVisible, setCursorVisible] = useState(true)
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
+  const [inputScrollOffset, setInputScrollOffset] = useState(0)
   const inputRef = useRef(input)
   inputRef.current = input
 
   useEffect(() => {
-    if (disabled) {
-      setCursorVisible(false)
-      return
-    }
-    setCursorVisible(true)
-    const t = setInterval(() => setCursorVisible(v => !v), 530)
-    return () => clearInterval(t)
+    setCursorVisible(!disabled)
   }, [disabled])
 
   const handleImagePaste = async () => {
@@ -83,6 +81,14 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
 
   const getSuggestions = (text: string) =>
     text.startsWith('/') ? COMMANDS.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
+
+  // Calculate number of visual lines the input text occupies
+  const terminalWidth = process.stdout.columns || 80
+  const inputLines = input.split('\n').reduce((sum, line) => {
+    if (line.length === 0) return sum + 1
+    return sum + Math.ceil(line.length / Math.max(1, terminalWidth - 6))
+  }, 0)
+  const needsScroll = inputLines > MAX_VISIBLE_ROWS
 
   useInput((_input, key) => {
     if (disabled) return
@@ -135,6 +141,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         setHistoryIndex(-1)
         setSuggestionIndex(-1)
         setPendingImageLabel(null)
+        setInputScrollOffset(0)
         return
       }
     }
@@ -150,15 +157,25 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     if (_input && !key.ctrl && !key.meta && !key.return && !key.tab && !key.escape && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow && !key.backspace && !key.delete) {
       setInput(prev => prev + _input)
       setSuggestionIndex(-1)
+      // Auto-scroll to bottom when typing
+      if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
       return
     }
 
-    // Enter (when no suggestions)
+    // Shift+Enter = newline, Enter = send (when no suggestions)
+    if (key.return && key.shift) {
+      setInput(prev => prev + '\n')
+      setSuggestionIndex(-1)
+      // Auto-scroll to bottom
+      if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
+      return
+    }
     if (key.return && currentInput.trim()) {
       onSubmit(currentInput)
       setHistory(prev => [currentInput, ...prev].slice(0, 100))
       setInput('')
       setHistoryIndex(-1)
+      setInputScrollOffset(0)
       setPendingImageLabel(null)
       setSuggestionIndex(-1)
       return
@@ -170,6 +187,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         const newIndex = Math.min(historyIndex + 1, history.length - 1)
         setHistoryIndex(newIndex)
         setInput(history[newIndex])
+        setInputScrollOffset(0)
       }
       return
     }
@@ -178,9 +196,11 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         const newIndex = historyIndex - 1
         setHistoryIndex(newIndex)
         setInput(history[newIndex])
+        setInputScrollOffset(0)
       } else {
         setHistoryIndex(-1)
         setInput('')
+        setInputScrollOffset(0)
       }
       return
     }
@@ -204,6 +224,22 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     : input
 
   const colors = themeManager.getColors()
+
+  // Split display text into visible lines for internal scroll
+  const allLines = displayText.split('\n')
+  const wrappedLines: string[] = []
+  for (const line of allLines) {
+    if (line.length === 0) {
+      wrappedLines.push('')
+    } else {
+      for (let i = 0; i < line.length; i += Math.max(1, terminalWidth - 6)) {
+        wrappedLines.push(line.slice(i, i + Math.max(1, terminalWidth - 6)))
+      }
+    }
+  }
+  const visibleLines = needsScroll
+    ? wrappedLines.slice(inputScrollOffset, inputScrollOffset + MAX_VISIBLE_ROWS)
+    : wrappedLines
 
   return (
     <Box flexDirection='column'>
@@ -232,12 +268,32 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         </Box>
       )}
       <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
-        <Text bold color={colors.primary}>{'>'}</Text>
-        <Text color={colors.text}> {input ? displayText : (disabled ? ' Processing...' : ' Type your request...')}</Text>
-        {!disabled && <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>}
+        <Box flexDirection='column' width='100%'>
+          {input.length === 0 && !disabled ? (
+            <Box>
+              <Text bold color={colors.primary}>{'>'}</Text>
+              <Text color={colors.textMuted}> Type your request...</Text>
+              <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
+            </Box>
+          ) : (
+            visibleLines.map((line, i) => (
+              <Box key={i}>
+                {i === 0 && <Text bold color={colors.primary}>{'>'}</Text>}
+                {i > 0 && <Text> </Text>}
+                <Text wrap='wrap' color={colors.text}>{line || ' '}</Text>
+                {i === visibleLines.length - 1 && !disabled && (
+                  <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
+                )}
+              </Box>
+            ))
+          )}
+        </Box>
         {pendingImageLabel && <Text color={colors.info}> {pendingImageLabel}</Text>}
         {input.length > 0 && !disabled && (
           <Text color={colors.textMuted}>  (Enter to send)</Text>
+        )}
+        {needsScroll && (
+          <Text color={colors.textMuted}>  ↑↓ scroll</Text>
         )}
       </Box>
     </Box>

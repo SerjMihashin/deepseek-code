@@ -10,6 +10,7 @@ export type HookEvent =
   | 'UserPromptSubmit'
   | 'SessionStart'
   | 'SessionEnd'
+  | 'AgentLoopStart'
   | 'SubagentStart'
   | 'SubagentStop'
 
@@ -39,6 +40,7 @@ export interface HookContext {
   toolResult?: Record<string, unknown>;
   error?: string;
   projectDir: string;
+  messageCount?: number;
 }
 
 export class HooksManager {

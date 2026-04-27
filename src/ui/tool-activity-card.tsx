@@ -2,11 +2,10 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import type { ToolCallEvent } from '../core/agent-loop.js'
 import { themeManager } from '../core/themes.js'
-import { FadeIn } from './fade-in.js'
 
-interface ToolCallViewProps {
+interface ToolActivityCardProps {
   toolCalls: ToolCallEvent[];
-  maxItems?: number;
+  status?: 'live' | 'compact';
 }
 
 const statusIcons: Record<string, string> = {
@@ -26,7 +25,6 @@ function formatDuration (ms?: number): string {
 function formatArgs (args: Record<string, unknown>): string {
   const entries = Object.entries(args)
   if (entries.length === 0) return ''
-
   return entries.map(([key, value]) => {
     const str = typeof value === 'string' ? value : JSON.stringify(value)
     const truncated = str.length > 80 ? `${str.slice(0, 77)}...` : str
@@ -78,10 +76,6 @@ function formatChromeArgs (args: Record<string, unknown>): string {
   return `${label}${parts.length > 0 ? ` ${parts.join(' ')}` : ''}`
 }
 
-/**
- * Group tool calls by name, returning summary entries.
- * Each group shows: name × count, status icon of latest, latest target.
- */
 function groupToolCalls (calls: ToolCallEvent[]): Array<{
   name: string;
   count: number;
@@ -98,7 +92,6 @@ function groupToolCalls (calls: ToolCallEvent[]): Array<{
   const result: Array<{ name: string; count: number; latest: ToolCallEvent; status: string }> = []
   for (const [name, entries] of groups) {
     const latest = entries[entries.length - 1]
-    // Determine aggregate status: if any failed, group is failed; if any running, group is running
     let status = 'completed'
     for (const e of entries) {
       if (e.status === 'running' || e.status === 'pending') { status = 'running'; break }
@@ -108,7 +101,6 @@ function groupToolCalls (calls: ToolCallEvent[]): Array<{
     result.push({ name, count: entries.length, latest, status })
   }
 
-  // Sort: running first, then by recency
   result.sort((a, b) => {
     if (a.status === 'running' && b.status !== 'running') return -1
     if (b.status === 'running' && a.status !== 'running') return 1
@@ -118,7 +110,7 @@ function groupToolCalls (calls: ToolCallEvent[]): Array<{
   return result
 }
 
-export const ToolCallView = React.memo(function ToolCallView ({ toolCalls, maxItems }: ToolCallViewProps) {
+export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCalls, status = 'live' }: ToolActivityCardProps) {
   const colors = themeManager.getColors()
   const statusColors: Record<string, string> = {
     pending: colors.warning,
@@ -130,52 +122,73 @@ export const ToolCallView = React.memo(function ToolCallView ({ toolCalls, maxIt
 
   if (toolCalls.length === 0) return null
 
-  // Group tool calls for compact display
   const groups = groupToolCalls(toolCalls)
-  const visible = maxItems !== undefined ? groups.slice(0, maxItems) : groups
-  const hidden = groups.length - visible.length
+  const totalDuration = toolCalls.reduce((sum, tc) => sum + (tc.durationMs ?? 0), 0)
+  const uniqueTypes = groups.length
 
+  // Compact mode: single-line summary
+  if (status === 'compact') {
+    const toolList = groups.map(g =>
+      `${g.name}${g.count > 1 ? ` ×${g.count}` : ''}`
+    ).join(', ')
+    const hasErrors = groups.some(g => g.status === 'failed' || g.status === 'rejected')
+    return (
+      <Box marginLeft={2} marginBottom={1}>
+        <Text dimColor>
+          {hasErrors ? '⚠️ ' : '🔧 '}
+          Инструменты: {toolList}
+          {' · '}{toolCalls.length} call{toolCalls.length !== 1 ? 's' : ''}
+          {totalDuration > 0 ? ` · ${formatDuration(totalDuration)}` : ''}
+        </Text>
+      </Box>
+    )
+  }
+
+  // Live mode: grouped display with border
   return (
-    <Box flexDirection='column' marginLeft={2}>
-      {hidden > 0 && (
-        <Box>
-          <Text dimColor>  ↑ {hidden} more tool type{hidden > 1 ? 's' : ''}</Text>
+    <Box flexDirection='column' marginLeft={2} marginBottom={1}>
+      <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
+        <Box flexDirection='column'>
+          {groups.map((group) => {
+            const icon = statusIcons[group.status] ?? '✳'
+            const color = statusColors[group.status] ?? 'white'
+            const duration = group.latest.durationMs ? formatDuration(group.latest.durationMs) : ''
+            const isChrome = group.name === 'chrome'
+            const displayArgs = isChrome
+              ? formatChromeArgs(group.latest.arguments)
+              : formatArgs(group.latest.arguments)
+
+            const inlineResult = group.latest.status === 'completed' && group.latest.result && group.latest.result.length > 0
+              ? ` → ${group.latest.result.slice(0, 60)}${group.latest.result.length > 60 ? '…' : ''}`
+              : null
+            const inlineError = group.latest.status === 'failed' && group.latest.error
+              ? ` ✗ ${group.latest.error.slice(0, 100)}`
+              : null
+
+            return (
+              <Box key={group.name}>
+                <Text>
+                  <Text color={color}>{icon}</Text>
+                  {' '}
+                  <Text bold color={color}>{group.name}</Text>
+                  {group.count > 1 && <Text color={color}> ×{group.count}</Text>}
+                  {displayArgs ? <Text dimColor> {displayArgs}</Text> : null}
+                  {duration ? <Text dimColor> - {duration}</Text> : null}
+                  {inlineResult ? <Text dimColor>{inlineResult}</Text> : null}
+                  {inlineError ? <Text color={colors.error}>{inlineError}</Text> : null}
+                </Text>
+              </Box>
+            )
+          })}
+          <Box>
+            <Text dimColor>
+              {toolCalls.length} tool call{toolCalls.length !== 1 ? 's' : ''}
+              {uniqueTypes > 1 ? ` (${uniqueTypes} types)` : ''}
+              {totalDuration > 0 ? ` · ${formatDuration(totalDuration)} total` : ''}
+            </Text>
+          </Box>
         </Box>
-      )}
-      {visible.map((group) => {
-        const icon = statusIcons[group.status] ?? '✳'
-        const color = statusColors[group.status] ?? 'white'
-        const duration = group.latest.durationMs ? formatDuration(group.latest.durationMs) : ''
-        const isChrome = group.name === 'chrome'
-        const displayArgs = isChrome
-          ? formatChromeArgs(group.latest.arguments)
-          : formatArgs(group.latest.arguments)
-
-        const inlineResult = group.latest.status === 'completed' && group.latest.result && group.latest.result.length > 0
-          ? ` → ${group.latest.result.slice(0, 60)}${group.latest.result.length > 60 ? '…' : ''}`
-          : null
-        const inlineError = group.latest.status === 'failed' && group.latest.error
-          ? ` ✗ ${group.latest.error.slice(0, 100)}`
-          : null
-
-        return (
-          <FadeIn key={group.name} delay={150}>
-            <Box>
-              <Text>
-                {'  '}
-                <Text color={color}>{icon}</Text>
-                {' '}
-                <Text bold color={color}>{group.name}</Text>
-                {group.count > 1 && <Text color={color}> ×{group.count}</Text>}
-                {displayArgs ? <Text dimColor> {displayArgs}</Text> : null}
-                {duration ? <Text dimColor> - {duration}</Text> : null}
-                {inlineResult ? <Text dimColor>{inlineResult}</Text> : null}
-                {inlineError ? <Text color={colors.error}>{inlineError}</Text> : null}
-              </Text>
-            </Box>
-          </FadeIn>
-        )
-      })}
+      </Box>
     </Box>
   )
 })

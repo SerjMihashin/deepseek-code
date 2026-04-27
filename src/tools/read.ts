@@ -32,9 +32,14 @@ export const readTool: Tool = {
       const offset = (args.offset as number) ?? 0
       const limit = args.limit as number | undefined
 
-      const result = limit
-        ? lines.slice(offset, offset + limit).join('\n')
-        : content
+      let result: string
+      if (limit !== undefined) {
+        result = lines.slice(offset, offset + limit).join('\n')
+      } else if (offset > 0) {
+        result = lines.slice(offset).join('\n')
+      } else {
+        result = content
+      }
 
       return {
         success: true,

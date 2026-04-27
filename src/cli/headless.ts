@@ -41,7 +41,15 @@ export async function headlessMode (
   const agent = new AgentLoop(config, {
     approvalMode,
     cwd: process.cwd(),
-    onApprovalRequest: async () => approvalMode !== 'plan',
+    onApprovalRequest: async (toolName) => {
+      if (approvalMode === 'plan') {
+        // In plan mode, only reject tools that need approval (write/edit/bash)
+        // Read-only tools (read_file, glob, grep_search) have approval='never'
+        // and won't reach this callback
+        return false
+      }
+      return true
+    },
   })
 
   try {

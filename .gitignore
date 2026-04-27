@@ -23,9 +23,8 @@ Thumbs.db
 # Qwen Code AI agent data
 .qwen/
 
-# Chrome CLI Tools subproject
-chrome-cli-tools/node_modules/
-chrome-cli-tools/.git/
+# Chrome CLI Tools subproject (legacy, removed from repo)
+chrome-cli-tools/
 
 # Agent session artifacts (never commit)
 *.handoff.md

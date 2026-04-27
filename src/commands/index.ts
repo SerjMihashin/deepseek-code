@@ -54,6 +54,8 @@ export interface SlashCommandContext {
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
   setStatusText: React.Dispatch<React.SetStateAction<string>>
   setSetupStep: (step: SetupStep) => void
+  /** Called when /theme is entered without arguments — opens interactive picker */
+  onThemePicker?: () => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -600,12 +602,16 @@ async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
 async function cmdTheme (ctx: SlashCommandContext, input: string): Promise<boolean> {
   const themeName = input.slice('/theme'.length).trim()
   if (!themeName) {
-    const themes = themeManager.listThemes()
-    const list = themes.map(t => `- **${t.name}**: ${t.description}`).join('\n')
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: `**Available Themes:**\n${list}\n\nCurrent: **${themeManager.theme.name}**\nUse \`/theme <name>\` to switch.`,
-    }])
+    if (ctx.onThemePicker) {
+      ctx.onThemePicker()
+    } else {
+      const themes = themeManager.listThemes()
+      const list = themes.map(t => `- **${t.name}**: ${t.description}`).join('\n')
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `**Available Themes:**\n${list}\n\nCurrent: **${themeManager.theme.name}**\nUse \`/theme <name>\` to switch.`,
+      }])
+    }
     return true
   }
   const success = themeManager.setTheme(themeName)

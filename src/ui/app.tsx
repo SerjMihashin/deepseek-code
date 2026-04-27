@@ -66,6 +66,7 @@ export function App ({ config, options }: AppProps) {
   const [contextPercent, setContextPercent] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
   const [pendingYoloConfirm, setPendingYoloConfirm] = useState(false)
+  const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
 
   // Check if API key is configured (non-empty) — used early for locale detection
   const hasApiKey = !!(config.apiKey || process.env.DEEPSEEK_API_KEY) &&
@@ -193,6 +194,12 @@ export function App ({ config, options }: AppProps) {
       setMessages,
       setStatusText,
       setSetupStep,
+      onThemePicker: () => {
+        const themes = themeManager.listThemes()
+        const currentName = themeManager.theme.name
+        const idx = themes.findIndex(t => t.name === currentName)
+        setThemePicker({ themes, selectedIndex: Math.max(0, idx) })
+      },
     }
     return executeSlashCommand(input, ctx)
   }, [config, approvalMode, messages])
@@ -605,6 +612,39 @@ export function App ({ config, options }: AppProps) {
         }
         return
       }
+      // Theme picker: interactive selection
+      if (themePicker) {
+        if (key.escape) {
+          setThemePicker(null)
+          return
+        }
+        if (key.upArrow) {
+          setThemePicker(prev => {
+            if (!prev) return null
+            return { ...prev, selectedIndex: Math.max(0, prev.selectedIndex - 1) }
+          })
+          return
+        }
+        if (key.downArrow) {
+          setThemePicker(prev => {
+            if (!prev) return null
+            return { ...prev, selectedIndex: Math.min(prev.themes.length - 1, prev.selectedIndex + 1) }
+          })
+          return
+        }
+        if (key.return) {
+          const picker = themePicker
+          const chosen = picker.themes[picker.selectedIndex]
+          themeManager.setTheme(chosen.name)
+          setThemePicker(null)
+          setMessages(prev => [...prev, {
+            role: 'assistant',
+            content: `🎨 Тема изменена: **${chosen.name}**`,
+          }])
+          return
+        }
+        return
+      }
       // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
       // When InputBar is active, arrows belong to input history/suggestions.
       if (key.upArrow && isProcessing) {
@@ -744,6 +784,27 @@ export function App ({ config, options }: AppProps) {
           <Box flexDirection='column' flexGrow={1}>
             <Logo />
             <ChatView messages={messages} scrollOffset={chatScrollOffset} hasNewMessages={newMessagesWhilePaused} />
+            {themePicker && (
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='green'>
+                <Box marginLeft={1} marginTop={1}>
+                  <Text bold>🎨 Выберите тему</Text>
+                </Box>
+                <Box marginLeft={1} marginTop={1} flexDirection='column'>
+                  {themePicker.themes.map((t, i) => (
+                    <Box key={t.name}>
+                      <Text color={i === themePicker.selectedIndex ? 'green' : undefined}>
+                        {i === themePicker.selectedIndex ? '▸ ' : '  '}
+                        {t.name}
+                        {t.name === themeManager.theme.name ? ' (текущая)' : ''}
+                      </Text>
+                    </Box>
+                  ))}
+                </Box>
+                <Box marginLeft={1} marginBottom={1} marginTop={1}>
+                  <Text dimColor>↑↓ — навигация  Enter — применить  Esc — отмена</Text>
+                </Box>
+              </Box>
+            )}
             {pendingApproval && (
               <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='yellow'>
                 <Box>

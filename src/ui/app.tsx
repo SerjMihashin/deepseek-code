@@ -51,6 +51,8 @@ export function App ({ config, options }: AppProps) {
     args: Record<string, unknown>;
     resolve: (value: boolean) => void;
   } | null>(null)
+  const [approvalCursor, setApprovalCursor] = useState(0)
+  const exemptedToolsRef = useRef<Set<string>>(new Set())
   const sessionIdRef = useRef<string>('')
   const initializedRef = useRef(false)
   const [emptyInputHint, setEmptyInputHint] = useState(false)
@@ -352,6 +354,7 @@ export function App ({ config, options }: AppProps) {
             if (approvalMode === 'yolo') return true
             if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit')) return true
             if (approvalMode === 'plan') return false
+            if (exemptedToolsRef.current.has(toolName)) return true
 
             // Default mode — ask user for confirmation
             return new Promise<boolean>((resolve) => {
@@ -525,12 +528,33 @@ export function App ({ config, options }: AppProps) {
     if (step === 'done') {
       // Handle approval dialog
       if (pendingApproval) {
-        if (_input === 'y' || _input === 'Y' || key.return) {
+        if (key.upArrow) {
+          setApprovalCursor(prev => Math.max(0, prev - 1))
+        } else if (key.downArrow) {
+          setApprovalCursor(prev => Math.min(3, prev + 1))
+        } else if (key.return) {
+          const cursor = approvalCursor
           const resolve = pendingApproval.resolve
+          const toolName = pendingApproval.toolName
+          setApprovalCursor(0)
           setPendingApproval(null)
           pendingApprovalResolveRef.current = null
-          resolve(true)
-        } else if (_input === 'n' || _input === 'N' || key.escape) {
+          if (cursor === 0) {
+            resolve(true)
+          } else if (cursor === 1) {
+            resolve(false)
+          } else if (cursor === 2) {
+            exemptedToolsRef.current.add(toolName)
+            addServiceNotice(`🔇 ${toolName}: больше не спрашивать в этой сессии`)
+            resolve(true)
+          } else {
+            setApprovalMode('yolo')
+            saveConfig({ ...config, approvalMode: 'yolo' }).catch(() => {})
+            addServiceNotice('⚡ YOLO режим включён: инструменты выполняются без подтверждения.')
+            resolve(true)
+          }
+        } else if (key.escape) {
+          setApprovalCursor(0)
           const resolve = pendingApproval.resolve
           setPendingApproval(null)
           pendingApprovalResolveRef.current = null
@@ -785,14 +809,22 @@ export function App ({ config, options }: AppProps) {
                 <Box marginLeft={1}>
                   <Text color={colors.textMuted}>{JSON.stringify(pendingApproval.args, null, 2).slice(0, 200)}</Text>
                 </Box>
-                <Box marginTop={1}>
-                  <Text>
-                    <Text bold color={colors.success}>y</Text>
-                    <Text color={colors.text}>/</Text>
-                    <Text bold color={colors.error}>n</Text>
-                    <Text color={colors.text}> — подтвердить/отклонить  </Text>
-                    <Text color={colors.textMuted}>Enter=подтвердить  Esc=отклонить</Text>
-                  </Text>
+                <Box flexDirection='column' marginTop={1}>
+                  {[
+                    '✅  Подтвердить',
+                    '❌  Отклонить',
+                    `🔇  Не спрашивать для "${pendingApproval.toolName}"`,
+                    '⚡  YOLO — выполнять всё без вопросов',
+                  ].map((label, i) => (
+                    <Box key={i} marginLeft={1}>
+                      <Text color={approvalCursor === i ? colors.primary : colors.text}>
+                        {approvalCursor === i ? '❯ ' : '  '}{label}
+                      </Text>
+                    </Box>
+                  ))}
+                  <Box marginLeft={1} marginTop={1}>
+                    <Text color={colors.textMuted}>↑↓ — навигация  Enter — выбрать  Esc — отклонить</Text>
+                  </Box>
                 </Box>
               </Box>
             )}

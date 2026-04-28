@@ -197,7 +197,7 @@ async function collectNetworkRequests (
 
 async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
   const timeout = args.timeout ?? 10000
-  const sameTab = args.sameTab ?? false
+  const sameTab = args.sameTab ?? true
   if (args.headless !== undefined) {
     await chromeManager.ensureMode(args.headless)
   }

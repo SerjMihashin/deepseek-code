@@ -1,31 +1,52 @@
 <div align="center">
   <br/>
   <h1>🦊 DeepSeek Code</h1>
-  <p><strong>AI-powered CLI agent for software development</strong></p>
-  <p>Read code · Edit files · Run commands · Search · Automate browser</p>
+  <p><strong>Open-source AI coding agent for your terminal — cheaper than Copilot, more powerful than a shell</strong></p>
 
   <p>
-    <a href="https://github.com/SerjMikhashin/deepseek-code/blob/master/LICENSE">
+    <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
     <img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build"/>
+    <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek"/>
     <img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status"/>
   </p>
 
   <p>
     <b>English</b> · <a href="README.ru.md">Русский</a>
   </p>
-
   <br/>
 </div>
 
 ---
 
-**DeepSeek Code** — open-source AI coding agent that runs in your terminal.  
-It understands your project, reads and edits files, runs shell commands, searches code, and even automates Chrome — all through natural conversation.
+## Why DeepSeek Code?
 
-Think of it as an AI pair programmer that lives in your terminal.
+| | DeepSeek Code | GitHub Copilot | Claude Code |
+|---|---|---|---|
+| **Cost** | ~$0.001/request | $10–19/month | $20+/month |
+| **Runs in terminal** | ✅ | ❌ | ✅ |
+| **File editing** | ✅ | ✅ | ✅ |
+| **Browser automation** | ✅ | ❌ | ❌ |
+| **Open source** | ✅ | ❌ | ❌ |
+| **Self-hosted** | ✅ | ❌ | ❌ |
+
+**DeepSeek API costs ~30× less than GPT-4** — run hundreds of coding sessions for the price of one Copilot month.
+
+---
+
+**DeepSeek Code** is an open-source AI coding agent that runs entirely in your terminal.  
+It reads your project, edits files, runs commands, searches code, and even automates Chrome — all through natural conversation.
+
+```
+You: "Find the memory leak in server.ts and fix it"
+  → read_file("server.ts")
+  → grep_search("EventEmitter|listener|removeListener")
+  → edit("server.ts")   ← shows diff, asks for approval
+  → run_shell_command("npm test")
+  ✅ "Fixed: EventEmitter listener was never removed in cleanup()"
+```
 
 ---
 
@@ -33,165 +54,109 @@ Think of it as an AI pair programmer that lives in your terminal.
 
 | | |
 |---|---|
-| 🧠 **AI Agent with Tools** | Reads files, writes code, runs commands, searches — the AI decides what to do |
-| 🖥️ **Beautiful TUI** | Full terminal UI with chat, autocomplete, tool call chain, spinner animations |
-| 🔒 **Approval Modes** | Plan → Default → Auto-Edit → YOLO — you choose the level of control |
-| 🌐 **Chrome Automation** | Open pages, click, fill forms, take screenshots, read console — all from chat |
-| 🧩 **MCP Protocol** | Connect external tool servers (filesystem, database, etc.) |
-| 🧠 **Memory System** | `/remember` — AI remembers what you teach it across sessions |
-| 📋 **Code Review** | `/review` — AI analyzes your code for bugs, vulnerabilities, performance |
-| 🎨 **Themes** | 5 built-in themes (default, light, dracula, nord, solarized) + custom |
-| 🌍 **i18n** | English, Русский, 中文 — switch with `/lang` |
-| 📦 **Git Integration** | `/git commit`, `/git diff`, `/git status` — from within the chat |
-| ⏰ **Scheduler** | `/loop 5m "check build"` — recurring tasks |
-| 🏖️ **Sandbox** | `/sandbox` — isolated execution via Docker |
-| 📊 **Execution Metrics** | Tool call count, token usage (input/output), timing, context progress bar |
-| 🤖 **Headless / CI/CD** | `--json` and `--headless` for pipelines and automation |
+| 🧠 **Autonomous Agent** | Reads files, writes code, runs commands, searches — plans and executes multi-step tasks |
+| 🖥️ **Beautiful TUI** | Full terminal UI with streaming chat, tool call chain, spinner, syntax highlighting |
+| 🔒 **4 Approval Modes** | Plan · Default · Auto-Edit · Turbo — you choose the level of AI autonomy |
+| 🌐 **Browser Automation** | Open pages, click, fill forms, screenshot, read console — Chrome built right in |
+| 🧩 **MCP Protocol** | Connect external tool servers (filesystem, database, custom tools) |
+| 🧠 **Persistent Memory** | `/remember` — AI remembers project context across sessions |
+| 📋 **AI Code Review** | `/review` — analyzes your code for bugs, vulnerabilities, performance issues |
+| 🎨 **6 Themes** | Default dark · Light · Dracula · Nord · Solarized · Matrix |
+| 🌍 **3 Languages** | English · Русский · 中文 |
+| 📊 **Token Metrics** | Real-time cost tracking, context usage %, execution timing |
+| ⏰ **Scheduler** | `/loop 5m "check build"` — recurring background tasks |
+| 🤖 **CI/CD Mode** | `--headless --json` — pipe-friendly output for automation |
 
-## 📊 Metrics
-
-DeepSeek Code automatically tracks execution statistics for every session:
-
-| Metric | Description |
-|--------|-------------|
-| **Tool uses** | Total number of tool calls made during the session |
-| **Input tokens** | Tokens sent to the model (your code + context) |
-| **Output tokens** | Tokens generated by the model (responses + tool results) |
-| **Total tokens** | Sum of input and output tokens |
-| **Elapsed time** | Wall-clock time of the session |
-| **Per-call timing** | Duration of each individual tool call |
-| **Context usage** | Progress bar showing how much of the 128k context window is used |
-
-### Example output
-
-```
-━━━ Execution Summary ━━━
-Tool uses: 12 · Tokens: 156,320 (in: 124,530, out: 31,790) · Time: 2m 15s
-Tools: read_file ×5, grep_search ×3, run_shell_command ×2, edit ×2
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
+---
 
 ## 🚀 Quick Start
 
-### Install
-
 ```bash
+# Install globally
 npm install -g deepseek-code
-```
 
-Or run directly:
-
-```bash
+# Or run without installing
 npx deepseek-code
 ```
 
-### First Launch
-
-On first run, DeepSeek Code will guide you through setup:
-1. Choose your language (English / Русский / 中文)
-2. Enter your DeepSeek API key
-3. Start coding!
-
-> Get your API key at [platform.deepseek.com](https://platform.deepseek.com)
-
-### Usage Examples
+On first run, the setup wizard guides you through:
+1. Choose language (English / Русский / 中文)
+2. Enter your [DeepSeek API key](https://platform.deepseek.com/api_keys) — free tier available
+3. Choose approval mode
+4. Start coding
 
 ```bash
-# Start interactive session
-deepseek-code
-
-# One-shot prompt with JSON output (for CI/CD)
-dsc -p "Find all TypeScript type errors" --json
-
-# Headless mode (no TUI, pipe-friendly)
-dsc -p "Refactor this module" --headless
-
-# Continue last session
-dsc -c
-
-# YOLO mode (auto-approve all actions)
-dsc -y
-
-# Set theme on startup
-dsc --theme dracula
-
-# Set language on startup
-dsc --lang ru
+deepseek-code          # interactive mode
+dsc                    # short alias
+dsc -p "Fix the bug"   # one-shot prompt
+dsc --turbo            # auto-approve all actions (no confirmation)
+dsc --headless --json  # CI/CD mode with JSON output
+dsc -c                 # continue last session
 ```
 
-## 🌐 Browser Runtime
+---
 
-The browser layer is a native part of the agent, not an external add-on.
+## 🔒 Approval Modes
 
-- The canonical runtime is the built-in `chrome` tool under `src/tools/`.
-- The vendored `chrome-cli-tools/` directory is kept as reference/compatibility material, not as the primary runtime path.
-- Browser screenshots are stored under `.deepseek-code/artifacts/browser/` unless an explicit output path is provided.
-- The browser tool supports `headless: true` for CI-safe automation flows.
+You stay in control. Choose how much autonomy the AI has:
 
-## 🔁 Continuation and Handoff
+| Mode | Behavior |
+|---|---|
+| **Plan** | Read-only — AI can search and analyze, no changes |
+| **Default** | AI proposes changes, you approve each one |
+| **Auto-Edit** | File edits auto-approved, shell commands need approval |
+| **Turbo** | Fully autonomous — approves everything automatically |
 
-- Sessions now store last prompt, last response, tool-call count, approval mode, and summary.
-- Each autonomous run writes a handoff file under `~/.deepseek-code/sessions/<project-hash>/<session-id>.handoff.md`.
-- Each autonomous run also writes a machine-readable execution bundle under `~/.deepseek-code/sessions/<project-hash>/<session-id>.bundle.json`.
-- Headless JSON output now includes `sessionId`, `handoffFile`, `bundleFile`, and tool-call summaries for CI and chaining.
+Switch modes anytime with `Tab` — even while the agent is running.
 
-## 🎮 How It Works
+---
+
+## 🌐 Browser Automation
+
+The browser is a first-class tool, not a plugin:
 
 ```
-You: "Fix the bug in auth.ts"
-        │
-        ▼
-┌─────────────────────────────────────┐
-│  DeepSeek Code (AI Agent)           │
-│                                     │
-│  Step 1: read_file("auth.ts")       │
-│  Step 2: grep_search("bug pattern") │
-│  Step 3: edit("auth.ts")            │
-│  Step 4: run_shell_command("npm t") │
-│                                     │
-│  "Bug fixed in auth.ts, tests pass" │
-└─────────────────────────────────────┘
-        │
-        ▼
-You: ✅ Bug fixed, tests pass
+> Open github.com and take a screenshot of the trending repos
+> Fill out the login form on my local app at localhost:3000
+> Click "Submit" and check the network tab for the API response
+> Read the browser console for any JavaScript errors
 ```
 
-The AI sees your project structure, reads files, searches code, runs commands — and iterates until the task is done.
+Supports: `open` · `click` · `fill` · `screenshot` · `eval` · `scroll` · `wait` · `network` · `console` · `cookies` · `storage` · and more.
 
-## ⌨️ Slash Commands
+---
+
+## ⌨️ Commands
 
 | Command | Description |
 |---|---|
-| `/help` | Show help |
-| `/remember` | Save to AI memory |
-| `/forget` | Remove from memory |
-| `/memory` | List all memories |
+| `/help` | Show all commands |
+| `/remember <text>` | Save to AI memory |
+| `/forget` | Clear memories |
+| `/memory` | List saved memories |
 | `/review` | AI code review |
-| `/checkpoint` | Save state |
-| `/restore` | Restore state |
-| `/compress` | Compress context |
-| `/git` | Git operations |
-| `/loop` | Recurring tasks |
-| `/sandbox` | Isolated execution |
-| `/theme` | Switch themes |
+| `/checkpoint` | Save git checkpoint |
+| `/restore` | Restore checkpoint |
+| `/theme` | Switch UI theme |
 | `/lang` | Switch language |
-| `/mcp` | MCP servers |
-| `/skills` | List skills |
-| `/agents` | Subagents |
-| `/stats` | Session stats |
+| `/git <cmd>` | Git operations |
+| `/loop <interval> <task>` | Recurring tasks |
+| `/sandbox` | Docker-isolated execution |
+| `/mcp` | Manage MCP servers |
+| `/stats` | Session statistics |
 | `/clear` | Clear chat |
-| `/quit` | Exit |
+
+---
 
 ## ⚙️ Configuration
 
-Priority: environment variables → project config → user config → defaults
-
 ```bash
+# Environment variables
 export DEEPSEEK_API_KEY="sk-..."
 export DEEPSEEK_MODEL="deepseek-chat"
 ```
 
-Or create `.deepseek-code/settings.json`:
+Or create `.deepseek-code/settings.json` in your project:
 
 ```json
 {
@@ -202,52 +167,48 @@ Or create `.deepseek-code/settings.json`:
 }
 ```
 
-## 📁 Project Structure
+---
+
+## 📁 Architecture
 
 ```
 src/
-  cli/       — Entry point, Commander CLI, headless mode
-  core/      — Agent loop, memory, sessions, MCP, subagents, themes, i18n
-  api/       — DeepSeek API client with function calling
-  tools/     — 7 native tools: read, write, edit, bash, glob, grep, chrome
-  ui/        — Ink/React components (chat, input, status bar, tool calls)
-  config/    — Config loader and defaults
-  utils/     — Logger, .deepseekignore
+  cli/    — Entry point, Commander CLI, headless mode
+  core/   — Agent loop, memory, sessions, MCP, i18n, metrics
+  api/    — DeepSeek API client with streaming + function calling
+  tools/  — read · write · edit · bash · glob · grep · chrome
+  ui/     — Ink/React TUI (chat, input bar, status bar, tool cards)
+  config/ — Config loader and defaults
 ```
 
-## 📚 Documentation
-
-- [SPEC.md](SPEC.md) — Full technical specification
-- [CHANGELOG.md](CHANGELOG.md) — Development history (in Russian)
-- [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
-- [ITERATIONS.md](ITERATIONS.md) — Development iterations plan
+---
 
 ## 🛡️ Safety
 
-DeepSeek Code includes multiple safety layers:
-- **Approval modes** — you choose how much autonomy the AI has
+- **Approval modes** — choose how much the AI can do autonomously
 - **Command sanitization** — dangerous shell patterns are blocked
-- **File size limits** — write_file capped at 1MB
-- **Sandbox mode** — isolated execution via Docker
+- **File size limits** — writes capped at 1MB
+- **Sandbox mode** — Docker-isolated execution via `/sandbox`
+- **`.deepseekignore`** — exclude sensitive files from AI access
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+```bash
+git clone https://github.com/SerjMihashin/deepseek-code.git
+cd deepseek-code
+npm install
+npm run dev
+```
+
+---
 
 ## 📄 License
 
 Apache-2.0 © 2026 Serj Mikhashin
-
----
-
-## 🐛 Known Issues
-
-| Issue | Status |
-|-------|--------|
-| **Scroll in paused mode**: PageUp/PageDown may not work perfectly in all terminal emulators (especially WebStorm). End key returns to follow mode. | Known limitation |
-| **ESLint**: `npm run lint` may hang on the full project. Not related to code changes. Run `npx eslint <specific-file>` for targeted checks. | Known limitation |
-| **Multiline input**: Shift+Enter adds a newline, but the visual cursor position may drift on very long wrapped lines (>200 chars). | Minor |
-| **Ctrl+C**: First press in Ready state shows a hint; second press within 2s exits. During processing, Ctrl+C soft-cancels. Some terminal emulators may intercept Ctrl+C before the app. | Minor |
-| **app.tsx size**: The main App component (~1300 lines) needs future refactoring. Not blocking functionality. | Tech debt |
-| **Sandbox on Windows**: Docker paths (C:\) are not mounted correctly. Fallback to direct `run_shell_command`. | Windows only |
-| **LSP Manager**: Registered but not actively used by the agent loop. | Backlog |
-| **API key storage**: Stored in plain text in `~/.deepseek-code/settings.json`. Use `DEEPSEEK_API_KEY` env var for better security. | Advisory |
 
 ---
 

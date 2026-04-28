@@ -17,7 +17,8 @@ import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
 import type { SetupStep } from '../ui/setup-wizard.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
-import { browserTest, getLastBrowserTestResult } from '../tools/chrome.js'
+import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools/chrome.js'
+import { chromeManager } from '../tools/chrome-manager.js'
 
 // ─── Help text ───────────────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ const HELP_TEXT = `Available commands:
   /capabilities      Показать полные возможности агента
   /browser-test      Протестировать Chrome browser tools
   /last-browser-test  Показать последний отчёт browser-test
+  /chrome [--headed|--headless]  Переключить режим Chrome
   /clear             Очистить чат`
 
 // ─── Command handler type ────────────────────────────────────────────────────
@@ -790,6 +792,10 @@ async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise
 
   ctx.setStatusText('🧪 Запуск browser test...')
 
+  // Сохраняем текущий режим Chrome, чтобы восстановить после теста
+  const prevState = chromeManager.getState()
+  const prevHeadless = prevState.headless
+
   try {
     const report = await browserTest({ headless })
     ctx.setMessages(prev => [...prev, {
@@ -801,9 +807,93 @@ async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise
       role: 'assistant',
       content: `## ❌ Browser Test Error\n\n\`\`\`\n${String(err)}\n\`\`\``,
     }])
+  } finally {
+    // Восстанавливаем предыдущий режим Chrome (не ломаем агента после теста)
+    if (chromeManager.isConnected()) {
+      await chromeManager.ensureMode(prevHeadless).catch(() => {})
+    }
   }
 
   ctx.setStatusText('')
+  return true
+}
+
+async function cmdBrowserRealTest (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const parts = input.trim().split(/\s+/).slice(1)
+  const saveReport = parts.includes('--save-report')
+  const headless = parts.includes('--headless')
+  const siteArgs = parts.filter(p => !p.startsWith('--'))
+  const sites = siteArgs.length > 0 ? siteArgs : undefined
+
+  ctx.setStatusText('🌐 Real site smoke-test...')
+  const prevState = chromeManager.getState()
+
+  try {
+    const report = await browserRealTest({ sites, headless })
+
+    if (saveReport) {
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile('BROWSER_REAL_TEST_REPORT.md', report, 'utf8')
+      ctx.addServiceNotice?.('📄 Report saved: BROWSER_REAL_TEST_REPORT.md')
+    }
+
+    ctx.setMessages(prev => [...prev, { role: 'assistant', content: report }])
+  } catch (err) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `## ❌ browser-real-test error\n\`\`\`\n${String(err)}\n\`\`\``,
+    }])
+  } finally {
+    if (chromeManager.isConnected()) {
+      await chromeManager.ensureMode(prevState.headless ?? false).catch(() => {})
+    }
+    ctx.setStatusText('')
+  }
+
+  return true
+}
+
+async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const parts = input.trim().split(/\s+/)
+  const flag = parts.length > 1 ? parts[1].toLowerCase() : ''
+
+  // No flag — show status
+  if (!flag || flag === '--status' || flag === '-s') {
+    const state = chromeManager.getState()
+    const modeStr = state.connected
+      ? (state.headless ? 'headless (фоновый)' : 'headed (видимое окно)')
+      : 'не запущен'
+    ctx.addServiceNotice?.(
+      `🌐 Chrome: ${modeStr}${state.connected ? ` | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}` : ''}`
+    )
+    return true
+  }
+
+  // Determine desired mode
+  let desiredHeadless: boolean
+  if (flag === '--headless' || flag === '-h') {
+    desiredHeadless = true
+  } else if (flag === '--headed' || flag === '-v') {
+    desiredHeadless = false
+  } else {
+    ctx.addServiceNotice?.('❌ /chrome: используйте --headed, --headless или без флага для статуса')
+    return true
+  }
+
+  try {
+    await chromeManager.ensureMode(desiredHeadless)
+    const state = chromeManager.getState()
+    const modeStr = state.headless ? 'headless (фоновый)' : 'headed (видимое окно)'
+
+    // Save to config
+    ctx.config.chromeHeadless = state.headless
+    saveConfig({ chromeHeadless: state.headless }).catch(() => {})
+
+    ctx.addServiceNotice?.(`🌐 Chrome: ${modeStr} | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}`)
+  } catch (err) {
+    ctx.addServiceNotice?.(`❌ Chrome: ${String(err)}`)
+  }
+
   return true
 }
 
@@ -930,7 +1020,9 @@ const commands: CommandEntry[] = [
   { name: '/tools', handler: cmdTools },
   { name: '/capabilities', handler: cmdCapabilities },
   { name: '/browser-test', handler: cmdBrowserTest },
+  { name: '/browser-real-test', handler: cmdBrowserRealTest },
   { name: '/last-browser-test', handler: cmdLastBrowserTest },
+  { name: '/chrome', handler: cmdChrome },
 ]
 
 const commandMap = new Map<string, CommandEntry>()

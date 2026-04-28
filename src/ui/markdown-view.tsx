@@ -229,7 +229,7 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
                   return <Text key={ti} color={colors.border}>{'─'.repeat(Math.min(process.stdout.columns - 6 || 60, 60))}</Text>
                 }
                 const isHeader = ti === headerIdx
-                return renderTableRow(tl, isHeader, colors)
+                return <React.Fragment key={ti}>{renderTableRow(tl, isHeader, colors)}</React.Fragment>
               })}
             </Box>
           )

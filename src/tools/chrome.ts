@@ -1037,6 +1037,175 @@ function buildBrowserTestReport (
   return lines.join('\n')
 }
 
+// ─── Real Site Smoke Test ─────────────────────────────────────────────────────
+
+const DEFAULT_REAL_SITES = ['example.com', 'wikipedia.org', 'github.com']
+const MAX_REAL_CALLS = 20
+
+export interface BrowserRealTestOptions {
+  sites?: string[]
+  headless?: boolean
+  signal?: AbortSignal
+}
+
+interface RealSiteStep {
+  action: string
+  status: 'passed' | 'failed' | 'skipped' | 'blocked'
+  detail: string
+}
+
+interface RealSiteResult {
+  site: string
+  steps: RealSiteStep[]
+  blocked: boolean
+  skipReason?: string
+}
+
+export async function browserRealTest (options?: BrowserRealTestOptions): Promise<string> {
+  const desiredHeadless = options?.headless ?? false
+  const signal = options?.signal
+
+  const rawSites = options?.sites && options.sites.length > 0
+    ? options.sites
+    : DEFAULT_REAL_SITES
+
+  const sites = rawSites.map(s => {
+    const t = s.trim().toLowerCase()
+    return t.startsWith('http://') || t.startsWith('https://') ? t : `https://${t}`
+  })
+
+  let chromeCalls = 0
+  const results: RealSiteResult[] = []
+
+  try {
+    await chromeManager.ensureMode(desiredHeadless)
+  } catch (err) {
+    return `## /browser-real-test\n\n❌ Chrome не удалось запустить: ${String(err)}`
+  }
+
+  for (const url of sites) {
+    if (signal?.aborted) {
+      results.push({ site: url, steps: [{ action: 'all', status: 'skipped', detail: 'aborted' }], blocked: false, skipReason: 'aborted' })
+      continue
+    }
+    if (chromeCalls >= MAX_REAL_CALLS) {
+      results.push({ site: url, steps: [{ action: 'all', status: 'skipped', detail: `call limit ${MAX_REAL_CALLS} reached` }], blocked: false, skipReason: 'limit' })
+      continue
+    }
+
+    const siteResult: RealSiteResult = { site: url, steps: [], blocked: false }
+    results.push(siteResult)
+
+    async function siteAction (args: ChromeToolArgs): Promise<ToolResult> {
+      chromeCalls++
+      try {
+        return await Promise.race<ToolResult>([
+          executeAction(args),
+          new Promise<ToolResult>((_resolve, reject) => setTimeout(() => reject(new Error('timeout 15s')), 15000)),
+        ])
+      } catch (err) {
+        return { success: false, output: '', error: String(err) }
+      }
+    }
+
+    // 1: open
+    if (chromeCalls >= MAX_REAL_CALLS) { siteResult.steps.push({ action: 'open', status: 'skipped', detail: 'call limit' }); continue }
+    const openR = await siteAction({ action: 'open', url, sameTab: true, timeout: 15000 } as ChromeToolArgs)
+    siteResult.steps.push({ action: 'open', status: openR.success ? 'passed' : 'failed', detail: openR.success ? '' : (openR.error ?? 'failed').slice(0, 120) })
+    if (!openR.success) continue
+
+    // 2: title via eval (no html action)
+    if (chromeCalls >= MAX_REAL_CALLS) { siteResult.steps.push({ action: 'title', status: 'skipped', detail: 'call limit' }); continue }
+    const titleR = await siteAction({ action: 'eval', sameTab: true, code: 'document.title', timeout: 10000 } as ChromeToolArgs)
+    siteResult.steps.push({ action: 'title', status: titleR.success ? 'passed' : 'failed', detail: titleR.success ? (titleR.output || '').slice(0, 80) : (titleR.error ?? '').slice(0, 80) })
+
+    // 3: cookie/captcha/consent wall check
+    if (chromeCalls >= MAX_REAL_CALLS) { siteResult.steps.push({ action: 'cookie-check', status: 'skipped', detail: 'call limit' }); continue }
+    const wallCode = '!!document.querySelector(\'[id*="cookie"],[class*="cookie"],[id*="consent"],[class*="consent"],[id*="captcha"],[class*="captcha"],[id*="gdpr"],[class*="gdpr"]\')'
+    const wallR = await siteAction({ action: 'eval', sameTab: true, code: wallCode, timeout: 10000 } as ChromeToolArgs)
+    const hasWall = wallR.success && wallR.output.trim() === 'true'
+    siteResult.steps.push({ action: 'cookie-check', status: hasWall ? 'blocked' : 'passed', detail: hasWall ? 'cookie/captcha/consent wall detected — skipped' : 'clear' })
+    if (hasWall) { siteResult.blocked = true; continue }
+
+    // 4: screenshot
+    if (chromeCalls >= MAX_REAL_CALLS) { siteResult.steps.push({ action: 'screenshot', status: 'skipped', detail: 'call limit' }); continue }
+    const shotR = await siteAction({ action: 'shot', sameTab: true, timeout: 10000 } as ChromeToolArgs)
+    siteResult.steps.push({ action: 'screenshot', status: shotR.success ? 'passed' : 'failed', detail: shotR.success ? 'ok' : (shotR.error ?? '').slice(0, 80) })
+
+    // 5: console errors
+    if (chromeCalls >= MAX_REAL_CALLS) { siteResult.steps.push({ action: 'console', status: 'skipped', detail: 'call limit' }); continue }
+    const consoleR = await siteAction({ action: 'console', sameTab: true, timeout: 10000 } as ChromeToolArgs)
+    siteResult.steps.push({ action: 'console', status: consoleR.success ? 'passed' : 'failed', detail: consoleR.success ? (consoleR.output || 'no errors').slice(0, 120) : (consoleR.error ?? '').slice(0, 80) })
+  }
+
+  return buildRealTestReport(results, chromeCalls, sites.length)
+}
+
+function buildRealTestReport (results: RealSiteResult[], totalCalls: number, totalSites: number): string {
+  const ACTIONS = ['open', 'title', 'cookie-check', 'screenshot', 'console']
+  const allSteps = results.flatMap(r => r.steps)
+  const passed = allSteps.filter(s => s.status === 'passed').length
+  const failed = allSteps.filter(s => s.status === 'failed').length
+  const skipped = allSteps.filter(s => s.status === 'skipped').length
+  const blocked = allSteps.filter(s => s.status === 'blocked').length
+  const partial = results.some(r => r.skipReason === 'limit')
+
+  const lines: string[] = [
+    '## /browser-real-test Results',
+    '',
+    `**Sites:** ${results.length}/${totalSites} | **Calls:** ${totalCalls}/${MAX_REAL_CALLS} | **Passed:** ${passed} | **Failed:** ${failed} | **Skipped:** ${skipped} | **Blocked:** ${blocked}`,
+    '> Token safety: OK — no full HTML reads, call limit enforced',
+    '',
+  ]
+
+  if (partial) {
+    lines.push(`> ⚠️ Partial Report: reached limit of ${MAX_REAL_CALLS} calls. Some sites were skipped.`)
+    lines.push('')
+  }
+
+  lines.push(`| Site | ${ACTIONS.join(' | ')} | Notes |`)
+  lines.push(`|------|${ACTIONS.map(() => '------').join('|')}|-------|`)
+
+  for (const r of results) {
+    const cells = ACTIONS.map(action => {
+      const step = r.steps.find(s => s.action === action)
+      if (!step) return '⏭️'
+      if (step.status === 'passed') return '✅'
+      if (step.status === 'failed') return '❌'
+      if (step.status === 'blocked') return '🚫'
+      return '⏭️'
+    })
+    const domain = r.site.replace(/^https?:\/\//, '')
+    const notes = r.blocked
+      ? 'cookie/consent wall'
+      : r.skipReason === 'limit'
+        ? 'call limit'
+        : r.skipReason === 'aborted'
+          ? 'aborted'
+          : '—'
+    lines.push(`| ${domain} | ${cells.join(' | ')} | ${notes} |`)
+  }
+
+  const failedSteps = results.flatMap(r =>
+    r.steps.filter(s => s.status === 'failed').map(s => ({ site: r.site, ...s }))
+  )
+  if (failedSteps.length > 0) {
+    lines.push('')
+    lines.push('### Failed Actions')
+    lines.push('| Site | Action | Reason | Blocker |')
+    lines.push('|------|--------|--------|---------|')
+    for (const s of failedSteps) {
+      const domain = s.site.replace(/^https?:\/\//, '')
+      lines.push(`| ${domain} | ${s.action} | ${s.detail.replace(/\|/g, '\\|')} | ${s.action === 'open' ? 'yes' : 'no'} |`)
+    }
+  }
+
+  lines.push('')
+  lines.push(`**Что доработать:** ${failedSteps.length === 0 ? 'нет проблем' : failedSteps.map(s => s.action).join(', ')}`)
+
+  return lines.join('\n')
+}
+
 export const chromeTool: Tool = {
   name: 'chrome',
   description: `Control a real browser through a native Chrome runtime.

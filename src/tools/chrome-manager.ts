@@ -92,6 +92,7 @@ class ChromeManager extends EventEmitter {
 
     const launchOptions: LaunchOptions = {
       headless: this.headlessMode,
+      defaultViewport: null,
       args: [
         `--remote-debugging-port=${this.debugPort}`,
         `--user-data-dir=${tmpDir}`,
@@ -99,6 +100,7 @@ class ChromeManager extends EventEmitter {
         '--no-default-browser-check',
         '--disable-extensions',
         '--disable-popup-blocking',
+        '--start-maximized',
       ],
       ...options,
     }

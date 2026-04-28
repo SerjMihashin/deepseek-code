@@ -12,7 +12,7 @@ interface InputBarProps {
   isSetupMode?: boolean;
   emptyHint?: boolean;
   onImagePaste?: (base64: string, mimeType: string) => void;
-  /** Block all keyboard input (e.g. when approval dialog or yolo confirmation is active) */
+  /** Block all keyboard input (e.g. when approval dialog or turbo confirmation is active) */
   blockInput?: boolean;
 }
 
@@ -81,7 +81,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   useInput((_input, key) => {
     if (disabled) return
 
-    // When blockInput is active (approval dialog, yolo confirmation, etc.),
+    // When blockInput is active (approval dialog, turbo confirmation, etc.),
     // do NOT consume any keys — let parent useInput handle them.
     if (blockInput) return
 

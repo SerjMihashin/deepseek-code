@@ -23,8 +23,8 @@ program
   .option('-p, --prompt <text>', 'Run a single prompt and exit (non-interactive)')
   .option('-i, --prompt-interactive <text>', 'Run a prompt then continue in interactive mode')
   .option('-m, --model <model>', 'Model to use (e.g. deepseek-chat)')
-  .option('-y, --yolo', 'Enable YOLO mode (auto-approve all actions)')
-  .option('--approval-mode <mode>', 'Set approval mode: plan, default, auto-edit, yolo')
+  .option('-t, --turbo', 'Enable Turbo mode (auto-approve all actions)')
+  .option('--approval-mode <mode>', 'Set approval mode: plan, default, auto-edit, turbo')
   .option('--debug', 'Enable debug logging')
   .option('-c, --continue', 'Continue last session')
   .option('-r, --resume [sessionId]', 'Resume a specific session')
@@ -47,7 +47,7 @@ program.action(async (query: string[] | undefined, opts: Record<string, unknown>
     prompt: opts.prompt as string | undefined,
     promptInteractive: opts.promptInteractive as string | undefined,
     model: opts.model as string | undefined,
-    yolo: !!opts.yolo,
+    turbo: !!opts.turbo,
     approvalMode: opts.approvalMode as string | undefined,
     debug: !!opts.debug,
     continue_: !!opts.continue,

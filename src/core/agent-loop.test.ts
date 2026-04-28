@@ -9,7 +9,7 @@ const TEST_CONFIG: DeepSeekConfig = {
   apiKey: 'test-key',
   baseUrl: 'https://api.deepseek.com',
   model: 'deepseek-chat',
-  approvalMode: 'yolo',
+  approvalMode: 'turbo',
   theme: 'default-dark',
   language: 'en',
   maxTokens: 128_000,
@@ -73,14 +73,14 @@ describe('AgentLoop', () => {
 
   it('should set approval mode and update tools', () => {
     const agent = new AgentLoop(TEST_CONFIG, { approvalMode: 'plan' })
-    agent.setApprovalMode('yolo')
+    agent.setApprovalMode('turbo')
     expect(true).toBe(true) // No crash
   })
 
   it('should handle cancellation via signal', async () => {
     const ac = new AbortController()
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       signal: ac.signal,
       onResponse: () => {},
       onStreamChunk: () => {},
@@ -98,7 +98,7 @@ describe('AgentLoop', () => {
   it('should handle max iterations', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
       maxIterations: 1,
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onResponse: () => {},
       onStreamChunk: () => {},
       onReasoningChunk: () => {},
@@ -127,7 +127,7 @@ describe('AgentLoop', () => {
   it('should handle streaming text response', async () => {
     const streamChunks: string[] = []
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: (chunk: string) => { streamChunks.push(chunk) },
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -151,7 +151,7 @@ describe('AgentLoop', () => {
   it('should handle tool calls and execute them', async () => {
     const toolCalls: Array<{ name: string; status: string }> = []
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onToolCall: (tc) => { toolCalls.push({ name: tc.name, status: tc.status }) },
       onStreamChunk: () => {},
       onResponse: () => {},
@@ -196,7 +196,7 @@ describe('AgentLoop', () => {
 
   it('should handle tool execution errors', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -270,7 +270,7 @@ describe('AgentLoop', () => {
 
   it('should handle empty response with fallback', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -292,7 +292,7 @@ describe('AgentLoop', () => {
 
   it('should track metrics during execution', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -316,7 +316,7 @@ describe('AgentLoop', () => {
 
   it('should provide context usage percentage', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},
@@ -339,7 +339,7 @@ describe('AgentLoop', () => {
   it('should emit reasoning chunks', async () => {
     const reasoningChunks: string[] = []
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onReasoningChunk: (chunk: string) => { reasoningChunks.push(chunk) },
       onStreamChunk: () => {},
       onResponse: () => {},
@@ -362,7 +362,7 @@ describe('AgentLoop', () => {
 
   it('should handle continueWithMessages', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
-      approvalMode: 'yolo',
+      approvalMode: 'turbo',
       onStreamChunk: () => {},
       onResponse: () => {},
       onReasoningChunk: () => {},

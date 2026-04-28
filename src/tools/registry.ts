@@ -19,7 +19,7 @@ export function getDefaultTools (): ToolDefinition[] {
   ]
 }
 
-export function getToolsForMode (mode: 'plan' | 'default' | 'auto-edit' | 'yolo'): ToolDefinition[] {
+export function getToolsForMode (mode: 'plan' | 'default' | 'auto-edit' | 'turbo'): ToolDefinition[] {
   const tools = getDefaultTools()
 
   switch (mode) {
@@ -34,8 +34,8 @@ export function getToolsForMode (mode: 'plan' | 'default' | 'auto-edit' | 'yolo'
           ? 'auto' as ApprovalRequirement
           : t.approval,
       }))
-    case 'yolo':
-      // YOLO: auto-approve everything
+    case 'turbo':
+      // Turbo: auto-approve everything
       return tools.map(t => ({
         ...t,
         approval: 'auto' as ApprovalRequirement,

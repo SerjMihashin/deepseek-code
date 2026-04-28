@@ -34,7 +34,7 @@ interface AppProps {
 export function App ({ config, options }: AppProps) {
   const { exit } = useApp()
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>(
-    (options.approvalMode as ApprovalMode) ?? (options.yolo ? 'yolo' : config.approvalMode)
+    (options.approvalMode as ApprovalMode) ?? (options.turbo ? 'turbo' : config.approvalMode)
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
@@ -53,6 +53,7 @@ export function App ({ config, options }: AppProps) {
   } | null>(null)
   const [approvalCursor, setApprovalCursor] = useState(0)
   const exemptedToolsRef = useRef<Set<string>>(new Set())
+  const approvalModeRef = useRef<ApprovalMode>(approvalMode)
   const sessionIdRef = useRef<string>('')
   const initializedRef = useRef(false)
   const [emptyInputHint, setEmptyInputHint] = useState(false)
@@ -74,6 +75,10 @@ export function App ({ config, options }: AppProps) {
     if (serviceNoticeTimerRef.current) clearTimeout(serviceNoticeTimerRef.current)
     serviceNoticeTimerRef.current = setTimeout(() => setServiceNotice(null), 3000)
   }, [])
+
+  // Keep approvalModeRef in sync so onApprovalRequest always uses the current mode
+  // even when changed via Tab while the agent is running
+  useEffect(() => { approvalModeRef.current = approvalMode }, [approvalMode])
 
   // Check if API key is configured (non-empty) — used early for locale detection
   const hasApiKey = !!(config.apiKey || process.env.DEEPSEEK_API_KEY) &&
@@ -351,9 +356,9 @@ export function App ({ config, options }: AppProps) {
             }])
           },
           onApprovalRequest: async (toolName, args) => {
-            if (approvalMode === 'yolo') return true
-            if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit')) return true
-            if (approvalMode === 'plan') return false
+            if (approvalModeRef.current === 'turbo') return true
+            if (approvalModeRef.current === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit')) return true
+            if (approvalModeRef.current === 'plan') return false
             if (exemptedToolsRef.current.has(toolName)) return true
 
             // Default mode — ask user for confirmation
@@ -548,9 +553,9 @@ export function App ({ config, options }: AppProps) {
             addServiceNotice(`🔇 ${toolName}: больше не спрашивать в этой сессии`)
             resolve(true)
           } else {
-            setApprovalMode('yolo')
-            saveConfig({ ...config, approvalMode: 'yolo' }).catch(() => {})
-            addServiceNotice('⚡ YOLO режим включён: инструменты выполняются без подтверждения.')
+            setApprovalMode('turbo')
+            saveConfig({ ...config, approvalMode: 'turbo' }).catch(() => {})
+            addServiceNotice('⚡ Turbo режим включён: инструменты выполняются без подтверждения.')
             resolve(true)
           }
         } else if (key.escape) {
@@ -565,16 +570,16 @@ export function App ({ config, options }: AppProps) {
       // Tab for approval mode cycling — instant switch, no y/n confirmation
       if (key.tab) {
         setApprovalMode(prev => {
-          const modes: ApprovalMode[] = ['plan', 'default', 'auto-edit', 'yolo']
+          const modes: ApprovalMode[] = ['plan', 'default', 'auto-edit', 'turbo']
           const nextIdx = (modes.indexOf(prev) + 1) % modes.length
           const newMode = modes[nextIdx]
           saveConfig({ ...config, approvalMode: newMode }).catch(() => {})
 
           // Local warning — NOT an agent message, NOT sent to model
-          if (newMode === 'yolo') {
-            addServiceNotice('⚠️ Включён режим YOLO: инструменты будут выполняться без подтверждения.')
-          } else if (prev === 'yolo') {
-            addServiceNotice('Режим YOLO выключен.')
+          if (newMode === 'turbo') {
+            addServiceNotice('⚡ Включён режим Turbo: инструменты будут выполняться без подтверждения.')
+          } else if (prev === 'turbo') {
+            addServiceNotice('Режим Turbo выключен.')
           } else {
             addServiceNotice(`Режим: ${newMode}`)
           }
@@ -814,7 +819,7 @@ export function App ({ config, options }: AppProps) {
                     '✅  Подтвердить',
                     '❌  Отклонить',
                     `🔇  Не спрашивать для "${pendingApproval.toolName}"`,
-                    '⚡  YOLO — выполнять всё без вопросов',
+                    '⚡  Turbo — выполнять всё без вопросов',
                   ].map((label, i) => (
                     <Box key={i} marginLeft={1}>
                       <Text color={approvalCursor === i ? colors.primary : colors.text}>

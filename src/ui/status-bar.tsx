@@ -25,7 +25,7 @@ const modeLabels: Record<ApprovalMode, string> = {
   plan: 'PLAN',
   default: 'DEFAULT',
   'auto-edit': 'AUTO-EDIT',
-  yolo: 'YOLO',
+  turbo: 'TURBO',
 }
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
@@ -36,7 +36,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
     plan: colors.warning,
     default: colors.info,
     'auto-edit': colors.success,
-    yolo: colors.error,
+    turbo: colors.error,
   }
   const pulseColors = [colors.warning, colors.info, colors.success, colors.text]
   const [chromeState, setChromeState] = useState<ChromeRuntimeState>(chromeManager.getState())

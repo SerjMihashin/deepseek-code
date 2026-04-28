@@ -11,7 +11,7 @@ export interface CliOptions {
   prompt?: string;
   promptInteractive?: string;
   model?: string;
-  yolo?: boolean;
+  turbo?: boolean;
   approvalMode?: string;
   debug?: boolean;
   continue_?: boolean;

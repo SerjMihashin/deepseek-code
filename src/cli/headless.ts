@@ -35,7 +35,7 @@ export async function headlessMode (
     config.model = options.model
   }
 
-  const approvalMode = (options.approvalMode ?? config.approvalMode ?? 'yolo') as 'plan' | 'default' | 'auto-edit' | 'yolo'
+  const approvalMode = (options.approvalMode ?? config.approvalMode ?? 'turbo') as 'plan' | 'default' | 'auto-edit' | 'turbo'
   const sessionId = await saveSession({ approvalMode, lastPrompt: prompt })
 
   const agent = new AgentLoop(config, {

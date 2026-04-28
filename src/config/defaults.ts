@@ -5,7 +5,7 @@ export interface DeepSeekConfig {
   baseUrl: string;
   /** Model name */
   model: string;
-  /** Approval mode: plan | default | auto-edit | yolo */
+  /** Approval mode: plan | default | auto-edit | turbo */
   approvalMode: ApprovalMode;
   /** Theme name */
   theme: string;
@@ -21,7 +21,7 @@ export interface DeepSeekConfig {
   chromeHeadless?: boolean;
 }
 
-export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'yolo'
+export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'turbo'
 
 export const DEFAULT_CONFIG: DeepSeekConfig = {
   baseUrl: 'https://api.deepseek.com',

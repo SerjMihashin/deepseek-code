@@ -720,7 +720,7 @@ async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
     '',
     `**Текущий режим:** \`${ctx.approvalMode}\``,
     ...(ctx.approvalMode === 'plan'
-      ? ['> ⚠️ В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/yolo.']
+      ? ['> ⚠️ В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/turbo.']
       : []),
   ].filter(Boolean).join('\n')
 
@@ -923,7 +923,7 @@ async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
       '> ⚠️ **Вы в PLAN mode.**',
       '> У меня есть инструменты write_file и edit, но в этом режиме они отключены.',
       '> Я могу предложить изменения, но не могу применить их напрямую.',
-      '> Используйте `/setup` и выберите другой режим (default, auto-edit, yolo) для включения записи.',
+      '> Используйте `/setup` и выберите другой режим (default, auto-edit, turbo) для включения записи.',
       ''
     )
   }

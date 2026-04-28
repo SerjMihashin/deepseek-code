@@ -25,7 +25,7 @@ interface LocaleStrings {
   modePlan: string;
   modeDefault: string;
   modeAutoEdit: string;
-  modeYolo: string;
+  modeTurbo: string;
   finishSetup: string;
   ready: string;
   processing: string;
@@ -117,7 +117,7 @@ const EN: LocaleStrings = {
   modePlan: 'Plan — review all actions before execution',
   modeDefault: 'Default — automatic with user confirmation',
   modeAutoEdit: 'Auto-Edit — automatic edits with approval',
-  modeYolo: 'YOLO — fully automatic, no confirmation',
+  modeTurbo: 'Turbo — fully automatic, no confirmation',
   finishSetup: 'to finish setup',
   ready: 'Ready',
   processing: 'Processing...',
@@ -199,7 +199,7 @@ const RU: LocaleStrings = {
   modePlan: 'Plan — просмотр всех действий перед выполнением',
   modeDefault: 'Default — авто с подтверждением',
   modeAutoEdit: 'Auto-Edit — авто-правки с подтверждением',
-  modeYolo: 'YOLO — полностью авто, без подтверждений',
+  modeTurbo: 'Turbo — полностью авто, без подтверждений',
   finishSetup: 'для завершения настройки',
   ready: 'Готов',
   processing: 'Обработка...',
@@ -281,7 +281,7 @@ const ZH: LocaleStrings = {
   modePlan: 'Plan — 执行前审查所有操作',
   modeDefault: 'Default — 自动执行，用户确认',
   modeAutoEdit: 'Auto-Edit — 自动编辑，需要批准',
-  modeYolo: 'YOLO — 完全自动，无需确认',
+  modeTurbo: 'Turbo — 完全自动，无需确认',
   finishSetup: '完成设置',
   ready: '就绪',
   processing: '处理中...',

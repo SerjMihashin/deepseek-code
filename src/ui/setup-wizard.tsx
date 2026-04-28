@@ -173,7 +173,7 @@ export function useSetupWizard (
   const [modeCursor, setModeCursor] = useState(0)
 
   const langOptions: Locale[] = ['en', 'ru', 'zh']
-  const modeOptions: ApprovalMode[] = ['plan', 'default', 'auto-edit', 'yolo']
+  const modeOptions: ApprovalMode[] = ['plan', 'default', 'auto-edit', 'turbo']
 
   const handleApiKeySubmit = useCallback(async (key: string) => {
     if (!key || key.trim().length === 0) {

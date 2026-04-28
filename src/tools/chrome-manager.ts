@@ -185,7 +185,7 @@ class ChromeManager extends EventEmitter {
 
   async navigate (url: string, sameTab = false): Promise<void> {
     const page = await this.getPage(sameTab)
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 })
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     this.currentPage = page
     this.emitState()
   }

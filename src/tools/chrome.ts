@@ -207,7 +207,7 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
     switch (args.action) {
       case 'open': {
         if (!args.url) return { success: false, output: '', error: 'URL is required for open action' }
-        await page.goto(args.url, { waitUntil: 'networkidle2', timeout: 30000 })
+        await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout })
         return { success: true, output: `Opened: ${page.url()}` }
       }
 
@@ -287,15 +287,15 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
 
       case 'nav': {
         if (args.back) {
-          await page.goBack({ waitUntil: 'networkidle2' })
+          await page.goBack({ waitUntil: 'load', timeout })
           return { success: true, output: `Navigated back to: ${page.url()}` }
         }
         if (args.forward) {
-          await page.goForward({ waitUntil: 'networkidle2' })
+          await page.goForward({ waitUntil: 'load', timeout })
           return { success: true, output: `Navigated forward to: ${page.url()}` }
         }
         if (args.refresh ?? true) {
-          await page.reload({ waitUntil: 'networkidle2' })
+          await page.reload({ waitUntil: 'load', timeout })
           return { success: true, output: `Page refreshed: ${page.url()}` }
         }
         return { success: true, output: `Current URL: ${page.url()}` }

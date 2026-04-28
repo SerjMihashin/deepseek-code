@@ -38,7 +38,7 @@ export function App ({ config, options }: AppProps) {
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
-  const [statusText, setStatusText] = useState('Готов')
+  const [statusText, setStatusText] = useState(i18n.t('ready'))
   const [localApiKey, setLocalApiKey] = useState(config.apiKey || '')
   const agentLoopRef = useRef<AgentLoop | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -143,7 +143,7 @@ export function App ({ config, options }: AppProps) {
       //   - пользователь запускает /browser-test
       //   - пользователь запускает /chrome
 
-      setStatusText('Готов')
+      setStatusText(i18n.t('ready'))
     })()
   }, [])
 
@@ -159,7 +159,7 @@ export function App ({ config, options }: AppProps) {
           pendingApprovalResolveRef.current = null
         }
         setPendingApproval(null)
-        setStatusText('Отменено')
+        setStatusText(i18n.t('cancelled'))
       }
     } else {
       proc.__agentSoftCancel = undefined
@@ -256,7 +256,7 @@ export function App ({ config, options }: AppProps) {
       } catch (err) {
         setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `Ошибка команды: ${(err as Error).message}`,
+          content: `${i18n.t('error')}: ${(err as Error).message}`,
         }])
         return
       }
@@ -286,7 +286,7 @@ export function App ({ config, options }: AppProps) {
     const userMessage: ChatMessage = { role: 'user', content: userContent }
     setMessages(prev => [...prev, userMessage])
     setIsProcessing(true)
-    setStatusText('Работаю...')
+    setStatusText(i18n.t('working'))
     setToolCalls([])
     setReasoning('')
     liveToolMessageIndexRef.current = -1
@@ -329,7 +329,7 @@ export function App ({ config, options }: AppProps) {
             })
           },
           onToolResult: (result) => {
-            setStatusText(result.success ? `✅ ${result.toolName} готов` : `❌ ${result.toolName} ошибка`)
+            setStatusText(result.success ? `✅ ${result.toolName} ${i18n.t('toolDone')}` : `❌ ${result.toolName} ${i18n.t('toolError')}`)
           },
           onReasoningChunk: (chunk) => {
             // Debounce reasoning updates to 100ms to avoid UI jitter
@@ -438,7 +438,7 @@ export function App ({ config, options }: AppProps) {
       // Single batch: all final UI updates at once (no await between setState calls)
       if (finalReasoning) setReasoning(finalReasoning)
       setIsProcessing(false)
-      setStatusText('Готов')
+      setStatusText(i18n.t('ready'))
 
       // Convert live tool activity card to compact summary
       if (liveToolMessageIndexRef.current >= 0 && toolHistory.length > 0) {
@@ -465,17 +465,17 @@ export function App ({ config, options }: AppProps) {
       const msg = error.message || ''
       let friendlyMsg: string
       if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized')) {
-        friendlyMsg = 'Ошибка аутентификации API. Возможно, API-ключ недействителен. Запустите `/setup` для ввода нового ключа.'
+        friendlyMsg = i18n.t('apiErrorAuth')
       } else if (msg.includes('429') || msg.includes('rate limit')) {
-        friendlyMsg = 'Превышен лимит запросов к API. Подождите и попробуйте снова.'
+        friendlyMsg = i18n.t('apiErrorRateLimit')
       } else if (msg.includes('5') || msg.includes('server error') || msg.includes('Service Unavailable')) {
-        friendlyMsg = 'Ошибка сервера DeepSeek API. Повторите попытку позже.'
+        friendlyMsg = i18n.t('apiErrorServer')
       } else if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') || msg.includes('ETIMEDOUT')) {
-        friendlyMsg = 'Нет соединения с DeepSeek API. Проверьте подключение к интернету.'
+        friendlyMsg = i18n.t('apiErrorNetwork')
       } else if (msg.includes('timed out')) {
-        friendlyMsg = 'Таймаут запроса. Проверьте подключение к интернету или адрес API.'
+        friendlyMsg = i18n.t('apiErrorTimeout')
       } else {
-        friendlyMsg = `Ошибка: ${msg}`
+        friendlyMsg = `${i18n.t('error')}: ${msg}`
       }
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -506,7 +506,7 @@ export function App ({ config, options }: AppProps) {
     } finally {
       // Safety net: ensure UI is always reset regardless of exit path
       setIsProcessing(false)
-      setStatusText('Готов')
+      setStatusText(i18n.t('ready'))
       // Clear any pending approval (covers error/abort exit paths)
       if (pendingApprovalResolveRef.current) {
         pendingApprovalResolveRef.current(false)
@@ -538,7 +538,7 @@ export function App ({ config, options }: AppProps) {
     if (key.ctrl && _input === 'c') {
       if (isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort()
-        setStatusText('Отменено')
+        setStatusText(i18n.t('cancelled'))
         if (pendingApprovalResolveRef.current) {
           pendingApprovalResolveRef.current(false)
           pendingApprovalResolveRef.current = null

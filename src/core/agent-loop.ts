@@ -1,6 +1,6 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, toOpenAITools, sanitizeArgs } from '../tools/types.js'
-import { getToolsForMode } from '../tools/registry.js'
+import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
 import { i18n } from './i18n.js'
@@ -11,7 +11,7 @@ import { MetricsCollector } from './metrics.js'
 import { hooksManager } from './hooks.js'
 
 export interface AgentLoopOptions {
-  /** Maximum number of tool call iterations before stopping (default: 25) */
+  /** Maximum number of tool call iterations before stopping (default: 100) */
   maxIterations?: number;
   /** Timeout per tool execution in ms (default: 30000 for bash, 10000 for others) */
   toolTimeout?: number;
@@ -61,7 +61,7 @@ export interface ToolResultEvent {
 /**
  * Build a dynamic system prompt with project context.
  */
-function buildSystemPrompt (cwd?: string): string {
+function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
   const osInfo = `${type()} ${release()} (${platform()})`
   let projectInfo = ''
 
@@ -108,9 +108,28 @@ function buildSystemPrompt (cwd?: string): string {
     }
   }
 
+  // Build tools capability section from registry
+  const allTools = getDefaultTools()
+  const mode = approvalMode ?? 'default'
+  const modeTools = getToolsForMode(mode)
+  const modeToolNames = new Set(modeTools.map(t => t.tool.name))
+
+  const toolListLines = allTools.map(def => {
+    const t = def.tool
+    const available = modeToolNames.has(t.name)
+    const note = available ? '' : ' (заблокирован в текущем режиме)'
+    return `  - \`${t.name}\` — ${t.description}${note}`
+  })
+
+  const capabilitiesSection = [
+    `\n## Current Mode: ${mode}`,
+    '',
+    ...toolListLines,
+  ].join('\n')
+
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
-You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}
+You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}
 
 ## Guidelines
 1. **Plan first** — Before making changes, explore the codebase to understand the context.
@@ -133,7 +152,11 @@ When you need to run multiple tools, call them one at a time and wait for result
 - ALWAYS use absolute paths when referring to files. The project root is \`${cwd || 'the current working directory'}\`.
 - When asked to audit or explore the project, start with \`glob\`, \`grep_search\`, and targeted reads to discover structure.
 - If the task implies a browser or rendered UI check, do not wait for the user to explicitly say "open browser" before using \`chrome\`.
-- Do NOT guess file paths — use \`glob\` or \`grep_search\` to discover them first.`
+- Do NOT guess file paths — use \`glob\` or \`grep_search\` to discover them first.
+- When asked about your capabilities, answer based on the tools listed in the "Current Mode" section above. Do NOT claim you lack tools that are listed there but blocked by mode — instead explain that the current mode restricts them.
+- If the user asks "what tools do you have" or "what are your capabilities", refer to this prompt's tool list. If write_file or edit are listed as blocked, explain that they exist but are restricted in the current mode.
+- **CRITICAL: Never claim an action was performed without an actual tool call.** Do not say "opening browser", "running eval", "taking screenshot", "passing captcha", "navigating to page", or any other action unless you have actually called the corresponding tool and received a result. If a tool call was not made, state honestly that it was not executed. If a tool is blocked by the current mode, do not promise to use it — explain that it is unavailable in this mode. If a captcha or site protection is encountered, do not claim to bypass it — stop and report the issue honestly.
+- **CRITICAL: No post-factum reports without tool calls.** If Tool uses is 0 in the current response, do not claim "I checked the log", "I reviewed the previous run", "step X was successful", or any other retrospective analysis. You may only say: "I did not perform a check right now. Based on visible context I can assume..." Always separate findings into: **Verified** (confirmed by actual tool calls this turn), **Assumption** (inferred from visible context), **Not checked** (not examined this turn). Do not write "successful" for a step that was not actually executed or has no saved result. Use the \`/last-browser-test\` command to retrieve the last saved browser test report — do not reconstruct it from memory.`
 }
 
 /**
@@ -154,9 +177,9 @@ export class AgentLoop extends EventEmitter {
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
     super()
     this.api = new DeepSeekAPI(config)
-    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd())
+    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode)
     this.options = {
-      maxIterations: 25,
+      maxIterations: 100,
       toolTimeout: 30000,
       approvalMode: 'default',
       cwd: process.cwd(),
@@ -195,11 +218,18 @@ export class AgentLoop extends EventEmitter {
   }
 
   /**
-   * Set approval mode — updates which tools are available.
+   * Set approval mode — updates which tools are available and rebuilds system prompt.
    */
   setApprovalMode (mode: ApprovalMode): void {
     this.options.approvalMode = mode
     this.tools = getToolsForMode(mode)
+    // Rebuild system prompt with updated mode info
+    this.options.systemPrompt = buildSystemPrompt(this.options.cwd, mode)
+    // Update the system message if it exists
+    const sysIdx = this.messages.findIndex(m => m.role === 'system')
+    if (sysIdx !== -1) {
+      this.messages[sysIdx] = { role: 'system', content: this.options.systemPrompt }
+    }
   }
 
   /**
@@ -257,7 +287,7 @@ export class AgentLoop extends EventEmitter {
 
         // Check for cancellation
         if (this.options.signal?.aborted) {
-          const cancelledMsg = 'Выполнение агента отменено.'
+          const cancelledMsg = i18n.t('agentCancelled')
           this.messages.push({ role: 'assistant', content: cancelledMsg })
           this.options.onResponse(cancelledMsg)
           return cancelledMsg
@@ -266,7 +296,7 @@ export class AgentLoop extends EventEmitter {
         for await (const chunk of stream) {
           // Check for cancellation during streaming
           if (this.options.signal?.aborted) {
-            const cancelledMsg = 'Выполнение агента отменено.'
+            const cancelledMsg = i18n.t('agentCancelled')
             this.messages.push({ role: 'assistant', content: cancelledMsg })
             this.options.onResponse(cancelledMsg)
             return cancelledMsg
@@ -336,6 +366,17 @@ export class AgentLoop extends EventEmitter {
             // Check approval — skip only for 'never' (read-only tools)
             const approval = this.getToolApproval(tc.function.name)
             if (approval !== 'never') {
+              // If signal is already aborted, reject without asking
+              if (this.options.signal?.aborted) {
+                toolCallEvent.status = 'rejected'
+                this.toolCallHistory.set(tc.id, toolCallEvent)
+                this.messages.push({
+                  role: 'tool',
+                  content: `Tool call "${tc.function.name}" aborted (cancellation signal).`,
+                  tool_call_id: tc.id,
+                })
+                continue
+              }
               const approved = await this.options.onApprovalRequest(
                 tc.function.name,
                 args,
@@ -346,7 +387,18 @@ export class AgentLoop extends EventEmitter {
                 this.toolCallHistory.set(tc.id, toolCallEvent)
                 this.messages.push({
                   role: 'tool',
-                  content: `Tool call "${tc.function.name}" отклонён пользователем.`,
+                  content: `Tool call "${tc.function.name}" rejected by user.`,
+                  tool_call_id: tc.id,
+                })
+                continue
+              }
+              // Re-check signal after approval dialog (user may have taken long)
+              if (this.options.signal?.aborted) {
+                toolCallEvent.status = 'rejected'
+                this.toolCallHistory.set(tc.id, toolCallEvent)
+                this.messages.push({
+                  role: 'tool',
+                  content: `Tool call "${tc.function.name}" aborted after approval.`,
                   tool_call_id: tc.id,
                 })
                 continue
@@ -408,7 +460,7 @@ export class AgentLoop extends EventEmitter {
 
               this.messages.push({
                 role: 'tool',
-                content: `Ошибка выполнения "${tc.function.name}": ${errorMsg}`,
+                content: `Tool "${tc.function.name}" execution error: ${errorMsg}`,
                 tool_call_id: tc.id,
               })
             }
@@ -420,9 +472,8 @@ export class AgentLoop extends EventEmitter {
 
         // Text response — agent is done
         if (!responseContent || responseContent.trim().length === 0) {
-          // DeepSeek API вернул пустой ответ — возможно модель "передумала"
-          // Добавляем fallback сообщение
-          const fallback = 'Я выполнил запрошенные действия. Что ещё нужно сделать?'
+          // DeepSeek API returned empty response — model may have "changed its mind", add fallback
+          const fallback = 'I have completed the requested actions. What else would you like me to do?'
           this.messages.push({ role: 'assistant', content: fallback })
           this.options.onResponse(fallback)
           const summary = this.metrics.getSummary()
@@ -489,7 +540,7 @@ export class AgentLoop extends EventEmitter {
       return {
         success: false,
         output: '',
-        error: `Ошибка валидации аргументов для "${name}": ${(err as Error).message}`,
+        error: `Argument validation error for "${name}": ${(err as Error).message}`,
       }
     }
 
@@ -522,13 +573,13 @@ export class AgentLoop extends EventEmitter {
 
     if (output.length > maxOutputLength) {
       output = output.slice(0, maxOutputLength) +
-        `\n\n... [усечено ${output.length - maxOutputLength} символов]`
+        `\n\n... [truncated ${output.length - maxOutputLength} chars]`
     }
 
     if (!result.success) {
-      return `Ошибка выполнения инструмента (${durationMs}ms):\n${result.error ?? result.output}`
+      return `Tool execution error (${durationMs}ms):\n${result.error ?? result.output}`
     }
 
-    return `Вывод инструмента (${durationMs}ms):\n${output}`
+    return `Tool output (${durationMs}ms):\n${output}`
   }
 }

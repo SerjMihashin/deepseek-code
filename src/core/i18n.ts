@@ -73,6 +73,21 @@ interface LocaleStrings {
 
   // Agent errors
   agentEmptyResponse: string;
+
+  // Status messages
+  working: string;
+  thinking: string;
+  cancelled: string;
+  agentCancelled: string;
+  toolDone: string;
+  toolError: string;
+
+  // API error messages
+  apiErrorAuth: string;
+  apiErrorRateLimit: string;
+  apiErrorServer: string;
+  apiErrorNetwork: string;
+  apiErrorTimeout: string;
 }
 
 const EN: LocaleStrings = {
@@ -140,6 +155,19 @@ const EN: LocaleStrings = {
   themeMatrix: 'The Matrix — green code rain',
 
   agentEmptyResponse: 'The model returned an empty response. Please try again.',
+
+  working: 'Working...',
+  thinking: 'Thinking...',
+  cancelled: 'Cancelled',
+  agentCancelled: 'Agent execution cancelled.',
+  toolDone: 'done',
+  toolError: 'error',
+
+  apiErrorAuth: 'Authentication error. Your API key may be invalid. Run /setup to enter a new key.',
+  apiErrorRateLimit: 'API rate limit exceeded. Please wait and try again.',
+  apiErrorServer: 'DeepSeek API server error. Please try again later.',
+  apiErrorNetwork: 'No connection to DeepSeek API. Check your internet connection.',
+  apiErrorTimeout: 'Request timed out. Check your internet connection or API address.',
 }
 
 const RU: LocaleStrings = {
@@ -207,6 +235,19 @@ const RU: LocaleStrings = {
   themeMatrix: 'Матрица — зелёный дождь из кода',
 
   agentEmptyResponse: 'Модель вернула пустой ответ. Попробуйте ещё раз.',
+
+  working: 'Работаю...',
+  thinking: 'Думаю...',
+  cancelled: 'Отменено',
+  agentCancelled: 'Выполнение агента отменено.',
+  toolDone: 'готов',
+  toolError: 'ошибка',
+
+  apiErrorAuth: 'Ошибка аутентификации API. Возможно, API-ключ недействителен. Запустите /setup для ввода нового ключа.',
+  apiErrorRateLimit: 'Превышен лимит запросов к API. Подождите и попробуйте снова.',
+  apiErrorServer: 'Ошибка сервера DeepSeek API. Повторите попытку позже.',
+  apiErrorNetwork: 'Нет соединения с DeepSeek API. Проверьте подключение к интернету.',
+  apiErrorTimeout: 'Таймаут запроса. Проверьте подключение к интернету или адрес API.',
 }
 
 const ZH: LocaleStrings = {
@@ -274,6 +315,19 @@ const ZH: LocaleStrings = {
   themeMatrix: '黑客帝国 — 绿色代码雨',
 
   agentEmptyResponse: '模型返回了空响应，请重试。',
+
+  working: '工作中...',
+  thinking: '思考中...',
+  cancelled: '已取消',
+  agentCancelled: '代理执行已取消。',
+  toolDone: '完成',
+  toolError: '错误',
+
+  apiErrorAuth: 'API 认证失败。您的密钥可能无效。运行 /setup 输入新密钥。',
+  apiErrorRateLimit: '超出 API 请求限制，请稍后重试。',
+  apiErrorServer: 'DeepSeek API 服务器错误，请稍后重试。',
+  apiErrorNetwork: '无法连接 DeepSeek API，请检查网络连接。',
+  apiErrorTimeout: '请求超时，请检查网络或 API 地址。',
 }
 
 const LOCALES: Record<Locale, LocaleStrings> = {

@@ -11,6 +11,14 @@ interface StatusBarProps {
   messageCount: number;
   isProcessing?: boolean;
   contextPercent?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
+}
+
+function tokAbbr (n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toString()
 }
 
 const modeLabels: Record<ApprovalMode, string> = {
@@ -22,7 +30,7 @@ const modeLabels: Record<ApprovalMode, string> = {
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent, totalTokens, estimatedCost }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -81,11 +89,17 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
       </Box>
       <Box>
         {chromeState.connected && (
-          <Text color='green'> 🌐Chrome{chromeState.headless ? ':H' : ''} </Text>
+          <Text color={colors.success}> 🌐Chrome{chromeState.headless ? ':H' : ''} </Text>
+        )}
+        {totalTokens !== undefined && totalTokens > 0 && (
+          <Text color={colors.textMuted}> {tokAbbr(totalTokens)} tok </Text>
+        )}
+        {estimatedCost !== undefined && estimatedCost > 0 && (
+          <Text color={colors.textMuted}>${estimatedCost.toFixed(3)} </Text>
         )}
         {contextPercent !== undefined && contextPercent > 0 && (
           <Text color={contextPercent > 80 ? colors.error : contextPercent > 50 ? colors.warning : colors.textMuted}>
-            {' '}ctx:{contextPercent}%{' '}
+            ctx:{contextPercent}%{' '}
           </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>

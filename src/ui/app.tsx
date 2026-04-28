@@ -64,9 +64,18 @@ export function App ({ config, options }: AppProps) {
   const [newMessagesWhilePaused, setNewMessagesWhilePaused] = useState(false)
   const visibleMessageCountRef = useRef(0)
   const [contextPercent, setContextPercent] = useState(0)
+  const [totalTokens, setTotalTokens] = useState(0)
+  const [estimatedCost, setEstimatedCost] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
-  const [pendingYoloConfirm, setPendingYoloConfirm] = useState(false)
   const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
+  const [serviceNotice, setServiceNotice] = useState<string | null>(null)
+  const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const addServiceNotice = useCallback((text: string) => {
+    setServiceNotice(text)
+    if (serviceNoticeTimerRef.current) clearTimeout(serviceNoticeTimerRef.current)
+    serviceNoticeTimerRef.current = setTimeout(() => setServiceNotice(null), 3000)
+  }, [])
 
   // Check if API key is configured (non-empty) — used early for locale detection
   const hasApiKey = !!(config.apiKey || process.env.DEEPSEEK_API_KEY) &&
@@ -128,6 +137,12 @@ export function App ({ config, options }: AppProps) {
         scheduler.load(),
       ])
 
+      // Chrome не инициализируется при старте.
+      // Он запускается только когда:
+      //   - агент вызывает chrome tool
+      //   - пользователь запускает /browser-test
+      //   - пользователь запускает /chrome
+
       setStatusText('Готов')
     })()
   }, [])
@@ -143,6 +158,8 @@ export function App ({ config, options }: AppProps) {
           pendingApprovalResolveRef.current(false)
           pendingApprovalResolveRef.current = null
         }
+        setPendingApproval(null)
+        setStatusText('Отменено')
       }
     } else {
       proc.__agentSoftCancel = undefined
@@ -194,6 +211,8 @@ export function App ({ config, options }: AppProps) {
       setMessages,
       setStatusText,
       setSetupStep,
+      addServiceNotice,
+      getMetrics: () => agentLoopRef.current!.getMetrics(),
       onThemePicker: () => {
         const themes = themeManager.listThemes()
         const currentName = themeManager.theme.name
@@ -202,7 +221,7 @@ export function App ({ config, options }: AppProps) {
       },
     }
     return executeSlashCommand(input, ctx)
-  }, [config, approvalMode, messages])
+  }, [config, approvalMode, messages, addServiceNotice])
 
   const handleSubmit = useCallback(async (input: string) => {
     // Show hint on empty input
@@ -345,7 +364,7 @@ export function App ({ config, options }: AppProps) {
           },
           onApprovalRequest: async (toolName, args) => {
             if (approvalMode === 'yolo') return true
-            if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit' || toolName === 'chrome')) return true
+            if (approvalMode === 'auto-edit' && (toolName === 'write_file' || toolName === 'edit')) return true
             if (approvalMode === 'plan') return false
 
             // Default mode — ask user for confirmation
@@ -556,41 +575,25 @@ export function App ({ config, options }: AppProps) {
         setShowReasoning(prev => !prev)
         return
       }
-      // Tab for approval mode cycling + save to config
+      // Tab for approval mode cycling — instant switch, no y/n confirmation
       if (key.tab) {
         setApprovalMode(prev => {
           const modes: ApprovalMode[] = ['plan', 'default', 'auto-edit', 'yolo']
           const nextIdx = (modes.indexOf(prev) + 1) % modes.length
           const newMode = modes[nextIdx]
+          saveConfig({ ...config, approvalMode: newMode }).catch(() => {})
 
-          // Confirmation dialog before entering YOLO mode
+          // Local warning — NOT an agent message, NOT sent to model
           if (newMode === 'yolo') {
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: '⚠️ **Предупреждение: режим YOLO.** Все вызовы инструментов будут подтверждаться автоматически. Это может выполнить опасные команды. Нажмите `y` для подтверждения или любую другую клавишу для отмены.',
-            }])
-            setPendingYoloConfirm(true)
-            return prev // Don't change mode yet
+            addServiceNotice('⚠️ Включён режим YOLO: инструменты будут выполняться без подтверждения.')
+          } else if (prev === 'yolo') {
+            addServiceNotice('Режим YOLO выключен.')
+          } else {
+            addServiceNotice(`Режим: ${newMode}`)
           }
 
-          saveConfig({ ...config, approvalMode: newMode }).catch(() => {})
           return newMode
         })
-        return
-      }
-      // Handle YOLO confirmation
-      if (pendingYoloConfirm) {
-        if (_input === 'y' || _input === 'Y') {
-          setPendingYoloConfirm(false)
-          setApprovalMode('yolo')
-          saveConfig({ ...config, approvalMode: 'yolo' }).catch(() => {})
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: '⚠️ Режим YOLO активирован. Все инструменты будут подтверждаться автоматически.',
-          }])
-        } else if (_input !== 'y' && _input !== 'Y') {
-          setPendingYoloConfirm(false)
-        }
         return
       }
       // Scroll chat history — always works regardless of processing state.
@@ -637,10 +640,7 @@ export function App ({ config, options }: AppProps) {
           const chosen = picker.themes[picker.selectedIndex]
           themeManager.setTheme(chosen.name)
           setThemePicker(null)
-          setMessages(prev => [...prev, {
-            role: 'assistant',
-            content: `🎨 Тема изменена: **${chosen.name}**`,
-          }])
+          addServiceNotice(`🎨 Тема изменена: ${chosen.name}`)
           return
         }
         return
@@ -743,6 +743,8 @@ export function App ({ config, options }: AppProps) {
       if (agentLoopRef.current) {
         const metrics = agentLoopRef.current.getMetrics()
         setContextPercent(metrics.getCurrentWindowPercent())
+        setTotalTokens(metrics.totalTokens)
+        setEstimatedCost(metrics.estimatedCostUSD(config.model))
       }
     }, 2000)
     return () => clearInterval(interval)
@@ -764,8 +766,14 @@ export function App ({ config, options }: AppProps) {
       clearTimeout(reasoningTimerRef.current)
       reasoningTimerRef.current = null
     }
+    setServiceNotice(null)
+    if (serviceNoticeTimerRef.current) {
+      clearTimeout(serviceNoticeTimerRef.current)
+      serviceNoticeTimerRef.current = null
+    }
   }, [])
   const handleExit = useCallback(() => { exit() }, [exit])
+  const colors = themeManager.getColors()
 
   return (
     <Box flexDirection='column' height='100%'>
@@ -784,15 +792,20 @@ export function App ({ config, options }: AppProps) {
           <Box flexDirection='column' flexGrow={1}>
             <Logo />
             <ChatView messages={messages} scrollOffset={chatScrollOffset} hasNewMessages={newMessagesWhilePaused} />
+            {serviceNotice && (
+              <Box marginLeft={2} marginBottom={1}>
+                <Text color={colors.primary}>{serviceNotice}</Text>
+              </Box>
+            )}
             {themePicker && (
-              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='green'>
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.primary}>
                 <Box marginLeft={1} marginTop={1}>
-                  <Text bold>🎨 Выберите тему</Text>
+                  <Text bold color={colors.primary}>🎨 Выберите тему</Text>
                 </Box>
                 <Box marginLeft={1} marginTop={1} flexDirection='column'>
                   {themePicker.themes.map((t, i) => (
                     <Box key={t.name}>
-                      <Text color={i === themePicker.selectedIndex ? 'green' : undefined}>
+                      <Text color={i === themePicker.selectedIndex ? colors.primary : colors.textMuted}>
                         {i === themePicker.selectedIndex ? '▸ ' : '  '}
                         {t.name}
                         {t.name === themeManager.theme.name ? ' (текущая)' : ''}
@@ -801,28 +814,28 @@ export function App ({ config, options }: AppProps) {
                   ))}
                 </Box>
                 <Box marginLeft={1} marginBottom={1} marginTop={1}>
-                  <Text dimColor>↑↓ — навигация  Enter — применить  Esc — отмена</Text>
+                  <Text color={colors.textMuted}>↑↓ — навигация  Enter — применить  Esc — отмена</Text>
                 </Box>
               </Box>
             )}
             {pendingApproval && (
-              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor='yellow'>
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.warning}>
                 <Box>
-                  <Text bold color='yellow'>🔔 Подтвердить вызов инструмента?</Text>
+                  <Text bold color={colors.warning}>🔔 Подтвердить вызов инструмента?</Text>
                 </Box>
                 <Box marginLeft={1}>
-                  <Text bold>{pendingApproval.toolName}</Text>
+                  <Text bold color={colors.text}>{pendingApproval.toolName}</Text>
                 </Box>
                 <Box marginLeft={1}>
-                  <Text dimColor>{JSON.stringify(pendingApproval.args, null, 2).slice(0, 200)}</Text>
+                  <Text color={colors.textMuted}>{JSON.stringify(pendingApproval.args, null, 2).slice(0, 200)}</Text>
                 </Box>
                 <Box marginTop={1}>
                   <Text>
-                    <Text bold color='green'>y</Text>
-                    <Text>/</Text>
-                    <Text bold color='red'>n</Text>
-                    <Text> — подтвердить/отклонить  </Text>
-                    <Text dimColor>Enter=подтвердить  Esc=отклонить</Text>
+                    <Text bold color={colors.success}>y</Text>
+                    <Text color={colors.text}>/</Text>
+                    <Text bold color={colors.error}>n</Text>
+                    <Text color={colors.text}> — подтвердить/отклонить  </Text>
+                    <Text color={colors.textMuted}>Enter=подтвердить  Esc=отклонить</Text>
                   </Text>
                 </Box>
               </Box>
@@ -836,6 +849,7 @@ export function App ({ config, options }: AppProps) {
         onExit={handleExit}
         isMasked={setupStep === 'apikey'}
         isSetupMode={setupStep !== 'done'}
+        blockInput={setupStep === 'done' && pendingApproval !== null}
         emptyHint={emptyInputHint}
         onImagePaste={(base64, mimeType) => {
           const model = config.model ?? ''
@@ -855,6 +869,8 @@ export function App ({ config, options }: AppProps) {
         messageCount={messages.length}
         isProcessing={isProcessing}
         contextPercent={contextPercent}
+        totalTokens={totalTokens}
+        estimatedCost={estimatedCost}
       />
     </Box>
   )

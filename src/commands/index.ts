@@ -14,6 +14,7 @@ import { i18n, type Locale } from '../core/i18n.js'
 import { extensionManager } from '../core/extensions.js'
 import { DeepSeekAPI } from '../api/index.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
+import type { MetricsCollector } from '../core/metrics.js'
 import { saveConfig } from '../config/loader.js'
 import type { SetupStep } from '../ui/setup-wizard.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
@@ -66,6 +67,8 @@ export interface SlashCommandContext {
   onThemePicker?: () => void
   /** Show a transient service notice (does NOT add to chat messages, does NOT break empty-state) */
   addServiceNotice?: (text: string) => void
+  /** Returns current session metrics (tokens, cost, tool calls) */
+  getMetrics?: () => MetricsCollector
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -602,10 +605,17 @@ async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
   const agents = subAgentManager['agents'].size
   const tasks = scheduler.count
   const exts = extensionManager.listExtensions().length
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: `**Session Statistics:**\n- Messages: ${ctx.messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${ctx.approvalMode}`,
-  }])
+  const metrics = ctx.getMetrics?.()
+  const usage = metrics?.getTokenUsage()
+  const cost = metrics ? metrics.estimatedCostUSD(ctx.config.model) : 0
+
+  let content = `**Session Statistics:**\n- Messages: ${ctx.messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${ctx.approvalMode}`
+
+  if (usage && usage.total > 0) {
+    content += `\n\n**Token Usage:**\n- Input: ${usage.input.toLocaleString()} tokens\n- Output: ${usage.output.toLocaleString()} tokens\n- Total: ${usage.total.toLocaleString()} tokens\n- Est. Cost: $${cost.toFixed(4)}`
+  }
+
+  ctx.setMessages(prev => [...prev, { role: 'assistant', content }])
   return true
 }
 

@@ -1,3 +1,5 @@
+import { MODEL_PRICING } from '../config/defaults.js'
+
 export interface TokenUsage {
   input: number
   output: number
@@ -62,6 +64,12 @@ export class MetricsCollector {
     return Math.min(100, Math.round((this._lastInputTokens / maxContext) * 100))
   }
 
+  estimatedCostUSD (model: string = 'deepseek-chat'): number {
+    const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['deepseek-chat']
+    return (this._inputTokens / 1_000_000) * pricing.inputPer1M +
+      (this._outputTokens / 1_000_000) * pricing.outputPer1M
+  }
+
   getTokenUsage (): TokenUsage {
     return {
       input: this._inputTokens,
@@ -78,13 +86,15 @@ export class MetricsCollector {
     return Math.min(100, Math.round((this.totalTokens / maxContext) * 100))
   }
 
-  getSummary (): string {
+  getSummary (model: string = 'deepseek-chat'): string {
     const elapsed = Math.round(this.elapsedMs / 1000)
     const mins = Math.floor(elapsed / 60)
     const secs = elapsed % 60
+    const cost = this.estimatedCostUSD(model)
+    const costStr = cost > 0 ? ` · $${cost.toFixed(4)}` : ''
 
     let summary = '\n\n━━━ Execution Summary ━━━\n'
-    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}, out: ${this._outputTokens.toLocaleString()}) · Time: ${mins}m ${secs}s\n`
+    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}, out: ${this._outputTokens.toLocaleString()})${costStr} · Time: ${mins}m ${secs}s\n`
 
     // Add compact tool breakdown if there were calls
     if (this.toolCallLog.length > 0) {

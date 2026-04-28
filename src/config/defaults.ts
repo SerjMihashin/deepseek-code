@@ -17,6 +17,8 @@ export interface DeepSeekConfig {
   temperature: number;
   /** System prompt */
   systemPrompt?: string;
+  /** Chrome browser mode: false = headed (visible), true = headless (background) */
+  chromeHeadless?: boolean;
 }
 
 export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'yolo'
@@ -44,3 +46,8 @@ Guidelines:
 
 export const CONFIG_FILE_NAME = 'settings.json'
 export const CONFIG_DIR_NAME = '.deepseek-code'
+
+export const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
+  'deepseek-chat': { inputPer1M: 0.14, outputPer1M: 0.28 },
+  'deepseek-reasoner': { inputPer1M: 0.55, outputPer1M: 2.19 },
+}

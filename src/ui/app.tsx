@@ -46,10 +46,6 @@ export function App ({ config, options }: AppProps) {
   const liveToolMessageIndexRef = useRef(-1)
   const prevToolCallsRef = useRef<ToolCallEvent[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
-  const [, setReasoning] = useState('')
-  const reasoningPendingRef = useRef('')
-  const reasoningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [, setShowReasoning] = useState(false)
   const [pendingApproval, setPendingApproval] = useState<{
     toolName: string;
     args: Record<string, unknown>;
@@ -288,7 +284,6 @@ export function App ({ config, options }: AppProps) {
     setIsProcessing(true)
     setStatusText(i18n.t('working'))
     setToolCalls([])
-    setReasoning('')
     liveToolMessageIndexRef.current = -1
     setChatScrollOffset(0)
     setScrollMode('follow')
@@ -331,16 +326,7 @@ export function App ({ config, options }: AppProps) {
           onToolResult: (result) => {
             setStatusText(result.success ? `✅ ${result.toolName} ${i18n.t('toolDone')}` : `❌ ${result.toolName} ${i18n.t('toolError')}`)
           },
-          onReasoningChunk: (chunk) => {
-            // Debounce reasoning updates to 100ms to avoid UI jitter
-            reasoningPendingRef.current += chunk
-            if (!reasoningTimerRef.current) {
-              reasoningTimerRef.current = setTimeout(() => {
-                setReasoning(reasoningPendingRef.current)
-                reasoningTimerRef.current = null
-              }, 100)
-            }
-          },
+          onReasoningChunk: () => {},
           onStreamChunk: (chunk) => {
             setMessages(prev => {
               const last = prev[prev.length - 1]
@@ -387,14 +373,6 @@ export function App ({ config, options }: AppProps) {
         return true
       }))
 
-      // Flush pending reasoning before any I/O
-      if (reasoningTimerRef.current) {
-        clearTimeout(reasoningTimerRef.current)
-        reasoningTimerRef.current = null
-      }
-      const finalReasoning = reasoningPendingRef.current
-      reasoningPendingRef.current = ''
-
       const toolHistory = agentLoopRef.current.getToolCallHistory()
       const bundleFile = await writeExecutionBundle({
         sessionId: sessionIdRef.current,
@@ -436,7 +414,6 @@ export function App ({ config, options }: AppProps) {
       })
 
       // Single batch: all final UI updates at once (no await between setState calls)
-      if (finalReasoning) setReasoning(finalReasoning)
       setIsProcessing(false)
       setStatusText(i18n.t('ready'))
 
@@ -513,15 +490,6 @@ export function App ({ config, options }: AppProps) {
         pendingApprovalResolveRef.current = null
       }
       setPendingApproval(null)
-      // Flush pending reasoning
-      if (reasoningTimerRef.current) {
-        clearTimeout(reasoningTimerRef.current)
-        reasoningTimerRef.current = null
-      }
-      if (reasoningPendingRef.current) {
-        setReasoning(reasoningPendingRef.current)
-        reasoningPendingRef.current = ''
-      }
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null
       }
@@ -568,11 +536,6 @@ export function App ({ config, options }: AppProps) {
           pendingApprovalResolveRef.current = null
           resolve(false)
         }
-        return
-      }
-      // R key to toggle reasoning view
-      if (_input === 'r' && !key.ctrl && !key.meta) {
-        setShowReasoning(prev => !prev)
         return
       }
       // Tab for approval mode cycling — instant switch, no y/n confirmation
@@ -753,19 +716,12 @@ export function App ({ config, options }: AppProps) {
   const handleClear = useCallback(() => {
     setMessages([])
     setToolCalls([])
-    setReasoning('')
-    setShowReasoning(false)
     setPendingApproval(null)
     setPendingImage(null)
     setScrollMode('follow')
     setNewMessagesWhilePaused(false)
     setChatScrollOffset(0)
     liveToolMessageIndexRef.current = -1
-    reasoningPendingRef.current = ''
-    if (reasoningTimerRef.current) {
-      clearTimeout(reasoningTimerRef.current)
-      reasoningTimerRef.current = null
-    }
     setServiceNotice(null)
     if (serviceNoticeTimerRef.current) {
       clearTimeout(serviceNoticeTimerRef.current)

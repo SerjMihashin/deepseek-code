@@ -88,6 +88,9 @@ interface LocaleStrings {
   apiErrorServer: string;
   apiErrorNetwork: string;
   apiErrorTimeout: string;
+
+  // Exit hint
+  ctrlCHint: string;
 }
 
 const EN: LocaleStrings = {
@@ -168,6 +171,8 @@ const EN: LocaleStrings = {
   apiErrorServer: 'DeepSeek API server error. Please try again later.',
   apiErrorNetwork: 'No connection to DeepSeek API. Check your internet connection.',
   apiErrorTimeout: 'Request timed out. Check your internet connection or API address.',
+
+  ctrlCHint: 'Press Ctrl+C again to exit',
 }
 
 const RU: LocaleStrings = {
@@ -248,6 +253,8 @@ const RU: LocaleStrings = {
   apiErrorServer: 'Ошибка сервера DeepSeek API. Повторите попытку позже.',
   apiErrorNetwork: 'Нет соединения с DeepSeek API. Проверьте подключение к интернету.',
   apiErrorTimeout: 'Таймаут запроса. Проверьте подключение к интернету или адрес API.',
+
+  ctrlCHint: 'Нажмите Ctrl+C ещё раз для выхода',
 }
 
 const ZH: LocaleStrings = {
@@ -328,6 +335,8 @@ const ZH: LocaleStrings = {
   apiErrorServer: 'DeepSeek API 服务器错误，请稍后重试。',
   apiErrorNetwork: '无法连接 DeepSeek API，请检查网络连接。',
   apiErrorTimeout: '请求超时，请检查网络或 API 地址。',
+
+  ctrlCHint: '再次按 Ctrl+C 退出',
 }
 
 const LOCALES: Record<Locale, LocaleStrings> = {

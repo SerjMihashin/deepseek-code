@@ -89,11 +89,12 @@ interface ApiKeyStepProps {
 }
 
 function ApiKeyStep ({ apiKeyError }: ApiKeyStepProps) {
+  const colors = themeManager.getColors()
   return (
     <Box flexDirection='column' marginLeft={2}>
       <Text bold>{i18n.t('setupApiKey')}</Text>
-      <Text dimColor>{i18n.t('apiKeyHint')}</Text>
-      {apiKeyError && <Text color='red'>{apiKeyError}</Text>}
+      <Text color={colors.textMuted}>{i18n.t('apiKeyHint')}</Text>
+      {apiKeyError && <Text color={colors.error}>{apiKeyError}</Text>}
     </Box>
   )
 }
@@ -103,12 +104,13 @@ interface ThemeStepProps {
 }
 
 function ThemeStep ({ cursor }: ThemeStepProps) {
+  const colors = themeManager.getColors()
   const themes = themeManager.listThemes()
   return (
     <Box flexDirection='column' marginLeft={2}>
       <Text bold>{i18n.t('selectTheme')}</Text>
       {themes.map((theme, i) => (
-        <Text key={theme.name} color={cursor === i ? 'cyan' : undefined}>
+        <Text key={theme.name} color={cursor === i ? colors.primary : colors.textMuted}>
           {cursor === i ? '❯ ' : '  '}{theme.name}
         </Text>
       ))}

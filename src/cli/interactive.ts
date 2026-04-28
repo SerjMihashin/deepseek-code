@@ -1,6 +1,7 @@
 import { render } from 'ink'
 import React from 'react'
 import { App } from '../ui/app.js'
+import { ErrorBoundary } from '../ui/error-boundary.js'
 import { loadConfig } from '../config/loader.js'
 import { themeManager } from '../core/themes.js'
 import { i18n } from '../core/i18n.js'
@@ -76,7 +77,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
     }, 2000)
 
     // Write hint to stderr so it appears even if TUI is rendering
-    process.stderr.write('\n\x1b[33m⚠ Нажмите Ctrl+C ещё раз для выхода\x1b[0m\n')
+    process.stderr.write(`\n\x1b[33m⚠ ${i18n.t('ctrlCHint')}\x1b[0m\n`)
   }
 
   // SIGTERM: always exit gracefully regardless of agent state
@@ -89,7 +90,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
   process.on('SIGTERM', onSIGTERM)
 
   const { waitUntilExit, clear } = render(
-    React.createElement(App, { config, options }),
+    React.createElement(ErrorBoundary, null, React.createElement(App, { config, options })),
     { exitOnCtrlC: false }  // App owns Ctrl+C: useInput handles raw-mode, onSIGINT handles signal
   )
 

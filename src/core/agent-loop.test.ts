@@ -92,7 +92,7 @@ describe('AgentLoop', () => {
 
     ac.abort()
     const result = await agent.run('test prompt')
-    expect(result).toContain('отменено')
+    expect(result).toContain('cancelled')
   })
 
   it('should handle max iterations', async () => {

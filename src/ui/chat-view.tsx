@@ -1,5 +1,6 @@
 import React from 'react'
 import { Box, Text } from 'ink'
+import { debug } from '../utils/logger.js'
 import type { ChatMessage } from '../api/index.js'
 import type { ToolCallEvent } from '../core/agent-loop.js'
 import { i18n } from '../core/i18n.js'
@@ -65,7 +66,8 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
           </Box>
         )
       }
-    } catch {
+    } catch (e) {
+      debug('chat-view: tool card parse error', e)
       // fall through to normal rendering
     }
   }
@@ -103,7 +105,8 @@ export const ChatView = React.memo(
         try {
           const parsed = typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content
           return parsed?.type === 'tool_activity_card'
-        } catch {
+        } catch (e) {
+          debug('chat-view: message filter parse error', e)
           return false
         }
       }
@@ -157,7 +160,7 @@ export const ChatView = React.memo(
               {hiddenBelow > 0 && (
                 <Box paddingX={1}>
                   {hasNewMessages
-                    ? <Text bold color='yellow'>↓ {hiddenBelow} новых — End для перехода</Text>
+                    ? <Text bold color={colors.warning}>↓ {hiddenBelow} новых — End для перехода</Text>
                     : <Text dimColor>↓ {hiddenBelow} новее — PageDown</Text>}
                 </Box>
               )}

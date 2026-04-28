@@ -27,10 +27,10 @@ export function getToolsForMode (mode: 'plan' | 'default' | 'auto-edit' | 'yolo'
       // Plan mode: only read/search tools
       return tools.filter(t => t.approval === 'never')
     case 'auto-edit':
-      // Auto-edit: auto-approve write/edit/browser, still ask for shell
+      // Auto-edit: auto-approve write/edit, still ask for shell and chrome
       return tools.map(t => ({
         ...t,
-        approval: t.tool.name === 'write_file' || t.tool.name === 'edit' || t.tool.name === 'chrome'
+        approval: t.tool.name === 'write_file' || t.tool.name === 'edit'
           ? 'auto' as ApprovalRequirement
           : t.approval,
       }))

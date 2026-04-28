@@ -95,10 +95,14 @@ export class DeepSeekAPI {
     messages: ChatMessage[],
     tools?: OpenAITool[]
   ): AsyncGenerator<StreamChunk> {
-    const fullMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: this.systemPrompt },
-      ...buildMessages(messages),
-    ]
+    // Only prepend system prompt if messages don't already contain one
+    const hasSystem = messages.some(m => m.role === 'system')
+    const fullMessages: OpenAI.Chat.ChatCompletionMessageParam[] = hasSystem
+      ? buildMessages(messages)
+      : [
+          { role: 'system', content: this.systemPrompt },
+          ...buildMessages(messages),
+        ]
 
     const timeoutController = new AbortController()
     let chunkTimer: ReturnType<typeof setTimeout>

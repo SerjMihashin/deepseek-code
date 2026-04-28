@@ -30,6 +30,16 @@ chrome-cli-tools/
 *.handoff.md
 *execution-bundle*.json
 *.session.json
+*test-report*.md
+BROWSER_TEST_REPORT.md
+
+# Chrome test screenshots
+*-screenshot.png
+browser-test-*.png
+test-*.png
+github-screenshot.png
+wikipedia-screenshot.png
+google-screenshot.png
 
 # Internal development artifacts (not for open-source)
 CHANGELOG.md

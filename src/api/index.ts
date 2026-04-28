@@ -232,7 +232,7 @@ export class DeepSeekAPI {
   async chat (
     messages: ChatMessage[],
     tools?: OpenAITool[]
-  ): Promise<{ content: string; toolCalls?: ToolCallMessage['tool_calls'] }> {
+  ): Promise<{ content: string; toolCalls?: ToolCallMessage['tool_calls']; usage?: { input: number; output: number } }> {
     const fullMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: this.systemPrompt },
       ...buildMessages(messages),
@@ -262,7 +262,12 @@ export class DeepSeekAPI {
       }
     }
 
-    return { content: message?.content ?? '' }
+    return {
+      content: message?.content ?? '',
+      usage: response.usage
+        ? { input: response.usage.prompt_tokens ?? 0, output: response.usage.completion_tokens ?? 0 }
+        : undefined,
+    }
   }
 
   /** Validate API key by making a minimal models list request */

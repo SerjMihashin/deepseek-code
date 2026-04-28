@@ -2,6 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { execSync } from 'node:child_process'
+
+const hasRg = (() => { try { execSync('rg --version', { stdio: 'ignore' }); return true } catch { return false } })()
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
 import { editTool } from './edit.js'
@@ -211,7 +214,7 @@ describe('glob tool', () => {
   })
 })
 
-describe('grep_search tool', () => {
+describe.skipIf(!hasRg)('grep_search tool', () => {
   beforeAll(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
     createTempFile('search.txt', 'hello world\nfoo bar\nHELLO')

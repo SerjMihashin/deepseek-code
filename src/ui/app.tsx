@@ -349,11 +349,9 @@ export function App ({ config, options }: AppProps) {
           // onResponse intentionally removed — onStreamChunk handles all text
           // Avoids duplicate "assistant" message push that caused text doubling
           onResponse: () => {},
-          onError: (error) => {
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: `Error: ${error.message}`,
-            }])
+          onError: () => {
+            // Handled by handleSubmit catch block — adding here would create duplicate
+            // assistant messages, breaking the conversation structure for the next request
           },
           onApprovalRequest: async (toolName, args) => {
             if (approvalModeRef.current === 'turbo') return true
@@ -453,11 +451,11 @@ export function App ({ config, options }: AppProps) {
         friendlyMsg = i18n.t('apiErrorAuth')
       } else if (msg.includes('429') || msg.includes('rate limit')) {
         friendlyMsg = i18n.t('apiErrorRateLimit')
-      } else if (msg.includes('5') || msg.includes('server error') || msg.includes('Service Unavailable')) {
+      } else if (/5\d{2}|server error|Service Unavailable/i.test(msg)) {
         friendlyMsg = i18n.t('apiErrorServer')
-      } else if (msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND') || msg.includes('ETIMEDOUT')) {
+      } else if (/ECONNRESET|ECONNREFUSED|ENOTFOUND/i.test(msg)) {
         friendlyMsg = i18n.t('apiErrorNetwork')
-      } else if (msg.includes('timed out')) {
+      } else if (/ETIMEDOUT|timed out/i.test(msg)) {
         friendlyMsg = i18n.t('apiErrorTimeout')
       } else {
         friendlyMsg = `${i18n.t('error')}: ${msg}`

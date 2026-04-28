@@ -327,6 +327,9 @@ export class AgentLoop extends EventEmitter {
         if (toolCalls.length === 0 && (!responseContent || responseContent.trim().length === 0)) {
           // Streaming не дал результата — пробуем non-streaming как fallback
           const fallbackResult = await this.api.chat(this.messages, openAITools)
+          if (fallbackResult.usage) {
+            this.metrics.recordTokens(fallbackResult.usage.input, fallbackResult.usage.output)
+          }
 
           if (fallbackResult.toolCalls && fallbackResult.toolCalls.length > 0) {
             toolCalls = fallbackResult.toolCalls

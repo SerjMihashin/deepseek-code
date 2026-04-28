@@ -125,7 +125,9 @@ async function collectConsoleMessages (
   page.on('console', handleConsole)
 
   try {
-    await navigateIfNeeded(args, page)
+    if (args.url) {
+      await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout: args.timeout ?? 30000 })
+    }
     await sleep(2000)
   } finally {
     page.off('console', handleConsole)
@@ -171,8 +173,10 @@ async function collectNetworkRequests (
   page.on('request', handleRequest)
 
   try {
-    await navigateIfNeeded(args, page)
-    await sleep(3000)
+    if (args.url) {
+      await page.goto(args.url, { waitUntil: 'domcontentloaded', timeout: args.timeout ?? 30000 })
+    }
+    await sleep(2000)
   } finally {
     page.off('request', handleRequest)
   }

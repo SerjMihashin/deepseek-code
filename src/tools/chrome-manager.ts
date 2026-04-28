@@ -92,7 +92,7 @@ class ChromeManager extends EventEmitter {
 
     const launchOptions: LaunchOptions = {
       headless: this.headlessMode,
-      defaultViewport: null,
+      defaultViewport: this.headlessMode ? { width: 1280, height: 900 } : null,
       args: [
         `--remote-debugging-port=${this.debugPort}`,
         `--user-data-dir=${tmpDir}`,

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { themeManager } from '../core/themes.js'
+import { COMMAND_NAMES } from '../commands/index.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void;
@@ -11,31 +12,9 @@ interface InputBarProps {
   isSetupMode?: boolean;
   emptyHint?: boolean;
   onImagePaste?: (base64: string, mimeType: string) => void;
+  /** Block all keyboard input (e.g. when approval dialog or yolo confirmation is active) */
+  blockInput?: boolean;
 }
-
-const COMMANDS = [
-  '/setup',
-  '/remember',
-  '/forget',
-  '/memory',
-  '/compress',
-  '/checkpoint',
-  '/restore',
-  '/mcp',
-  '/skills',
-  '/agents',
-  '/review',
-  '/sandbox',
-  '/git',
-  '/loop',
-  '/stats',
-  '/theme',
-  '/lang',
-  '/language',
-  '/extensions',
-  '/followup',
-  '/help',
-]
 
 /** Max visible rows for the input area before internal scroll kicks in */
 const MAX_VISIBLE_ROWS = 5
@@ -43,7 +22,7 @@ const MAX_VISIBLE_ROWS = 5
 /** Max visible suggestions in the dropdown before scrolling */
 const SUGGESTIONS_MAX_VISIBLE = 8
 
-export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste }: InputBarProps) {
+export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste, blockInput }: InputBarProps) {
   const [input, setInput] = useState('')
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
@@ -85,11 +64,11 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
 
   // Compute command suggestions from current input
   const suggestions = input.startsWith('/')
-    ? COMMANDS.filter(cmd => cmd.startsWith(input.toLowerCase()))
+    ? COMMAND_NAMES.filter(cmd => cmd.startsWith(input.toLowerCase()))
     : []
 
   const getSuggestions = (text: string) =>
-    text.startsWith('/') ? COMMANDS.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
+    text.startsWith('/') ? COMMAND_NAMES.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
 
   // Calculate number of visual lines the input text occupies
   const terminalWidth = process.stdout.columns || 80
@@ -101,6 +80,10 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
 
   useInput((_input, key) => {
     if (disabled) return
+
+    // When blockInput is active (approval dialog, yolo confirmation, etc.),
+    // do NOT consume any keys — let parent useInput handle them.
+    if (blockInput) return
 
     // In setup mode, only handle Enter and character input, not arrows/tab
     if (isSetupMode) {

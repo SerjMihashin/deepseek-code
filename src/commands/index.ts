@@ -21,39 +21,6 @@ import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools/chrome.js'
 import { chromeManager } from '../tools/chrome-manager.js'
 
-// ─── Help text ───────────────────────────────────────────────────────────────
-
-const HELP_TEXT = `Available commands:
-
-  /help              Показать справку
-  /setup             Настройки (язык, API-ключ, тема, режим разрешений)
-  /remember <text>   Сохранить в память
-  /forget <text>     Удалить из памяти по поиску
-  /memory            Показать все сохранённые записи
-  /compress          Сжать историю диалога
-  /checkpoint        Сохранить чекпоинт
-  /restore [id]      Восстановить чекпоинт
-  /mcp <list|connect>  Управление MCP-серверами
-  /skills [name]     Список или просмотр навыков агента
-  /agents            Список активных под-агентов
-  /review <all|diff|auto>  Проверка кода
-  /sandbox <cmd>     Выполнить команду в песочнице
-  /git <commit|branch|diff|status>  Git-операции
-  /loop <interval>   Запланировать повторяющуюся задачу
-  /stats             Статистика сессии
-  /theme <name>      Сменить тему оформления
-  /lang <lang>       Сменить язык (en/ru/zh)
-  /extensions        Список расширений
-  /followup          Сгенерировать предложения продолжения
-  /logs              Показать журнал действий
-  /plan              Показать план работы
-  /tools             Показать доступные инструменты и их статус
-  /capabilities      Показать полные возможности агента
-  /browser-test      Протестировать Chrome browser tools
-  /last-browser-test  Показать последний отчёт browser-test
-  /chrome [--headed|--headless]  Переключить режим Chrome
-  /clear             Очистить чат`
-
 // ─── Command handler type ────────────────────────────────────────────────────
 
 export interface SlashCommandContext {
@@ -106,10 +73,13 @@ function generateFollowups (lastContent: string): string[] {
 // ─── Command handlers ────────────────────────────────────────────────────────
 
 async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: HELP_TEXT,
-  }])
+  const lines = ['**Available commands:**', '']
+  for (const cmd of COMMANDS) {
+    if (cmd.name === '/language') continue
+    lines.push(`  ${cmd.name.padEnd(22)} ${cmd.description}`)
+  }
+  lines.push('', '  /clear                 Clear chat history')
+  ctx.setMessages(prev => [...prev, { role: 'assistant', content: lines.join('\n') }])
   return true
 }
 
@@ -718,34 +688,9 @@ async function cmdLogs (ctx: SlashCommandContext): Promise<boolean> {
 }
 
 async function cmdPlan (ctx: SlashCommandContext): Promise<boolean> {
-  const card = {
-    type: 'tool_activity_card' as const,
-    toolCalls: [{
-      id: 'plan-card',
-      name: 'tasks',
-      arguments: {} as Record<string, unknown>,
-      status: 'completed' as const,
-      result: JSON.stringify({
-        type: 'tasks' as const,
-        current: 'Implementing UX cards for tool actions',
-        completed: [
-          'Activity card types designed (Shell, File, Error, Unsupported, Tasks)',
-          'activity-cards.tsx created with all 5 card components',
-          'ChatView integration — tool calls render as proper cards',
-          'Sandbox capability guard for Windows',
-        ],
-        next: [
-          'Verify typecheck + build pass',
-          'Test card rendering in TUI',
-        ],
-        errors: [],
-      }),
-    }],
-    status: 'compact' as const,
-  }
   ctx.setMessages(prev => [...prev, {
-    role: 'tool',
-    content: JSON.stringify(card),
+    role: 'assistant',
+    content: 'Use **/capabilities** to see all agent capabilities, or **/stats** for session statistics.',
   }])
   return true
 }
@@ -998,45 +943,48 @@ async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
 
 // ─── Command registry ────────────────────────────────────────────────────────
 
-interface CommandEntry {
+export interface CommandEntry {
   name: string
+  description: string
   handler: (ctx: SlashCommandContext, input: string) => Promise<boolean>
 }
 
-const commands: CommandEntry[] = [
-  { name: '/help', handler: cmdHelp },
-  { name: '/setup', handler: cmdSetup },
-  { name: '/remember', handler: cmdRemember },
-  { name: '/forget', handler: cmdForget },
-  { name: '/memory', handler: cmdMemory },
-  { name: '/compress', handler: cmdCompress },
-  { name: '/checkpoint', handler: cmdCheckpoint },
-  { name: '/restore', handler: cmdRestore },
-  { name: '/mcp', handler: cmdMcp },
-  { name: '/skills', handler: cmdSkills },
-  { name: '/agents', handler: cmdAgents },
-  { name: '/review', handler: cmdReview },
-  { name: '/sandbox', handler: cmdSandbox },
-  { name: '/git', handler: cmdGit },
-  { name: '/loop', handler: cmdLoop },
-  { name: '/stats', handler: cmdStats },
-  { name: '/theme', handler: cmdTheme },
-  { name: '/lang', handler: cmdLang },
-  { name: '/language', handler: cmdLang },
-  { name: '/extensions', handler: cmdExtensions },
-  { name: '/followup', handler: cmdFollowup },
-  { name: '/logs', handler: cmdLogs },
-  { name: '/plan', handler: cmdPlan },
-  { name: '/tools', handler: cmdTools },
-  { name: '/capabilities', handler: cmdCapabilities },
-  { name: '/browser-test', handler: cmdBrowserTest },
-  { name: '/browser-real-test', handler: cmdBrowserRealTest },
-  { name: '/last-browser-test', handler: cmdLastBrowserTest },
-  { name: '/chrome', handler: cmdChrome },
+export const COMMANDS: CommandEntry[] = [
+  { name: '/help', description: 'Show this help', handler: cmdHelp },
+  { name: '/setup', description: 'Settings: language, API key, theme, mode', handler: cmdSetup },
+  { name: '/remember', description: 'Save to memory: /remember <text>', handler: cmdRemember },
+  { name: '/forget', description: 'Delete from memory by search', handler: cmdForget },
+  { name: '/memory', description: 'Show all saved memories', handler: cmdMemory },
+  { name: '/compress', description: 'Compress chat history', handler: cmdCompress },
+  { name: '/checkpoint', description: 'Create git checkpoint', handler: cmdCheckpoint },
+  { name: '/restore', description: 'List or restore checkpoint: /restore [id]', handler: cmdRestore },
+  { name: '/mcp', description: 'MCP servers: /mcp list | connect', handler: cmdMcp },
+  { name: '/skills', description: 'List or describe an agent skill', handler: cmdSkills },
+  { name: '/agents', description: 'List active subagents', handler: cmdAgents },
+  { name: '/review', description: 'Code review: /review all|diff|auto', handler: cmdReview },
+  { name: '/sandbox', description: 'Run command in sandbox', handler: cmdSandbox },
+  { name: '/git', description: 'Git: /git commit|branch|diff|status', handler: cmdGit },
+  { name: '/loop', description: 'Schedule recurring task: /loop <interval> <prompt>', handler: cmdLoop },
+  { name: '/stats', description: 'Session statistics with token usage', handler: cmdStats },
+  { name: '/theme', description: 'Switch theme or open picker', handler: cmdTheme },
+  { name: '/lang', description: 'Change language: /lang en|ru|zh', handler: cmdLang },
+  { name: '/language', description: 'Alias for /lang', handler: cmdLang },
+  { name: '/extensions', description: 'List installed extensions', handler: cmdExtensions },
+  { name: '/followup', description: 'Generate follow-up suggestions', handler: cmdFollowup },
+  { name: '/logs', description: 'Show recent log files', handler: cmdLogs },
+  { name: '/plan', description: 'Show capabilities overview', handler: cmdPlan },
+  { name: '/tools', description: 'Show available tools and approval status', handler: cmdTools },
+  { name: '/capabilities', description: 'Show full capability matrix', handler: cmdCapabilities },
+  { name: '/browser-test', description: 'Run Chrome browser test suite', handler: cmdBrowserTest },
+  { name: '/browser-real-test', description: 'Smoke test on real websites', handler: cmdBrowserRealTest },
+  { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
+  { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
 ]
 
+export const COMMAND_NAMES: string[] = COMMANDS.map(c => c.name)
+
 const commandMap = new Map<string, CommandEntry>()
-for (const cmd of commands) {
+for (const cmd of COMMANDS) {
   commandMap.set(cmd.name, cmd)
 }
 

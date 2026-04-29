@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { themeManager } from '../core/themes.js'
-import { COMMAND_NAMES } from '../commands/index.js'
+import { COMMAND_NAMES, COMMAND_MAP } from '../commands/index.js'
 import { visualWidth } from '../utils/string-width.js'
 
 interface InputBarProps {
@@ -278,14 +278,16 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
           {suggestions.slice(suggestionsScrollOffset, suggestionsScrollOffset + SUGGESTIONS_MAX_VISIBLE).map((cmd, i) => {
             const actualIndex = suggestionsScrollOffset + i
             const isActive = actualIndex === suggestionIndex || (suggestionIndex < 0 && actualIndex === 0)
+            const desc = COMMAND_MAP.get(cmd) ?? ''
+            const maxDescWidth = Math.max(0, (process.stdout.columns || 80) - cmd.length - 6)
+            const truncDesc = desc.length > maxDescWidth ? desc.slice(0, Math.max(0, maxDescWidth - 1)) + '…' : desc
             return (
               <Text key={cmd}>
                 {isActive
                   ? <Text bold color={colors.primary}>▸ </Text>
                   : <Text>  </Text>}
-                <Text color={isActive ? colors.primary : colors.textMuted}>
-                  {cmd}
-                </Text>
+                <Text color={isActive ? colors.primary : colors.textMuted}>{cmd}</Text>
+                {truncDesc ? <Text dimColor>  {truncDesc}</Text> : null}
               </Text>
             )
           })}

@@ -983,6 +983,10 @@ export const COMMANDS: CommandEntry[] = [
 
 export const COMMAND_NAMES: string[] = COMMANDS.map(c => c.name)
 
+export const COMMAND_MAP: ReadonlyMap<string, string> = new Map(
+  COMMANDS.map(c => [c.name, c.description])
+)
+
 const commandMap = new Map<string, CommandEntry>()
 for (const cmd of COMMANDS) {
   commandMap.set(cmd.name, cmd)

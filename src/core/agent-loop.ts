@@ -47,6 +47,7 @@ export interface ToolCallEvent {
   result?: string;
   error?: string;
   durationMs?: number;
+  startedAt?: number;
 }
 
 export interface ToolResultEvent {
@@ -410,10 +411,11 @@ export class AgentLoop extends EventEmitter {
 
             // Execute the tool
             toolCallEvent.status = 'running'
+            toolCallEvent.startedAt = Date.now()
             this.toolCallHistory.set(tc.id, toolCallEvent)
             this.metrics.recordToolCallStart(tc.function.name)
 
-            const startTime = Date.now()
+            const startTime = toolCallEvent.startedAt
             try {
               const toolResult = await this.executeTool(tc.function.name, args)
               const duration = Date.now() - startTime

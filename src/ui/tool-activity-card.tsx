@@ -1,8 +1,11 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Text } from 'ink'
 import type { ToolCallEvent } from '../core/agent-loop.js'
 import { themeManager } from '../core/themes.js'
 import { formatDuration } from '../utils/string-width.js'
+
+const BASH_TIMEOUT_MS = 30_000
+const DEFAULT_TIMEOUT_MS = 10_000
 
 interface ToolActivityCardProps {
   toolCalls: ToolCallEvent[];
@@ -107,6 +110,21 @@ function groupToolCalls (calls: ToolCallEvent[]): Array<{
 
 export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCalls, status = 'live' }: ToolActivityCardProps) {
   const colors = themeManager.getColors()
+  const [now, setNow] = useState(() => Date.now())
+
+  const isAnyRunning = toolCalls.some(tc => tc.status === 'running')
+  useEffect(() => {
+    if (!isAnyRunning) return
+    const id = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(id)
+  }, [isAnyRunning])
+
+  function elapsedColor (elapsed: number, timeoutMs: number): string {
+    const ratio = elapsed / timeoutMs
+    if (ratio >= 0.9) return colors.error
+    if (ratio >= 0.6) return colors.warning
+    return colors.success
+  }
   const statusColors: Record<string, string> = {
     pending: colors.warning,
     running: colors.info,
@@ -147,8 +165,9 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
           {groups.map((group) => {
             const icon = statusIcons[group.status] ?? '✳'
             const color = statusColors[group.status] ?? 'white'
-            const duration = group.latest.durationMs ? formatDuration(group.latest.durationMs) : ''
+            const isRunning = group.status === 'running'
             const isChrome = group.name === 'chrome'
+            const isBash = group.name === 'run_shell_command'
             const displayArgs = isChrome
               ? formatChromeArgs(group.latest.arguments)
               : formatArgs(group.latest.arguments)
@@ -160,6 +179,17 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
               ? ` ✗ ${group.latest.error.slice(0, 100)}`
               : null
 
+            let durationDisplay: React.ReactNode = null
+            if (isRunning && group.latest.startedAt !== undefined) {
+              const elapsed = now - group.latest.startedAt
+              const timeoutMs = isBash ? BASH_TIMEOUT_MS : DEFAULT_TIMEOUT_MS
+              const eColor = elapsedColor(elapsed, timeoutMs)
+              const warning = elapsed / timeoutMs >= 0.75 ? ' ⚠' : ''
+              durationDisplay = <Text color={eColor}> {formatDuration(elapsed)}{warning}</Text>
+            } else if (group.latest.durationMs) {
+              durationDisplay = <Text dimColor> - {formatDuration(group.latest.durationMs)}</Text>
+            }
+
             return (
               <Box key={group.name}>
                 <Text>
@@ -168,7 +198,7 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
                   <Text bold color={color}>{group.name}</Text>
                   {group.count > 1 && <Text color={color}> ×{group.count}</Text>}
                   {displayArgs ? <Text dimColor> {displayArgs}</Text> : null}
-                  {duration ? <Text dimColor> - {duration}</Text> : null}
+                  {durationDisplay}
                   {inlineResult ? <Text dimColor>{inlineResult}</Text> : null}
                   {inlineError ? <Text color={colors.error}>{inlineError}</Text> : null}
                 </Text>

@@ -4,7 +4,7 @@
   <p><strong>Open-source AI coding agent for your terminal — cheaper than Copilot, more powerful than a shell</strong></p>
 
   <p>
-    <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
+    <a href="https://github.com/SerjMihashin/deep-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
@@ -73,10 +73,10 @@ You: "Find the memory leak in server.ts and fix it"
 
 ```bash
 # Install globally
-npm install -g deepseek-code
+npm install -g deep-code
 
 # Or run without installing
-npx deepseek-code
+npx deep-code
 ```
 
 On first run, the setup wizard guides you through:
@@ -86,7 +86,7 @@ On first run, the setup wizard guides you through:
 4. Start coding
 
 ```bash
-deepseek-code          # interactive mode
+deep-code             # interactive mode
 dsc                    # short alias
 dsc -p "Fix the bug"   # one-shot prompt
 dsc --turbo            # auto-approve all actions (no confirmation)
@@ -198,8 +198,8 @@ src/
 Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ```bash
-git clone https://github.com/SerjMihashin/deepseek-code.git
-cd deepseek-code
+git clone https://github.com/SerjMihashin/deep-code.git
+cd deep-code
 npm install
 npm run dev
 ```

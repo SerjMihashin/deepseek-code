@@ -4,7 +4,7 @@
   <p><strong>Open-source AI-агент для разработки в терминале — дешевле Copilot, мощнее обычного шелла</strong></p>
 
   <p>
-    <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
+    <a href="https://github.com/SerjMihashin/deep-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
@@ -73,10 +73,10 @@
 
 ```bash
 # Установить глобально
-npm install -g deepseek-code
+npm install -g deep-code
 
 # Или запустить без установки
-npx deepseek-code
+npx deep-code
 ```
 
 При первом запуске мастер настройки проведёт через:
@@ -86,7 +86,7 @@ npx deepseek-code
 4. Начало работы
 
 ```bash
-deepseek-code          # интерактивный режим
+deep-code             # интерактивный режим
 dsc                    # короткий алиас
 dsc -p "Исправь баг"  # одиночный запрос
 dsc --turbo            # авто-подтверждение всего
@@ -198,8 +198,8 @@ src/
 Вклад приветствуется! Смотри [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
-git clone https://github.com/SerjMihashin/deepseek-code.git
-cd deepseek-code
+git clone https://github.com/SerjMihashin/deep-code.git
+cd deep-code
 npm install
 npm run dev
 ```

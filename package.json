@@ -1,10 +1,10 @@
 {
-  "name": "deepseek-code",
-  "version": "0.3.0",
+  "name": "deep-code",
+  "version": "0.3.1",
   "description": "AI-powered CLI agent for software development, powered by DeepSeek API",
   "bin": {
-    "deepseek-code": "dist/cli/index.js",
-    "dsc": "dist/cli/index.js"
+    "dsc": "dist/cli/index.js",
+    "deep-code": "dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -36,7 +36,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SerjMihashin/deepseek-code.git"
+    "url": "git+https://github.com/SerjMihashin/deep-code.git"
   },
   "engines": {
     "node": ">=20"

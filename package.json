@@ -36,7 +36,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/deepseek-ai/deepseek-code.git"
+    "url": "git+https://github.com/SerjMihashin/deepseek-code.git"
   },
   "engines": {
     "node": ">=20"

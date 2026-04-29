@@ -54,6 +54,30 @@ export interface ChromeToolArgs {
   quizStrategy?: 'first' | 'random';
 }
 
+const CHROME_ACTIONS: ChromeAction[] = [
+  'open',
+  'click',
+  'fill',
+  'eval',
+  'text',
+  'html',
+  'console',
+  'network',
+  'state',
+  'shot',
+  'nav',
+  'wait',
+  'scroll',
+  'locator',
+  'cookies',
+  'storage',
+  'quiz',
+]
+
+function isChromeAction (action: unknown): action is ChromeAction {
+  return typeof action === 'string' && CHROME_ACTIONS.includes(action as ChromeAction)
+}
+
 async function waitForElement (
   page: Page,
   selector: string,
@@ -200,6 +224,17 @@ async function collectNetworkRequests (
 }
 
 async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
+  if (!isChromeAction(args.action)) {
+    return { success: false, output: '', error: `Unknown action: ${String(args.action)}` }
+  }
+
+  if (args.action === 'state') {
+    return {
+      success: true,
+      output: JSON.stringify(chromeManager.getState(), null, 2),
+    }
+  }
+
   const timeout = args.timeout ?? 10000
   const sameTab = args.sameTab ?? true
   if (args.headless !== undefined) {
@@ -268,13 +303,6 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
 
       case 'network':
         return collectNetworkRequests(page, args)
-
-      case 'state': {
-        return {
-          success: true,
-          output: JSON.stringify(chromeManager.getState(), null, 2),
-        }
-      }
 
       case 'shot': {
         await navigateIfNeeded(args, page)

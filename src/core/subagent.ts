@@ -73,7 +73,9 @@ export class SubAgent extends EventEmitter {
         durationMs: Date.now() - startTime,
       }
 
-      this.emit('error', result)
+      if (this.listenerCount('error') > 0) {
+        this.emit('error', result)
+      }
       return result
     }
   }
@@ -138,7 +140,7 @@ export class SubAgentManager {
   }
 }
 
-function parseAgentConfig (content: string): SubAgentConfig | null {
+export function parseAgentConfig (content: string): SubAgentConfig | null {
   const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
   if (!frontmatterMatch) return null
 

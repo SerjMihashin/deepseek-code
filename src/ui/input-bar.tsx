@@ -17,6 +17,11 @@ interface InputBarProps {
   blockInput?: boolean;
 }
 
+export function resolveCommandSubmission (currentInput: string, currentSuggestions: string[], suggestionIndex: number): string {
+  if (currentSuggestions.length === 0) return currentInput.trim()
+  return suggestionIndex >= 0 ? currentSuggestions[suggestionIndex] ?? currentSuggestions[0] : currentSuggestions[0]
+}
+
 /** Max visible rows for the input area before internal scroll kicks in */
 const MAX_VISIBLE_ROWS = 5
 
@@ -148,7 +153,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       }
       // Enter submits the selected command (or current input if no selection)
       if (key.return && currentInput.trim()) {
-        const cmd = suggestionIndex >= 0 ? currentSuggestions[suggestionIndex] : currentInput.trim()
+        const cmd = resolveCommandSubmission(currentInput, currentSuggestions, suggestionIndex)
         onSubmit(cmd)
         setHistory(prev => [cmd, ...prev].slice(0, 100))
         setInput('')

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export interface LSPServerConfig {
   language: string;
@@ -52,7 +53,7 @@ export class LSPClient extends EventEmitter {
 
   constructor (private config: LSPServerConfig) {
     super()
-    this.rootUri = `file:///${process.cwd().replace(/\\/g, '/')}`
+    this.rootUri = pathToFileURL(process.cwd()).href
   }
 
   async initialize (): Promise<void> {
@@ -181,11 +182,11 @@ export class LSPClient extends EventEmitter {
   }
 
   private toUri (filePath: string): string {
-    return `file:///${filePath.replace(/\\/g, '/')}`
+    return pathToFileURL(filePath).href
   }
 
   private fromUri (uri: string): string {
-    return uri.replace(/^file:\/\//, '').replace(/\//g, '\\')
+    return fileURLToPath(uri)
   }
 
   private sendRequest (method: string, params: Record<string, unknown>): Promise<unknown> {

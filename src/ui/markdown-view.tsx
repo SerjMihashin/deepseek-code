@@ -48,14 +48,49 @@ function renderInline (text: string, colors: Colors): React.ReactNode {
 
 // ─── Table rendering ─────────────────────────────────────────────────────────
 
+function parseTableCells (line: string): string[] {
+  const trimmed = line.trim()
+  const body = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed
+  const withoutTrailing = body.endsWith('|') ? body.slice(0, -1) : body
+  return withoutTrailing.split('|').map(c => c.trim())
+}
+
+function isTableSeparator (line: string): boolean {
+  return /^\|?[\s\-:|]+\|?$/.test(line.trim())
+}
+
+function padVisual (text: string, width: number): string {
+  return text + ' '.repeat(Math.max(0, width - visualWidth(text)))
+}
+
+function tableColumnWidths (lines: string[]): number[] {
+  const widths: number[] = []
+  for (const line of lines) {
+    if (isTableSeparator(line)) continue
+    parseTableCells(line).forEach((cell, i) => {
+      widths[i] = Math.max(widths[i] ?? 0, visualWidth(cell))
+    })
+  }
+  return widths
+}
+
+function shouldRenderTableAsList (lines: string[]): boolean {
+  const termWidth = process.stdout.columns || 80
+  const maxTableWidth = Math.max(24, termWidth - 6)
+  const widths = tableColumnWidths(lines)
+  const tableWidth = widths.reduce((sum, width) => sum + width + 3, 1)
+  const maxCellWidth = Math.max(18, Math.floor(maxTableWidth * 0.35))
+
+  return widths.length === 0 || tableWidth > maxTableWidth || widths.some(width => width > maxCellWidth)
+}
+
 function renderTableAsList (lines: string[], headerIdx: number, colors: Colors): React.ReactNode {
-  // Render table as simple list of key: value pairs
-  const headers = lines[headerIdx].split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1).map(h => h.trim())
-  const dataLines = lines.filter((_, i) => i !== headerIdx && i !== headerIdx + 1 && !/^\|[\s\-:|]+\|/.test(lines[i]))
+  const headers = parseTableCells(lines[headerIdx])
+  const dataLines = lines.filter((_, i) => i !== headerIdx && i !== headerIdx + 1 && !isTableSeparator(lines[i]))
   const rows: React.ReactNode[] = []
 
   for (const line of dataLines) {
-    const cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1).map(c => c.trim())
+    const cells = parseTableCells(line)
     const pairs = cells.map((cell, ci) => {
       const label = headers[ci] || `col${ci + 1}`
       return `${label}: ${cell}`
@@ -70,36 +105,15 @@ function renderTableAsList (lines: string[], headerIdx: number, colors: Colors):
   return <Box flexDirection='column'>{rows}</Box>
 }
 
-function renderTableRow (line: string, isHeader: boolean, colors: Colors): React.ReactNode {
-  const termWidth = process.stdout.columns || 80
-  const maxTableWidth = termWidth - 6 // account for padding + border
-  const cells = line.split('|').filter((_, i, arr) => i > 0 && i < arr.length - 1)
+function renderTableRow (line: string, isHeader: boolean, colors: Colors, widths: number[]): React.ReactNode {
+  const cells = parseTableCells(line)
 
-  // Check if any cell is too wide or contains wide chars
-  let totalWidth = 0
-  let hasWide = false
-  for (const cell of cells) {
-    const trimmed = cell.trim()
-    const vw = visualWidth(trimmed)
-    totalWidth += vw + 3 // cell + padding + border
-    if (vw > 30 || visualWidth(trimmed) !== trimmed.length) hasWide = true
-  }
-
-  // If table is too wide or has wide chars, render as simple list
-  if (totalWidth > maxTableWidth || hasWide) {
-    // Signal to caller that table needs list rendering
-    return null
-  }
-
-  // Safe table: use simple ASCII delimiters
   return (
     <Box flexDirection='row'>
       <Text>{'| '}</Text>
       {cells.map((cell, i) => {
         const trimmed = cell.trim()
-        const padded = isHeader
-          ? ` ${trimmed} `
-          : ` ${trimmed.padEnd(Math.max(visualWidth(trimmed), 8))} `
+        const padded = `${padVisual(trimmed, widths[i] ?? visualWidth(trimmed))} `
         return (
           <React.Fragment key={i}>
             <Text bold={isHeader} color={isHeader ? colors.primary : undefined}>
@@ -175,13 +189,12 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
 
       // Find header row (first non-separator row before a separator row)
       const headerIdx = tableLines.findIndex((l, idx) =>
-        idx + 1 < tableLines.length && /^\|[\s\-:|]+\|/.test(tableLines[idx + 1])
+        idx + 1 < tableLines.length && isTableSeparator(tableLines[idx + 1])
       )
 
       if (headerIdx >= 0) {
         // Check if table fits — renderTableRow returns null if too wide
-        const testRow = renderTableRow(tableLines[headerIdx], true, colors)
-        if (testRow === null) {
+        if (shouldRenderTableAsList(tableLines)) {
           // Fallback: render as list
           rendered.push(
             <Box key={rendered.length} flexDirection='column' marginLeft={1}>
@@ -189,15 +202,21 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
             </Box>
           )
         } else {
+          const widths = tableColumnWidths(tableLines)
+          const borderWidth = Math.min(
+            process.stdout.columns - 6 || 60,
+            widths.reduce((sum, width) => sum + width + 3, 1)
+          )
+
           // Render full table
           rendered.push(
             <Box key={rendered.length} flexDirection='column' marginLeft={1}>
               {tableLines.map((tl, ti) => {
-                if (/^\|[\s\-:|]+\|/.test(tl)) {
-                  return <Text key={ti} color={colors.border}>{'─'.repeat(Math.min(process.stdout.columns - 6 || 60, 60))}</Text>
+                if (isTableSeparator(tl)) {
+                  return <Text key={ti} color={colors.border}>{'─'.repeat(borderWidth)}</Text>
                 }
                 const isHeader = ti === headerIdx
-                return <React.Fragment key={ti}>{renderTableRow(tl, isHeader, colors)}</React.Fragment>
+                return <React.Fragment key={ti}>{renderTableRow(tl, isHeader, colors, widths)}</React.Fragment>
               })}
             </Box>
           )

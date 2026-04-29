@@ -29,6 +29,29 @@ interface AppProps {
   options: SessionOptions;
 }
 
+function stripExecutionSummary (content: string): string {
+  return content.replace(/\n\n━━━ Execution Summary ━━━[\s\S]*$/u, '').trimEnd()
+}
+
+function historyForModel (messages: ChatMessage[]): ChatMessage[] {
+  return messages.flatMap(message => {
+    if (message.role === 'tool') {
+      try {
+        const parsed = typeof message.content === 'string' ? JSON.parse(message.content) : message.content
+        if (parsed?.type === 'tool_activity_card') return []
+      } catch {
+        // Keep non-UI tool messages.
+      }
+    }
+
+    if (message.role === 'assistant' && typeof message.content === 'string') {
+      return [{ ...message, content: stripExecutionSummary(message.content) }]
+    }
+
+    return [message]
+  })
+}
+
 // Setup wizard step components are now in ./setup-wizard.tsx
 // Logo, SetupWizard, useSetupWizard imported from there
 
@@ -219,7 +242,7 @@ export function App ({ config, options }: AppProps) {
       setStatusText,
       setSetupStep,
       addServiceNotice,
-      getMetrics: () => agentLoopRef.current!.getMetrics(),
+      getMetrics: () => agentLoopRef.current?.getMetrics(),
       onThemePicker: () => {
         const themes = themeManager.listThemes()
         const currentName = themeManager.theme.name
@@ -376,16 +399,7 @@ export function App ({ config, options }: AppProps) {
         }
       )
 
-      const finalResponse = await agentLoopRef.current.run(input, messages.filter(m => {
-        // Filter out tool activity cards — they are UI-only and not valid API messages
-        if (m.role === 'tool') {
-          try {
-            const parsed = typeof m.content === 'string' ? JSON.parse(m.content) : m.content
-            if (parsed?.type === 'tool_activity_card') return false
-          } catch { /* not JSON, keep it */ }
-        }
-        return true
-      }))
+      const finalResponse = await agentLoopRef.current.run(input, historyForModel(messages))
 
       const toolHistory = agentLoopRef.current.getToolCallHistory()
       const bundleFile = await writeExecutionBundle({

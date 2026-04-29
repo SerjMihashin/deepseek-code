@@ -3,14 +3,14 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
-
-const hasRg = (() => { try { execSync('rg --version', { stdio: 'ignore' }); return true } catch { return false } })()
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
 import { editTool } from './edit.js'
 import { bashTool } from './bash.js'
 import { globTool } from './glob.js'
 import { grepTool } from './grep.js'
+
+const hasRg = (() => { try { execSync('rg --version', { stdio: 'ignore' }); return true } catch { return false } })()
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
@@ -181,6 +181,22 @@ describe('bash tool', () => {
     const result = await bashTool.execute({ command: ':(){ :|:& };:' })
     expect(result.success).toBe(false)
     expect(result.error).toContain('dangerous')
+  })
+
+  it('should reject dangerous PowerShell commands', async () => {
+    const commands = [
+      'Remove-Item C:\\ -Recurse -Force',
+      'Stop-Computer',
+      'Restart-Computer',
+      'Clear-Disk -Number 0',
+      'Format-Volume -DriveLetter C',
+    ]
+
+    for (const command of commands) {
+      const result = await bashTool.execute({ command })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('dangerous')
+    }
   })
 
   it('should handle command failure', async () => {

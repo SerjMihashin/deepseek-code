@@ -91,8 +91,7 @@ export function MatrixRain () {
 
   const initialColumns = useMemo(
     () => initColumns(numColumns, termHeight),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [numColumns, termHeight]
   )
   const [columns, setColumns] = useState<Column[]>(initialColumns)
 

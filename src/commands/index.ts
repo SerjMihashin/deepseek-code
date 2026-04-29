@@ -39,7 +39,7 @@ export interface SlashCommandContext {
   /** Show a transient service notice (does NOT add to chat messages, does NOT break empty-state) */
   addServiceNotice?: (text: string) => void
   /** Returns current session metrics (tokens, cost, tool calls) */
-  getMetrics?: () => MetricsCollector
+  getMetrics?: () => MetricsCollector | undefined
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

@@ -317,21 +317,29 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
                   <Box key={i}>
                     {i === 0 && <Text bold color={colors.primary}>{'>'}</Text>}
                     {i > 0 && <Text> </Text>}
-                    <Text wrap='wrap' color={colors.text}>{line || ' '}</Text>
+                    <Text color={colors.text}>{line || ' '}</Text>
                     {i === visibleLines.length - 1 && !disabled && (
                       <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
                     )}
                   </Box>
                 ))
               )}
+          {pendingImageLabel && (
+            <Box>
+              <Text color={colors.info}>{pendingImageLabel}</Text>
+            </Box>
+          )}
+          {(input.length > 0 && !disabled) || needsScroll
+            ? (
+              <Box justifyContent='flex-end'>
+                {needsScroll && <Text color={colors.textMuted}>↑↓  </Text>}
+                {input.length > 0 && !disabled && (
+                  <Text color={colors.textMuted}>Enter — отправить</Text>
+                )}
+              </Box>
+              )
+            : null}
         </Box>
-        {pendingImageLabel && <Text color={colors.info}> {pendingImageLabel}</Text>}
-        {input.length > 0 && !disabled && (
-          <Text color={colors.textMuted}>  (Enter — отправить)</Text>
-        )}
-        {needsScroll && (
-          <Text color={colors.textMuted}>  ↑↓ scroll</Text>
-        )}
       </Box>
     </Box>
   )

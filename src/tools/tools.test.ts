@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { tmpdir } from 'node:os'
 import { execSync } from 'node:child_process'
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
@@ -27,7 +26,7 @@ function createTempFile (name: string, content: string): string {
 
 describe('read_file tool', () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
   })
 
   afterAll(() => {
@@ -67,11 +66,18 @@ describe('read_file tool', () => {
     expect(result.success).toBe(false)
     expect(result.error).toBeTruthy()
   })
+
+  it('should reject paths outside the workspace', async () => {
+    const outsidePath = join(process.cwd(), '..', 'outside.txt')
+    const result = await readTool.execute({ file_path: outsidePath })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('outside the workspace')
+  })
 })
 
 describe('write_file tool', () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
   })
 
   afterAll(() => {
@@ -104,11 +110,18 @@ describe('write_file tool', () => {
     const result = await writeTool.execute({ file_path: '', content: 'test' })
     expect(result.success).toBe(false)
   })
+
+  it('should reject writes outside the workspace', async () => {
+    const outsidePath = join(process.cwd(), '..', 'outside.txt')
+    const result = await writeTool.execute({ file_path: outsidePath, content: 'test' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('outside the workspace')
+  })
 })
 
 describe('edit tool', () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
   })
 
   afterAll(() => {
@@ -156,6 +169,17 @@ describe('edit tool', () => {
       new_string: 'bar',
     })
     expect(result.success).toBe(false)
+  })
+
+  it('should reject edits outside the workspace', async () => {
+    const outsidePath = join(process.cwd(), '..', 'outside.txt')
+    const result = await editTool.execute({
+      file_path: outsidePath,
+      old_string: 'foo',
+      new_string: 'bar',
+    })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('outside the workspace')
   })
 })
 
@@ -207,7 +231,7 @@ describe('bash tool', () => {
 
 describe('glob tool', () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
     createTempFile('src/index.ts', '')
     createTempFile('src/utils/helper.ts', '')
     createTempFile('README.md', '')
@@ -232,7 +256,7 @@ describe('glob tool', () => {
 
 describe.skipIf(!hasRg)('grep_search tool', () => {
   beforeAll(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'dsc-test-'))
+    tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
     createTempFile('search.txt', 'hello world\nfoo bar\nHELLO')
   })
 

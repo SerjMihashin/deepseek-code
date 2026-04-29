@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { type Tool, type ToolResult } from './types.js'
+import { assertPathInWorkspace } from './path-safety.js'
 
 export const editTool: Tool = {
   name: 'edit',
@@ -37,6 +38,7 @@ export const editTool: Tool = {
     const replaceAll = !!args.replace_all
 
     try {
+      assertPathInWorkspace(filePath)
       const content = await readFile(filePath, 'utf-8')
 
       if (replaceAll) {

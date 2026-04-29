@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { type Tool, type ToolResult } from './types.js'
+import { assertPathInWorkspace } from './path-safety.js'
 
 export const readTool: Tool = {
   name: 'read_file',
@@ -27,6 +28,7 @@ export const readTool: Tool = {
   async execute (args: Record<string, unknown>): Promise<ToolResult> {
     const filePath = args.file_path as string
     try {
+      assertPathInWorkspace(filePath)
       const content = await readFile(filePath, 'utf-8')
       const lines = content.split('\n')
       const offset = (args.offset as number) ?? 0

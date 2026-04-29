@@ -1,6 +1,7 @@
 import { writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
+import { assertPathInWorkspace } from './path-safety.js'
 
 const MAX_FILE_SIZE = 1_048_576 // 1MB limit
 
@@ -35,6 +36,7 @@ export const writeTool: Tool = {
     }
 
     try {
+      assertPathInWorkspace(filePath)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, content, 'utf-8')
       return {

@@ -48,22 +48,22 @@ function renderInline (text: string, colors: Colors): React.ReactNode {
 
 // ─── Table rendering ─────────────────────────────────────────────────────────
 
-function parseTableCells (line: string): string[] {
+export function parseTableCells (line: string): string[] {
   const trimmed = line.trim()
   const body = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed
   const withoutTrailing = body.endsWith('|') ? body.slice(0, -1) : body
   return withoutTrailing.split('|').map(c => c.trim())
 }
 
-function isTableSeparator (line: string): boolean {
+export function isTableSeparator (line: string): boolean {
   return /^\|?[\s\-:|]+\|?$/.test(line.trim())
 }
 
-function padVisual (text: string, width: number): string {
+export function padVisual (text: string, width: number): string {
   return text + ' '.repeat(Math.max(0, width - visualWidth(text)))
 }
 
-function tableColumnWidths (lines: string[]): number[] {
+export function tableColumnWidths (lines: string[]): number[] {
   const widths: number[] = []
   for (const line of lines) {
     if (isTableSeparator(line)) continue
@@ -74,7 +74,7 @@ function tableColumnWidths (lines: string[]): number[] {
   return widths
 }
 
-function shouldRenderTableAsList (lines: string[]): boolean {
+export function shouldRenderTableAsList (lines: string[]): boolean {
   const termWidth = process.stdout.columns || 80
   const maxTableWidth = Math.max(24, termWidth - 6)
   const widths = tableColumnWidths(lines)

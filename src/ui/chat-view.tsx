@@ -47,7 +47,7 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
           return (
             <Box marginLeft={2} marginBottom={1}>
               <Text dimColor>
-                {hasErrors ? '⚠️ ' : '🔧 '}
+                {hasErrors ? '[warn] ' : '[tools] '}
                 Инструменты: {toolList}
                 {' · '}{toolCalls.length} {toolCalls.length === 1 ? 'вызов' : 'вызова'}
                 {totalDuration > 0 ? ` · ${(totalDuration < 1000 ? `${totalDuration}мс` : `${(totalDuration / 1000).toFixed(1)}с`)}` : ''}
@@ -88,7 +88,7 @@ function MessageBubble ({ message }: { message: ChatMessage }) {
         {isUser || isSystem
           ? <Text wrap='wrap'>{textContent}</Text>
           : <MarkdownView text={textContent} />}
-        {hasImage && <Text color={colors.info}>[📎 изображение прикреплено]</Text>}
+        {hasImage && <Text color={colors.info}>[image attached]</Text>}
       </Box>
     </Box>
   )

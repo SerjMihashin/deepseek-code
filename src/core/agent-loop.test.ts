@@ -34,7 +34,7 @@ function usageChunk (input: number, output: number): StreamChunk {
   return {
     type: 'usage',
     content: '',
-    usage: { input, output, total: input + output },
+    usage: { input, cacheHitInput: 0, cacheMissInput: input, output, reasoningOutput: 0, total: input + output },
   }
 }
 

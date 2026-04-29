@@ -123,7 +123,7 @@ async function cmdRemember (ctx: SlashCommandContext, input: string): Promise<bo
   })
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `✓ Saved to memory: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`,
+    content: `[ok] Saved to memory: "${text.slice(0, 100)}${text.length > 100 ? '...' : ''}"`,
   }])
   return true
 }
@@ -150,7 +150,7 @@ async function cmdForget (ctx: SlashCommandContext, input: string): Promise<bool
   }
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `✓ Deleted ${results.length} memory/memories matching: "${query}"`,
+    content: `[ok] Deleted ${results.length} memory/memories matching: "${query}"`,
   }])
   return true
 }
@@ -169,7 +169,7 @@ async function cmdMemory (ctx: SlashCommandContext): Promise<boolean> {
   ).join('\n')
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `📝 **Memories** (${memories.length}):\n\n${memoryList}`,
+      content: `**Memories** (${memories.length}):\n\n${memoryList}`,
   }])
   return true
 }
@@ -196,7 +196,7 @@ async function cmdCompress (ctx: SlashCommandContext): Promise<boolean> {
       const systemMsg = ctx.messages.find(m => m.role === 'system')
       ctx.setMessages([
         ...(systemMsg ? [systemMsg] : []),
-        { role: 'assistant', content: `📦 **Context Compressed**\n\nOriginal: ${msgCount} messages (~${(totalLen / 1024).toFixed(1)}KB)\n\n**Summary:**\n${summary}` },
+        { role: 'assistant', content: `**Context Compressed**\n\nOriginal: ${msgCount} messages (~${(totalLen / 1024).toFixed(1)}KB)\n\n**Summary:**\n${summary}` },
       ])
     } catch {
       ctx.setMessages(prev => [...prev, {
@@ -226,7 +226,7 @@ async function cmdCheckpoint (ctx: SlashCommandContext, input: string): Promise<
   }
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `✓ Checkpoint created: **${cp.id}**\nFiles: ${cp.files.length > 0 ? cp.files.join(', ') : '(no changes)'}`,
+    content: `[ok] Checkpoint created: **${cp.id}**\nFiles: ${cp.files.length > 0 ? cp.files.join(', ') : '(no changes)'}`,
   }])
   return true
 }
@@ -247,7 +247,7 @@ async function cmdRestore (ctx: SlashCommandContext, input: string): Promise<boo
     ).join('\n')
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `📋 **Checkpoints:**\n${list}\n\nUse \`/restore <id>\` to restore.`,
+      content: `**Checkpoints:**\n${list}\n\nUse \`/restore <id>\` to restore.`,
     }])
     return true
   }
@@ -257,13 +257,13 @@ async function cmdRestore (ctx: SlashCommandContext, input: string): Promise<boo
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
       content: restoredMessages
-        ? `✓ Restored checkpoint: ${arg}`
-        : `✗ Could not restore checkpoint: ${arg}`,
+        ? `[ok] Restored checkpoint: ${arg}`
+        : `[err] Could not restore checkpoint: ${arg}`,
     }])
   } catch (err) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `❌ Restore failed: ${(err as Error).message}`,
+      content: `[err] Restore failed: ${(err as Error).message}`,
     }])
   }
   ctx.setStatusText('Ready')
@@ -300,12 +300,12 @@ async function cmdMcp (ctx: SlashCommandContext, input: string): Promise<boolean
       await server.connect()
       ctx.setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `✓ Connected to MCP server: ${name} (${server.tools.length} tools)`,
+        content: `[ok] Connected to MCP server: ${name} (${server.tools.length} tools)`,
       }])
     } catch (err) {
       ctx.setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `❌ MCP connection failed: ${(err as Error).message}`,
+        content: `[err] MCP connection failed: ${(err as Error).message}`,
       }])
     }
   } else {
@@ -330,7 +330,7 @@ async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<bool
     }
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `📖 **Skill: ${skill.name}**\n\n${skill.description || ''}`,
+      content: `**Skill: ${skill.name}**\n\n${skill.description || ''}`,
     }])
   } else {
     const skills = skillsManager.listSkills()
@@ -339,7 +339,7 @@ async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<bool
       : skills.map(s => `- **${s.name}**: ${s.description}`).join('\n')
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `📖 **Available Skills**\n\n${list}`,
+      content: `**Available Skills**\n\n${list}`,
     }])
   }
   return true
@@ -374,14 +374,14 @@ async function cmdReview (ctx: SlashCommandContext, input: string): Promise<bool
   }
 
   ctx.setStatusText('Reviewing code...')
-  ctx.setMessages(prev => [...prev, { role: 'assistant', content: '🔍 Running code review...' }])
+  ctx.setMessages(prev => [...prev, { role: 'assistant', content: 'Running code review...' }])
 
   try {
     const result = await reviewCode(ctx.config, options)
     const report = formatReviewReport(result)
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `**Code Review Results**\n\nScore: **${result.score}/100**\nIssues: ${result.issues.length}\nDuration: ${(result.durationMs / 1000).toFixed(1)}s\n\n${report || '✅ No issues found.'}\n\n${result.summary}`,
+      content: `**Code Review Results**\n\nScore: **${result.score}/100**\nIssues: ${result.issues.length}\nDuration: ${(result.durationMs / 1000).toFixed(1)}s\n\n${report || '[ok] No issues found.'}\n\n${result.summary}`,
     }])
   } catch (err) {
     ctx.setMessages(prev => [...prev, {
@@ -430,8 +430,8 @@ async function cmdSandbox (ctx: SlashCommandContext, input: string): Promise<boo
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
       content: result.exitCode === 0
-        ? `✅ **Sandbox Result** (${(result.durationMs / 1000).toFixed(1)}s, exit: ${result.exitCode})\n\n${result.stdout.slice(0, 2000)}${result.stderr ? `\n\n**Stderr:**\n${result.stderr.slice(0, 1000)}` : ''}`
-        : `❌ **Sandbox Error** (exit: ${result.exitCode})\n\n${result.stderr.slice(0, 2000)}`,
+        ? `[ok] **Sandbox Result** (${(result.durationMs / 1000).toFixed(1)}s, exit: ${result.exitCode})\n\n${result.stdout.slice(0, 2000)}${result.stderr ? `\n\n**Stderr:**\n${result.stderr.slice(0, 1000)}` : ''}`
+        : `[err] **Sandbox Error** (exit: ${result.exitCode})\n\n${result.stderr.slice(0, 2000)}`,
     }])
   } catch (err) {
     ctx.setMessages(prev => [...prev, {
@@ -458,13 +458,13 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
           content: result.success
-            ? `✓ Committed: \`${msg}\` (${result.hash?.slice(0, 7)})`
-            : `✗ Commit failed: ${result.error}`,
+            ? `[ok] Committed: \`${msg}\` (${result.hash?.slice(0, 7)})`
+            : `[err] Commit failed: ${result.error}`,
         }])
       } catch (err) {
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `❌ Commit failed: ${(err as Error).message}`,
+          content: `[err] Commit failed: ${(err as Error).message}`,
         }])
       }
       ctx.setStatusText('Ready')
@@ -484,13 +484,13 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
           content: result.success
-            ? `🌿 Switched to branch: ${name}`
-            : `✗ ${result.error}`,
+            ? `Switched to branch: ${name}`
+            : `[err] ${result.error}`,
         }])
       } catch (err) {
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `❌ Branch failed: ${(err as Error).message}`,
+          content: `[err] Branch failed: ${(err as Error).message}`,
         }])
       }
       return true
@@ -505,7 +505,7 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
       } catch (err) {
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `❌ Diff failed: ${(err as Error).message}`,
+          content: `[err] Diff failed: ${(err as Error).message}`,
         }])
       }
       return true
@@ -521,7 +521,7 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
       } catch (err) {
         ctx.setMessages(prev => [...prev, {
           role: 'assistant',
-          content: `❌ Status failed: ${(err as Error).message}`,
+          content: `[err] Status failed: ${(err as Error).message}`,
         }])
       }
       return true
@@ -558,7 +558,7 @@ async function cmdLoop (ctx: SlashCommandContext, input: string): Promise<boolea
     scheduler.clearAll()
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: '✓ All tasks cleared.',
+      content: '[ok] All tasks cleared.',
     }])
   } else if (sub) {
     const parts = sub.split(/\s+/)
@@ -575,7 +575,7 @@ async function cmdLoop (ctx: SlashCommandContext, input: string): Promise<boolea
     const task = scheduler.addTask(prompt, intervalMs)
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `✓ Task scheduled: "${prompt}" every ${intervalStr} (ID: ${task.id})`,
+      content: `[ok] Task scheduled: "${prompt}" every ${intervalStr} (ID: ${task.id})`,
     }])
   } else {
     ctx.setMessages(prev => [...prev, {
@@ -599,7 +599,7 @@ async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
   let content = `**Session Statistics:**\n- Messages: ${ctx.messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${ctx.approvalMode}`
 
   if (usage && usage.total > 0) {
-    content += `\n\n**Token Usage:**\n- Input: ${usage.input.toLocaleString()} tokens\n- Output: ${usage.output.toLocaleString()} tokens\n- Total: ${usage.total.toLocaleString()} tokens\n- Est. Cost: $${cost.toFixed(4)}`
+    content += `\n\n**Token Usage:**\n- Input: ${usage.input.toLocaleString()} tokens\n- Cache hit input: ${usage.cacheHitInput.toLocaleString()} tokens\n- Cache miss input: ${usage.cacheMissInput.toLocaleString()} tokens\n- Output: ${usage.output.toLocaleString()} tokens\n- Reasoning output: ${usage.reasoningOutput.toLocaleString()} tokens\n- Total: ${usage.total.toLocaleString()} tokens\n- Est. Cost: $${cost.toFixed(4)}`
   }
 
   ctx.setMessages(prev => [...prev, { role: 'assistant', content }])
@@ -623,10 +623,10 @@ async function cmdTheme (ctx: SlashCommandContext, input: string): Promise<boole
   }
   const success = themeManager.setTheme(themeName)
   if (success) {
-    ctx.addServiceNotice?.(`🎨 Тема изменена: ${themeName}`)
+    ctx.addServiceNotice?.(`[theme] Тема изменена: ${themeName}`)
     ctx.setStatusText(`Тема: ${themeName}`)
   } else {
-    ctx.addServiceNotice?.(`❌ Тема "${themeName}" не найдена`)
+    ctx.addServiceNotice?.(`[err] Тема "${themeName}" не найдена`)
   }
   return true
 }
@@ -638,7 +638,7 @@ async function cmdModel (ctx: SlashCommandContext, input: string): Promise<boole
       ctx.onModelPicker()
     } else {
       const list = DEEPSEEK_MODELS.map(m =>
-        `- **${m.label}** (\`${m.id}\`): ${m.description}${m.id === ctx.config.model ? ' ✓ current' : ''}`
+        `- **${m.label}** (\`${m.id}\`): ${m.description}${m.id === ctx.config.model ? ' [current]' : ''}`
       ).join('\n')
       ctx.setMessages(prev => [...prev, {
         role: 'assistant',
@@ -653,7 +653,7 @@ async function cmdModel (ctx: SlashCommandContext, input: string): Promise<boole
   const { saveConfig } = await import('../config/loader.js')
   await saveConfig({ ...ctx.config, model: targetId })
   const label = found?.label ?? targetId
-  ctx.addServiceNotice?.(`🤖 Модель: ${label} (${targetId})`)
+  ctx.addServiceNotice?.(`[model] Модель: ${label} (${targetId})`)
   return true
 }
 
@@ -668,7 +668,7 @@ async function cmdLang (ctx: SlashCommandContext, input: string): Promise<boolea
   }
   i18n.setLocale(code)
   await saveConfig({ ...ctx.config, language: code })
-  ctx.addServiceNotice?.(`🌐 Язык изменён: ${code}`)
+  ctx.addServiceNotice?.(`[lang] Язык изменён: ${code}`)
   return true
 }
 
@@ -695,7 +695,7 @@ async function cmdFollowup (ctx: SlashCommandContext): Promise<boolean> {
   const suggestions = generateFollowups(lastContent)
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `💡 **Follow-up suggestions:**\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+    content: `**Follow-up suggestions:**\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
   }])
   return true
 }
@@ -719,7 +719,7 @@ async function cmdLogs (ctx: SlashCommandContext): Promise<boolean> {
     const fileList = files.map((f, i) => `${i + 1}. ${f}`).join('\n')
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `📋 **Recent Logs** (${files.length} files):\n\n${fileList}\n\n**Tail of ${files[0]}:**\n\`\`\`\n${latestLog}\n\`\`\``,
+      content: `**Recent Logs** (${files.length} files):\n\n${fileList}\n\n**Tail of ${files[0]}:**\n\`\`\`\n${latestLog}\n\`\`\``,
     }])
   } catch {
     ctx.setMessages(prev => [...prev, {
@@ -745,7 +745,7 @@ async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
 
   const toolLines = allTools.map(def => {
     const t = def.tool
-    const inMode = modeToolNames.has(t.name) ? '✅' : '⛔'
+    const inMode = modeToolNames.has(t.name) ? '[on]' : '[off]'
     let approvalLabel: string
     if (def.approval === 'never') {
       approvalLabel = 'read-only'
@@ -763,7 +763,7 @@ async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
     '',
     `**Текущий режим:** \`${ctx.approvalMode}\``,
     ...(ctx.approvalMode === 'plan'
-      ? ['> ⚠️ В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/turbo.']
+      ? ['> [warn] В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/turbo.']
       : []),
   ].filter(Boolean).join('\n')
 
@@ -788,7 +788,7 @@ async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise
     headless = false // default: headed (видимое окно)
   }
 
-  ctx.setStatusText('🧪 Запуск browser test...')
+  ctx.setStatusText('Запуск browser test...')
 
   // Сохраняем текущий режим Chrome, чтобы восстановить после теста
   const prevState = chromeManager.getState()
@@ -803,7 +803,7 @@ async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise
   } catch (err) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `## ❌ Browser Test Error\n\n\`\`\`\n${String(err)}\n\`\`\``,
+      content: `## Browser Test Error\n\n\`\`\`\n${String(err)}\n\`\`\``,
     }])
   } finally {
     // Восстанавливаем предыдущий режим Chrome (не ломаем агента после теста)
@@ -823,7 +823,7 @@ async function cmdBrowserRealTest (ctx: SlashCommandContext, input: string): Pro
   const siteArgs = parts.filter(p => !p.startsWith('--'))
   const sites = siteArgs.length > 0 ? siteArgs : undefined
 
-  ctx.setStatusText('🌐 Real site smoke-test...')
+  ctx.setStatusText('Real site smoke-test...')
   const prevState = chromeManager.getState()
 
   try {
@@ -832,14 +832,14 @@ async function cmdBrowserRealTest (ctx: SlashCommandContext, input: string): Pro
     if (saveReport) {
       const { writeFile } = await import('node:fs/promises')
       await writeFile('BROWSER_REAL_TEST_REPORT.md', report, 'utf8')
-      ctx.addServiceNotice?.('📄 Report saved: BROWSER_REAL_TEST_REPORT.md')
+      ctx.addServiceNotice?.('Report saved: BROWSER_REAL_TEST_REPORT.md')
     }
 
     ctx.setMessages(prev => [...prev, { role: 'assistant', content: report }])
   } catch (err) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `## ❌ browser-real-test error\n\`\`\`\n${String(err)}\n\`\`\``,
+      content: `## browser-real-test error\n\`\`\`\n${String(err)}\n\`\`\``,
     }])
   } finally {
     if (chromeManager.isConnected()) {
@@ -862,7 +862,7 @@ async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<bool
       ? (state.headless ? 'headless (фоновый)' : 'headed (видимое окно)')
       : 'не запущен'
     ctx.addServiceNotice?.(
-      `🌐 Chrome: ${modeStr}${state.connected ? ` | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}` : ''}`
+      `Chrome: ${modeStr}${state.connected ? ` | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}` : ''}`
     )
     return true
   }
@@ -874,7 +874,7 @@ async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<bool
   } else if (flag === '--headed' || flag === '-v') {
     desiredHeadless = false
   } else {
-    ctx.addServiceNotice?.('❌ /chrome: используйте --headed, --headless или без флага для статуса')
+    ctx.addServiceNotice?.('[err] /chrome: используйте --headed, --headless или без флага для статуса')
     return true
   }
 
@@ -887,9 +887,9 @@ async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<bool
     ctx.config.chromeHeadless = state.headless
     saveConfig({ chromeHeadless: state.headless }).catch(() => {})
 
-    ctx.addServiceNotice?.(`🌐 Chrome: ${modeStr} | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}`)
+    ctx.addServiceNotice?.(`Chrome: ${modeStr} | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}`)
   } catch (err) {
-    ctx.addServiceNotice?.(`❌ Chrome: ${String(err)}`)
+    ctx.addServiceNotice?.(`[err] Chrome: ${String(err)}`)
   }
 
   return true
@@ -901,13 +901,13 @@ async function cmdLastBrowserTest (ctx: SlashCommandContext): Promise<boolean> {
   if (!result) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: '## 📋 Последний browser test\n\nНет сохранённого отчёта последнего теста. Запустите `/browser-test` сначала.',
+      content: '## Последний browser test\n\nНет сохранённого отчёта последнего теста. Запустите `/browser-test` сначала.',
     }])
     return true
   }
 
   const lines: string[] = [
-    '## 📋 Последний browser test',
+    '## Последний browser test',
     '',
     `> **Timestamp:** ${result.timestamp}`,
     '> **Источник:** сохранённый structured result (не LLM-реконструкция)',
@@ -917,7 +917,7 @@ async function cmdLastBrowserTest (ctx: SlashCommandContext): Promise<boolean> {
   ]
 
   for (const step of result.steps) {
-    const icon = step.status === 'passed' ? '✅' : step.status === 'failed' ? '❌' : '⏭️'
+    const icon = step.status === 'passed' ? '[ok]' : step.status === 'failed' ? '[err]' : '[skip]'
     const dur = step.durationMs > 0 ? `${step.durationMs}ms` : '—'
     lines.push(`| ${icon} ${step.name} | ${step.status} | ${dur} |`)
   }
@@ -948,22 +948,22 @@ async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
     `**Режим:** \`${ctx.approvalMode}\``,
     '',
     '### Чтение и поиск',
-    ...modeReadTools.map(t => `  - ✅ \`${t.tool.name}\` — ${t.tool.description}`),
+    ...modeReadTools.map(t => `  - [on] \`${t.tool.name}\` — ${t.tool.description}`),
     ...readTools
       .filter(t => !modeReadTools.some(mt => mt.tool.name === t.tool.name))
-      .map(t => `  - ⛔ \`${t.tool.name}\` — заблокирован в PLAN mode`),
+      .map(t => `  - [off] \`${t.tool.name}\` — заблокирован в PLAN mode`),
     '',
     '### Запись и исполнение',
-    ...modeWriteTools.map(t => `  - ✅ \`${t.tool.name}\` — ${t.tool.description} (${t.approval === 'auto' ? 'авто-подтверждение' : 'требует подтверждения'})`),
+    ...modeWriteTools.map(t => `  - [on] \`${t.tool.name}\` — ${t.tool.description} (${t.approval === 'auto' ? 'авто-подтверждение' : 'требует подтверждения'})`),
     ...writeTools
       .filter(t => !modeWriteTools.some(mt => mt.tool.name === t.tool.name))
-      .map(t => `  - ⛔ \`${t.tool.name}\` — заблокирован в PLAN mode`),
+      .map(t => `  - [off] \`${t.tool.name}\` — заблокирован в PLAN mode`),
     '',
   ]
 
   if (ctx.approvalMode === 'plan') {
     lines.push(
-      '> ⚠️ **Вы в PLAN mode.**',
+      '> [warn] **Вы в PLAN mode.**',
       '> У меня есть инструменты write_file и edit, но в этом режиме они отключены.',
       '> Я могу предложить изменения, но не могу применить их напрямую.',
       '> Используйте `/setup` и выберите другой режим (default, auto-edit, turbo) для включения записи.',
@@ -972,10 +972,10 @@ async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
   }
 
   lines.push('### Дополнительно')
-  lines.push('  - 🌐 **MCP серверы** — подключаемые внешние инструменты')
-  lines.push('  - 🧩 **Расширения** — плагины, добавляющие функциональность')
-  lines.push('  - 🧠 **Навыки (Skills)** — предустановленные сценарии работы')
-  lines.push('  - 🤖 **Под-агенты** — дочерние агенты для параллельных задач')
+  lines.push('  - **MCP серверы** — подключаемые внешние инструменты')
+  lines.push('  - **Расширения** — плагины, добавляющие функциональность')
+  lines.push('  - **Навыки (Skills)** — предустановленные сценарии работы')
+  lines.push('  - **Под-агенты** — дочерние агенты для параллельных задач')
 
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',

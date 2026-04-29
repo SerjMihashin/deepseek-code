@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   isTableSeparator,
   padVisual,
+  parseSegments,
   parseTableCells,
   shouldRenderTableAsList,
   tableColumnWidths,
@@ -33,7 +34,7 @@ describe('MarkdownView table helpers', () => {
   })
 
   it('pads by visual terminal width', () => {
-    const text = 'API ✅'
+    const text = 'API OK'
     const padded = padVisual(text, 8)
     expect(visualWidth(padded)).toBe(8)
   })
@@ -42,11 +43,11 @@ describe('MarkdownView table helpers', () => {
     const widths = tableColumnWidths([
       '| Модуль | Оценка |',
       '| --- | --- |',
-      '| tools/types.ts | ⭐⭐⭐⭐⭐ |',
+      '| tools/types.ts | ***** |',
     ])
 
     expect(widths[0]).toBe(visualWidth('tools/types.ts'))
-    expect(widths[1]).toBe(Math.max(visualWidth('Оценка'), visualWidth('⭐⭐⭐⭐⭐')))
+    expect(widths[1]).toBe(Math.max(visualWidth('Оценка'), visualWidth('*****')))
   })
 
   it('falls back to list rendering for wide tables on narrow terminals', () => {
@@ -55,7 +56,7 @@ describe('MarkdownView table helpers', () => {
     expect(shouldRenderTableAsList([
       '| Модуль | Качество | Тесты | Безопасность | Комментарий |',
       '| --- | --- | --- | --- | --- |',
-      '| core/lsp.ts | ⭐⭐⭐ | 0 тестов | ✅ | fromUri баг на Windows |',
+      '| core/lsp.ts | *** | 0 тестов | OK | fromUri баг на Windows |',
     ])).toBe(true)
   })
 
@@ -67,5 +68,12 @@ describe('MarkdownView table helpers', () => {
       '| --- | --- |',
       '| edit.ts | 4 |',
     ])).toBe(false)
+  })
+
+  it('parses an unfinished streaming code fence as a code block', () => {
+    expect(parseSegments('Before\n```python\nprint("ok")')).toEqual([
+      { type: 'text', content: 'Before\n' },
+      { type: 'code', lang: 'python', content: 'print("ok")' },
+    ])
   })
 })

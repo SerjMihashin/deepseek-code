@@ -87,8 +87,8 @@ function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
     // List top-level directory structure (non-recursive, max 30 entries)
     try {
       const entries = readdirSync(cwd, { withFileTypes: true })
-      const dirs = entries.filter(e => e.isDirectory()).map(e => `  📁 ${e.name}/`).slice(0, 15)
-      const files = entries.filter(e => e.isFile()).map(e => `  📄 ${e.name}`).slice(0, 15)
+      const dirs = entries.filter(e => e.isDirectory()).map(e => `  [dir] ${e.name}/`).slice(0, 15)
+      const files = entries.filter(e => e.isFile()).map(e => `  [file] ${e.name}`).slice(0, 15)
       if (dirs.length > 0 || files.length > 0) {
         projectInfo += '\n### Project Structure (top-level)\n'
         projectInfo += [...dirs, ...files].join('\n')
@@ -168,6 +168,7 @@ When you need to run multiple tools, call them one at a time and wait for result
  */
 export class AgentLoop extends EventEmitter {
   private api: DeepSeekAPI
+  private model: string
   private tools: ToolDefinition[]
   private options: Required<Omit<AgentLoopOptions, 'signal'>> & { signal?: AbortSignal }
   private messages: ChatMessage[] = []
@@ -178,6 +179,7 @@ export class AgentLoop extends EventEmitter {
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
     super()
     this.api = new DeepSeekAPI(config)
+    this.model = config.model
     const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode)
     this.options = {
       maxIterations: 100,
@@ -304,7 +306,7 @@ export class AgentLoop extends EventEmitter {
           }
 
           if (chunk.type === 'usage' && chunk.usage) {
-            this.metrics.recordTokens(chunk.usage.input, chunk.usage.output)
+            this.metrics.recordUsage(chunk.usage)
           } else if (chunk.type === 'reasoning') {
             this.options.onReasoningChunk(chunk.content)
           } else if (chunk.type === 'text') {
@@ -329,7 +331,7 @@ export class AgentLoop extends EventEmitter {
           // Streaming не дал результата — пробуем non-streaming как fallback
           const fallbackResult = await this.api.chat(this.messages, openAITools)
           if (fallbackResult.usage) {
-            this.metrics.recordTokens(fallbackResult.usage.input, fallbackResult.usage.output)
+            this.metrics.recordUsage(fallbackResult.usage)
           }
 
           if (fallbackResult.toolCalls && fallbackResult.toolCalls.length > 0) {
@@ -481,7 +483,7 @@ export class AgentLoop extends EventEmitter {
           const fallback = 'I have completed the requested actions. What else would you like me to do?'
           this.messages.push({ role: 'assistant', content: fallback })
           this.options.onResponse(fallback)
-          const summary = this.metrics.getSummary()
+          const summary = this.metrics.getSummary(this.model)
           this.options.onStreamChunk(summary)
           return fallback
         }
@@ -489,7 +491,7 @@ export class AgentLoop extends EventEmitter {
         this.options.onResponse(responseContent)
 
         // Output execution summary
-        const summary = this.metrics.getSummary()
+        const summary = this.metrics.getSummary(this.model)
         this.options.onStreamChunk(summary)
 
         return responseContent

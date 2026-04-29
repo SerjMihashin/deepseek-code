@@ -41,7 +41,7 @@ export const ReasoningView = React.memo(function ReasoningView ({ reasoning, isA
         <Text>
           {isActive
             ? <Text color={colors.warning}>{SPINNER_FRAMES[spinnerFrame]}</Text>
-            : <Text color={colors.success}>✓</Text>}
+            : <Text color={colors.success}>[ok]</Text>}
           {' '}
           <Text bold color={colors.warning}>Reasoning</Text>
           {truncated && <Text dimColor> (showing last {MAX_LINES} lines)</Text>}

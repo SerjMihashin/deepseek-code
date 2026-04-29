@@ -38,7 +38,7 @@ export function ResultsPanel ({ toolCalls, reasoning, reasoningActive, pendingAp
       <Box flexDirection='column' paddingX={1} height={8} overflow='hidden'>
         {reasoningActive && (
           <Box marginBottom={0}>
-            <Text color={colors.warning} bold>🤔 Thinking...</Text>
+            <Text color={colors.warning} bold>Thinking...</Text>
           </Box>
         )}
 

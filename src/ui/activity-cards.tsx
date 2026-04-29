@@ -77,10 +77,10 @@ function ShellCard ({ data }: { data: ShellCardData }) {
       ? colors.error
       : colors.info
   const statusIcon = data.status === 'success'
-    ? '✅'
+    ? '[ok]'
     : data.status === 'failed'
-      ? '❌'
-      : '🔄'
+      ? '[err]'
+      : '[run]'
 
   return (
     <Box flexDirection='column' marginLeft={2} marginBottom={1}>
@@ -131,10 +131,10 @@ function FileCard ({ data }: { data: FileCardData }) {
       ? colors.error
       : colors.info
   const statusIcon = data.status === 'success'
-    ? '✅'
+    ? '[ok]'
     : data.status === 'failed'
-      ? '❌'
-      : '🔄'
+      ? '[err]'
+      : '[run]'
 
   const toolLabel = data.toolName === 'read_file'
     ? 'ReadFile'
@@ -191,7 +191,7 @@ function ErrorCard ({ data }: { data: ErrorCardData }) {
       <Box borderStyle='round' borderColor={colors.error} paddingX={1} paddingY={0}>
         <Box flexDirection='column'>
           <Box>
-            <Text bold color={colors.error}>❌ Ошибка</Text>
+            <Text bold color={colors.error}>[err] Ошибка</Text>
           </Box>
           <Box>
             <Text color={colors.error}>Инструмент: {data.toolName}</Text>
@@ -225,7 +225,7 @@ function UnsupportedCard ({ data }: { data: UnsupportedCardData }) {
       <Box borderStyle='round' borderColor={colors.warning} paddingX={1} paddingY={0}>
         <Box flexDirection='column'>
           <Box>
-            <Text bold color={colors.warning}>⚠️ {data.feature} недоступен</Text>
+            <Text bold color={colors.warning}>[warn] {data.feature} недоступен</Text>
           </Box>
           <Box>
             <Text color={colors.textMuted}>ОС: {data.os}</Text>
@@ -252,19 +252,19 @@ function TasksCard ({ data }: { data: TasksCardData }) {
       <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
         <Box flexDirection='column'>
           <Box>
-            <Text bold color={colors.info}>📋 План</Text>
+            <Text bold color={colors.info}>[plan] План</Text>
           </Box>
           {data.current && (
             <Box>
-              <Text color={colors.warning}>🔄 Текущее: {data.current}</Text>
+              <Text color={colors.warning}>[run] Текущее: {data.current}</Text>
             </Box>
           )}
           {data.completed.length > 0 && (
             <Box flexDirection='column'>
-              <Text color={colors.success}>✅ Завершено:</Text>
+              <Text color={colors.success}>[ok] Завершено:</Text>
               {data.completed.map((item, i) => (
                 <Box key={i} marginLeft={1}>
-                  <Text color={colors.success}>· {item}</Text>
+                  <Text color={colors.success}>- {item}</Text>
                 </Box>
               ))}
             </Box>
@@ -274,17 +274,17 @@ function TasksCard ({ data }: { data: TasksCardData }) {
               <Text color={colors.textMuted}>⬜ Далее:</Text>
               {data.next.map((item, i) => (
                 <Box key={i} marginLeft={1}>
-                  <Text color={colors.textMuted}>· {item}</Text>
+                  <Text color={colors.textMuted}>- {item}</Text>
                 </Box>
               ))}
             </Box>
           )}
           {data.errors && data.errors.length > 0 && (
             <Box flexDirection='column'>
-              <Text color={colors.error}>❌ Ошибки:</Text>
+              <Text color={colors.error}>[err] Ошибки:</Text>
               {data.errors.map((item, i) => (
                 <Box key={i} marginLeft={1}>
-                  <Text color={colors.error}>· {item}</Text>
+                  <Text color={colors.error}>- {item}</Text>
                 </Box>
               ))}
             </Box>

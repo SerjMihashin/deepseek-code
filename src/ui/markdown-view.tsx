@@ -127,6 +127,10 @@ function renderTableRow (line: string, isHeader: boolean, colors: Colors, widths
   )
 }
 
+function terminalContentWidth (): number {
+  return Math.max(32, (process.stdout.columns || 80) - 8)
+}
+
 // ─── Text segment renderer ───────────────────────────────────────────────────
 
 function TextSegment ({ content, colors }: { content: string; colors: Colors }) {
@@ -203,21 +207,25 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
           )
         } else {
           const widths = tableColumnWidths(tableLines)
-          const borderWidth = Math.min(
-            process.stdout.columns - 6 || 60,
-            widths.reduce((sum, width) => sum + width + 3, 1)
-          )
+          const borderWidth = Math.min(terminalContentWidth(), widths.reduce((sum, width) => sum + width + 3, 1))
 
           // Render full table
           rendered.push(
-            <Box key={rendered.length} flexDirection='column' marginLeft={1}>
+            <Box key={rendered.length} flexDirection='column' marginLeft={1} marginY={1}>
+              <Text color={colors.border}>{'┏' + '━'.repeat(borderWidth) + '┓'}</Text>
               {tableLines.map((tl, ti) => {
                 if (isTableSeparator(tl)) {
-                  return <Text key={ti} color={colors.border}>{'─'.repeat(borderWidth)}</Text>
+                  return <Text key={ti} color={colors.border}>{'┣' + '━'.repeat(borderWidth) + '┫'}</Text>
                 }
                 const isHeader = ti === headerIdx
-                return <React.Fragment key={ti}>{renderTableRow(tl, isHeader, colors, widths)}</React.Fragment>
+                return (
+                  <Box key={ti}>
+                    <Text color={colors.border}>┃ </Text>
+                    {renderTableRow(tl, isHeader, colors, widths)}
+                  </Box>
+                )
               })}
+              <Text color={colors.border}>{'┗' + '━'.repeat(borderWidth) + '┛'}</Text>
             </Box>
           )
         }
@@ -291,70 +299,105 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
 
 // ─── Code block renderer ─────────────────────────────────────────────────────
 
-function CodeBlock ({ content, lang, colors }: { content: string; lang: string; colors: Colors }) {
-  const termWidth = process.stdout.columns || 80
-  const maxContentWidth = termWidth - 6
-  const lines = content.split('\n')
-  const maxLineWidth = Math.max(...lines.map(l => visualWidth(l)), 0)
-  const useBorder = maxLineWidth <= maxContentWidth - 4 && termWidth >= 50
+function codeLineColor (line: string, colors: Colors): string {
+  if (line.startsWith('+')) return colors.success
+  if (line.startsWith('-')) return colors.error
+  if (line.startsWith('@')) return colors.warning
+  return colors.info
+}
 
-  if (!useBorder) {
-    // Fallback: simple indented block without borders
-    return (
-      <Box flexDirection='column' marginTop={0} marginBottom={1} marginLeft={1}>
-        {lang && <Text color={colors.info} bold>{lang}</Text>}
-        {lines.map((line, i) => (
-          <Text key={i} color={colors.info}>{line}</Text>
-        ))}
-      </Box>
-    )
+function wrapCodeLine (line: string, width: number): string[] {
+  if (width <= 8 || visualWidth(line) <= width) return [line]
+
+  const chunks: string[] = []
+  let current = ''
+  let currentWidth = 0
+
+  for (const ch of line) {
+    const chWidth = visualWidth(ch)
+    if (current && currentWidth + chWidth > width) {
+      chunks.push(current)
+      current = ch
+      currentWidth = chWidth
+    } else {
+      current += ch
+      currentWidth += chWidth
+    }
   }
 
+  chunks.push(current)
+  return chunks
+}
+
+function CodeBlock ({ content, lang, colors }: { content: string; lang: string; colors: Colors }) {
+  const lines = content.split('\n')
   const langLabel = lang || 'code'
-  const width = Math.min(maxLineWidth + 2, maxContentWidth)
+  const gutterWidth = Math.max(2, String(lines.length).length)
+  const codeWidth = Math.max(16, terminalContentWidth() - gutterWidth - 5)
+  const width = codeWidth + gutterWidth + 4
 
   return (
-    <Box flexDirection='column' marginTop={0} marginBottom={1}>
+    <Box flexDirection='column' marginY={1}>
       <Box>
-        <Text color={colors.border}>┌─ </Text>
+        <Text color={colors.border}>┏━ </Text>
         <Text color={colors.info} bold>{langLabel}</Text>
-        <Text color={colors.border}>{' ' + '─'.repeat(Math.max(0, width - langLabel.length - 3)) + '┐'}</Text>
+        <Text color={colors.border}>{' ' + '━'.repeat(Math.max(0, width - langLabel.length - 4)) + '┓'}</Text>
       </Box>
-      {lines.map((line, i) => (
-        <Box key={i}>
-          <Text color={colors.border}>│ </Text>
-          <Text color={colors.info}>{line}</Text>
-        </Box>
-      ))}
-      <Text color={colors.border}>└{'─'.repeat(width + 1)}┘</Text>
+      {lines.map((line, i) => {
+        const chunks = wrapCodeLine(line, codeWidth)
+        const color = codeLineColor(line, colors)
+
+        return chunks.map((chunk, ci) => (
+          <Box key={`${i}-${ci}`}>
+            <Text color={colors.border}>┃ </Text>
+            <Text color={colors.textMuted}>
+              {ci === 0 ? String(i + 1).padStart(gutterWidth, ' ') : ' '.repeat(gutterWidth)}
+            </Text>
+            <Text color={colors.border}> │ </Text>
+            <Text color={color}>{chunk}</Text>
+          </Box>
+        ))
+      })}
+      <Text color={colors.border}>┗{'━'.repeat(width + 1)}┛</Text>
     </Box>
   )
 }
 
 // ─── Main export ─────────────────────────────────────────────────────────────
 
-type Segment =
+export type Segment =
   | { type: 'text'; content: string }
   | { type: 'code'; content: string; lang: string }
 
-function parseSegments (text: string): Segment[] {
-  const parts = text.split(/(```(\w*)\n?)([\s\S]*?)```/g)
+export function parseSegments (text: string): Segment[] {
   const segments: Segment[] = []
+  const fenceRegex = /```([\w-]*)\n?/g
+  let cursor = 0
 
-  // split with 3 capture groups gives chunks of 4 per match:
-  // [before, fence+lang, lang, code, before, fence+lang, lang, code, ...]
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 4 === 0) {
-      if (parts[i]) segments.push({ type: 'text', content: parts[i] })
-    } else if (i % 4 === 1) {
-      // full fence match (```lang\n) — skip
-    } else if (i % 4 === 2) {
-      const lang = parts[i] ?? ''
-      const code = (parts[i + 1] ?? '').trimEnd()
-      segments.push({ type: 'code', content: code, lang })
-      i++ // skip code part
+  while (true) {
+    const start = fenceRegex.exec(text)
+    if (!start) break
+
+    if (start.index > cursor) {
+      segments.push({ type: 'text', content: text.slice(cursor, start.index) })
     }
+
+    const lang = start[1] ?? ''
+    const codeStart = fenceRegex.lastIndex
+    const end = text.indexOf('```', codeStart)
+
+    if (end === -1) {
+      segments.push({ type: 'code', content: text.slice(codeStart).trimEnd(), lang })
+      cursor = text.length
+      break
+    }
+
+    segments.push({ type: 'code', content: text.slice(codeStart, end).trimEnd(), lang })
+    cursor = end + 3
+    fenceRegex.lastIndex = cursor
   }
+
+  if (cursor < text.length) segments.push({ type: 'text', content: text.slice(cursor) })
 
   return segments
 }

@@ -47,9 +47,11 @@ Guidelines:
 export const CONFIG_FILE_NAME = 'settings.json'
 export const CONFIG_DIR_NAME = '.deepseek-code'
 
-export const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: number }> = {
-  'deepseek-chat': { inputPer1M: 0.14, outputPer1M: 0.28 },
-  'deepseek-reasoner': { inputPer1M: 0.55, outputPer1M: 2.19 },
+export const MODEL_PRICING: Record<string, { cacheHitInputPer1M: number; cacheMissInputPer1M: number; outputPer1M: number }> = {
+  'deepseek-chat': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
+  'deepseek-reasoner': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
+  'deepseek-v4-flash': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
+  'deepseek-v4-pro': { cacheHitInputPer1M: 0.003625, cacheMissInputPer1M: 0.435, outputPer1M: 0.87 },
 }
 
 export interface ModelInfo {

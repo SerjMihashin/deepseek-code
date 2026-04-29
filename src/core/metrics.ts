@@ -2,7 +2,10 @@ import { MODEL_PRICING } from '../config/defaults.js'
 
 export interface TokenUsage {
   input: number
+  cacheHitInput: number
+  cacheMissInput: number
   output: number
+  reasoningOutput: number
   total: number
 }
 
@@ -10,7 +13,10 @@ export class MetricsCollector {
   private startTime: number = Date.now()
   private _toolCalls: number = 0
   private _inputTokens: number = 0
+  private _cacheHitInputTokens: number = 0
+  private _cacheMissInputTokens: number = 0
   private _outputTokens: number = 0
+  private _reasoningOutputTokens: number = 0
   private _lastInputTokens: number = 0
   private toolTimings: Map<string, { start: number; duration?: number }> = new Map()
   private toolCallLog: Array<{ tool: string; duration: number; success: boolean }> = []
@@ -25,6 +31,18 @@ export class MetricsCollector {
 
   get outputTokens (): number {
     return this._outputTokens
+  }
+
+  get cacheHitInputTokens (): number {
+    return this._cacheHitInputTokens
+  }
+
+  get cacheMissInputTokens (): number {
+    return this._cacheMissInputTokens
+  }
+
+  get reasoningOutputTokens (): number {
+    return this._reasoningOutputTokens
   }
 
   get totalTokens (): number {
@@ -50,8 +68,22 @@ export class MetricsCollector {
   }
 
   recordTokens (input: number, output: number): void {
+    this.recordUsage({ input, cacheMissInput: input, output })
+  }
+
+  recordUsage (usage: Partial<TokenUsage>): void {
+    const cacheHitInput = usage.cacheHitInput ?? 0
+    const explicitCacheMissInput = usage.cacheMissInput ?? 0
+    const input = usage.input ?? (cacheHitInput + explicitCacheMissInput)
+    const cacheMissInput = (cacheHitInput > 0 || explicitCacheMissInput > 0)
+      ? explicitCacheMissInput
+      : input
+
     this._inputTokens += input
-    this._outputTokens += output
+    this._cacheHitInputTokens += cacheHitInput
+    this._cacheMissInputTokens += cacheMissInput
+    this._outputTokens += usage.output ?? 0
+    this._reasoningOutputTokens += usage.reasoningOutput ?? 0
     if (input > 0) this._lastInputTokens = input
   }
 
@@ -66,14 +98,18 @@ export class MetricsCollector {
 
   estimatedCostUSD (model: string = 'deepseek-chat'): number {
     const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['deepseek-chat']
-    return (this._inputTokens / 1_000_000) * pricing.inputPer1M +
+    return (this._cacheHitInputTokens / 1_000_000) * pricing.cacheHitInputPer1M +
+      (this._cacheMissInputTokens / 1_000_000) * pricing.cacheMissInputPer1M +
       (this._outputTokens / 1_000_000) * pricing.outputPer1M
   }
 
   getTokenUsage (): TokenUsage {
     return {
       input: this._inputTokens,
+      cacheHitInput: this._cacheHitInputTokens,
+      cacheMissInput: this._cacheMissInputTokens,
       output: this._outputTokens,
+      reasoningOutput: this._reasoningOutputTokens,
       total: this.totalTokens,
     }
   }
@@ -94,7 +130,11 @@ export class MetricsCollector {
     const costStr = cost > 0 ? ` · $${cost.toFixed(4)}` : ''
 
     let summary = '\n\n━━━ Execution Summary ━━━\n'
-    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}, out: ${this._outputTokens.toLocaleString()})${costStr} · Time: ${mins}m ${secs}s\n`
+    const cacheStr = this._cacheHitInputTokens > 0 || this._cacheMissInputTokens > 0
+      ? `, cache hit: ${this._cacheHitInputTokens.toLocaleString()}, cache miss: ${this._cacheMissInputTokens.toLocaleString()}`
+      : ''
+    const reasoningStr = this._reasoningOutputTokens > 0 ? `, reasoning: ${this._reasoningOutputTokens.toLocaleString()}` : ''
+    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}${cacheStr}, out: ${this._outputTokens.toLocaleString()}${reasoningStr})${costStr} · Time: ${mins}m ${secs}s\n`
 
     // Add compact tool breakdown if there were calls
     if (this.toolCallLog.length > 0) {
@@ -108,7 +148,7 @@ export class MetricsCollector {
         groups.set(call.tool, g)
       }
       summary += `Tools: ${Array.from(groups.entries()).map(([name, g]) =>
-        `${name} ×${g.count}${g.fail > 0 ? ` (${g.success}✓ ${g.fail}✗)` : ''}`
+        `${name} x${g.count}${g.fail > 0 ? ` (${g.success} ok ${g.fail} failed)` : ''}`
       ).join(', ')}\n`
     }
 
@@ -120,7 +160,10 @@ export class MetricsCollector {
     this.startTime = Date.now()
     this._toolCalls = 0
     this._inputTokens = 0
+    this._cacheHitInputTokens = 0
+    this._cacheMissInputTokens = 0
     this._outputTokens = 0
+    this._reasoningOutputTokens = 0
     this._lastInputTokens = 0
     this.toolTimings.clear()
     this.toolCallLog = []

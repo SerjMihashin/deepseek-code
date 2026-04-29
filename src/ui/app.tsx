@@ -344,7 +344,7 @@ export function App ({ config, options }: AppProps) {
             const updatedCalls = [...prevToolCallsRef.current, tc]
             prevToolCallsRef.current = updatedCalls
             setToolCalls(updatedCalls)
-            setStatusText(`🔧 ${tc.name}...`)
+            setStatusText(`[tool] ${tc.name}...`)
 
             // Add/update live tool activity card in chat messages
             setMessages(prev => {
@@ -362,7 +362,7 @@ export function App ({ config, options }: AppProps) {
             })
           },
           onToolResult: (result) => {
-            setStatusText(result.success ? `✅ ${result.toolName} ${i18n.t('toolDone')}` : `❌ ${result.toolName} ${i18n.t('toolError')}`)
+            setStatusText(result.success ? `[ok] ${result.toolName} ${i18n.t('toolDone')}` : `[err] ${result.toolName} ${i18n.t('toolError')}`)
           },
           onReasoningChunk: () => {},
           onStreamChunk: (chunk) => {
@@ -584,12 +584,12 @@ export function App ({ config, options }: AppProps) {
             resolve(false)
           } else if (cursor === 2) {
             exemptedToolsRef.current.add(toolName)
-            addServiceNotice(`🔇 ${toolName}: больше не спрашивать в этой сессии`)
+            addServiceNotice(`[mute] ${toolName}: больше не спрашивать в этой сессии`)
             resolve(true)
           } else {
             setApprovalMode('turbo')
             saveConfig({ ...config, approvalMode: 'turbo' }).catch(() => {})
-            addServiceNotice('⚡ Turbo режим включён: инструменты выполняются без подтверждения.')
+            addServiceNotice('[turbo] Turbo режим включён: инструменты выполняются без подтверждения.')
             resolve(true)
           }
         } else if (key.escape) {
@@ -611,7 +611,7 @@ export function App ({ config, options }: AppProps) {
 
           // Local warning — NOT an agent message, NOT sent to model
           if (newMode === 'turbo') {
-            addServiceNotice('⚡ Включён режим Turbo: инструменты будут выполняться без подтверждения.')
+            addServiceNotice('[turbo] Включён режим Turbo: инструменты будут выполняться без подтверждения.')
           } else if (prev === 'turbo') {
             addServiceNotice('Режим Turbo выключен.')
           } else {
@@ -666,7 +666,7 @@ export function App ({ config, options }: AppProps) {
           const chosen = picker.themes[picker.selectedIndex]
           themeManager.setTheme(chosen.name)
           setThemePicker(null)
-          addServiceNotice(`🎨 Тема изменена: ${chosen.name}`)
+          addServiceNotice(`[theme] Тема изменена: ${chosen.name}`)
           return
         }
         return
@@ -691,7 +691,7 @@ export function App ({ config, options }: AppProps) {
             saveConfig({ ...config, model: chosen.id }).catch(() => {})
             config.model = chosen.id
             setModelPicker(null)
-            addServiceNotice(`🤖 Модель: ${chosen.label} (${chosen.id})`)
+            addServiceNotice(`[model] Модель: ${chosen.label} (${chosen.id})`)
           }
           return
         }
@@ -872,7 +872,7 @@ export function App ({ config, options }: AppProps) {
             {themePicker && (
               <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.primary}>
                 <Box marginLeft={1} marginTop={1}>
-                  <Text bold color={colors.primary}>🎨 Выберите тему</Text>
+                  <Text bold color={colors.primary}>Выберите тему</Text>
                 </Box>
                 <Box marginLeft={1} marginTop={1} flexDirection='column'>
                   {themePicker.themes.map((t, i) => (
@@ -893,7 +893,7 @@ export function App ({ config, options }: AppProps) {
             {modelPicker && (
               <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.primary}>
                 <Box marginLeft={1} marginTop={1}>
-                  <Text bold color={colors.primary}>🤖 Выберите модель</Text>
+                  <Text bold color={colors.primary}>Выберите модель</Text>
                 </Box>
                 <Box marginLeft={1} marginTop={1} flexDirection='column'>
                   {DEEPSEEK_MODELS.map((m, i) => (
@@ -915,7 +915,7 @@ export function App ({ config, options }: AppProps) {
             {pendingApproval && (
               <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.warning}>
                 <Box>
-                  <Text bold color={colors.warning}>🔔 Подтвердить вызов инструмента?</Text>
+                  <Text bold color={colors.warning}>Подтвердить вызов инструмента?</Text>
                 </Box>
                 <Box marginLeft={1}>
                   <Text bold color={colors.text}>{pendingApproval.toolName}</Text>
@@ -925,14 +925,14 @@ export function App ({ config, options }: AppProps) {
                 </Box>
                 <Box flexDirection='column' marginTop={1}>
                   {[
-                    '✅  Подтвердить',
-                    '❌  Отклонить',
-                    `🔇  Не спрашивать для "${pendingApproval.toolName}"`,
-                    '⚡  Turbo — выполнять всё без вопросов',
+                    '[ok]   Подтвердить',
+                    '[no]   Отклонить',
+                    `[mute] Не спрашивать для "${pendingApproval.toolName}"`,
+                    '[turbo] Выполнять всё без вопросов',
                   ].map((label, i) => (
                     <Box key={i} marginLeft={1}>
                       <Text color={approvalCursor === i ? colors.primary : colors.text}>
-                        {approvalCursor === i ? '❯ ' : '  '}{label}
+                        {approvalCursor === i ? '> ' : '  '}{label}
                       </Text>
                     </Box>
                   ))}
@@ -945,16 +945,16 @@ export function App ({ config, options }: AppProps) {
             {pendingClear && (
               <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.warning}>
                 <Box>
-                  <Text bold color={colors.warning}>⚠️  Очистить историю чата?</Text>
+                  <Text bold color={colors.warning}>Очистить историю чата?</Text>
                 </Box>
                 <Box marginLeft={1}>
                   <Text color={colors.textMuted}>{messages.length} сообщений будет удалено. Отмену нельзя.</Text>
                 </Box>
                 <Box flexDirection='column' marginTop={1}>
-                  {['✅  Да, очистить', '❌  Отмена'].map((label, i) => (
+                  {['[ok] Да, очистить', '[no] Отмена'].map((label, i) => (
                     <Box key={i} marginLeft={1}>
                       <Text color={clearCursor === i ? colors.primary : colors.text}>
-                        {clearCursor === i ? '❯ ' : '  '}{label}
+                        {clearCursor === i ? '> ' : '  '}{label}
                       </Text>
                     </Box>
                   ))}
@@ -980,7 +980,7 @@ export function App ({ config, options }: AppProps) {
           if (!model.includes('vl') && !model.includes('vision')) {
             setMessages(prev => [...prev, {
               role: 'assistant',
-              content: `⚠️ Вставка изображения требует модель с поддержкой vision.\nТекущая модель: ${model || 'неизвестно'}\nИспользуйте модель с "vl" или "vision" в названии.`,
+              content: `[warn] Вставка изображения требует модель с поддержкой vision.\nТекущая модель: ${model || 'неизвестно'}\nИспользуйте модель с "vl" или "vision" в названии.`,
             }])
             return
           }

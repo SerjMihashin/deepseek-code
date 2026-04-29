@@ -10,11 +10,11 @@ interface ToolCallViewProps {
 }
 
 const statusIcons: Record<string, string> = {
-  pending: '⏳',
-  running: '🔄',
-  completed: '✅',
-  failed: '❌',
-  rejected: '🚫',
+  pending: '[wait]',
+  running: '[run]',
+  completed: '[ok]',
+  failed: '[err]',
+  rejected: '[no]',
 }
 
 function formatDuration (ms?: number): string {
@@ -143,7 +143,7 @@ export const ToolCallView = React.memo(function ToolCallView ({ toolCalls, maxIt
         </Box>
       )}
       {visible.map((group) => {
-        const icon = statusIcons[group.status] ?? '✳'
+        const icon = statusIcons[group.status] ?? '[?]'
         const color = statusColors[group.status] ?? 'white'
         const duration = group.latest.durationMs ? formatDuration(group.latest.durationMs) : ''
         const isChrome = group.name === 'chrome'
@@ -155,7 +155,7 @@ export const ToolCallView = React.memo(function ToolCallView ({ toolCalls, maxIt
           ? ` → ${group.latest.result.slice(0, 60)}${group.latest.result.length > 60 ? '…' : ''}`
           : null
         const inlineError = group.latest.status === 'failed' && group.latest.error
-          ? ` ✗ ${group.latest.error.slice(0, 100)}`
+          ? ` [err] ${group.latest.error.slice(0, 100)}`
           : null
 
         return (

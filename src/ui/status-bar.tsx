@@ -90,7 +90,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
       </Box>
       <Box>
         {chromeState.connected && (
-          <Text color={colors.success}> 🌐Chrome{chromeState.headless ? ':H' : ''} </Text>
+          <Text color={colors.success}> Chrome{chromeState.headless ? ':H' : ''} </Text>
         )}
         {totalTokens !== undefined && totalTokens > 0 && (
           <Text color={colors.textMuted}> {tokAbbr(totalTokens)} tok </Text>

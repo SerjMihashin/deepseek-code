@@ -32,7 +32,10 @@ export interface StreamChunk {
   toolCallId?: string;
   usage?: {
     input: number;
+    cacheHitInput: number;
+    cacheMissInput: number;
     output: number;
+    reasoningOutput: number;
     total: number;
   };
 }
@@ -138,13 +141,21 @@ export class DeepSeekAPI {
 
         // Usage chunk (last chunk with stream_options.include_usage)
         if (chunk.usage) {
+          const usage = chunk.usage as OpenAI.Chat.ChatCompletionChunk['usage'] & {
+            prompt_cache_hit_tokens?: number;
+            prompt_cache_miss_tokens?: number;
+            completion_tokens_details?: { reasoning_tokens?: number };
+          }
           yield {
             type: 'usage',
             content: '',
             usage: {
-              input: chunk.usage.prompt_tokens ?? 0,
-              output: chunk.usage.completion_tokens ?? 0,
-              total: chunk.usage.total_tokens ?? 0,
+              input: usage.prompt_tokens ?? 0,
+              cacheHitInput: usage.prompt_cache_hit_tokens ?? 0,
+              cacheMissInput: usage.prompt_cache_miss_tokens ?? 0,
+              output: usage.completion_tokens ?? 0,
+              reasoningOutput: usage.completion_tokens_details?.reasoning_tokens ?? 0,
+              total: usage.total_tokens ?? 0,
             },
           }
           continue
@@ -232,7 +243,7 @@ export class DeepSeekAPI {
   async chat (
     messages: ChatMessage[],
     tools?: OpenAITool[]
-  ): Promise<{ content: string; toolCalls?: ToolCallMessage['tool_calls']; usage?: { input: number; output: number } }> {
+  ): Promise<{ content: string; toolCalls?: ToolCallMessage['tool_calls']; usage?: StreamChunk['usage'] }> {
     const fullMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: this.systemPrompt },
       ...buildMessages(messages),
@@ -262,10 +273,23 @@ export class DeepSeekAPI {
       }
     }
 
+    const usage = response.usage as typeof response.usage & {
+      prompt_cache_hit_tokens?: number;
+      prompt_cache_miss_tokens?: number;
+      completion_tokens_details?: { reasoning_tokens?: number };
+    }
+
     return {
       content: message?.content ?? '',
-      usage: response.usage
-        ? { input: response.usage.prompt_tokens ?? 0, output: response.usage.completion_tokens ?? 0 }
+      usage: usage
+        ? {
+            input: usage.prompt_tokens ?? 0,
+            cacheHitInput: usage.prompt_cache_hit_tokens ?? 0,
+            cacheMissInput: usage.prompt_cache_miss_tokens ?? 0,
+            output: usage.completion_tokens ?? 0,
+            reasoningOutput: usage.completion_tokens_details?.reasoning_tokens ?? 0,
+            total: usage.total_tokens ?? 0,
+          }
         : undefined,
     }
   }

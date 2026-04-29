@@ -13,11 +13,11 @@ interface ToolActivityCardProps {
 }
 
 const statusIcons: Record<string, string> = {
-  pending: '⏳',
-  running: '🔄',
-  completed: '✅',
-  failed: '❌',
-  rejected: '🚫',
+  pending: '[wait]',
+  running: '[run]',
+  completed: '[ok]',
+  failed: '[err]',
+  rejected: '[no]',
 }
 
 function formatArgs (args: Record<string, unknown>): string {
@@ -148,7 +148,7 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
     return (
       <Box marginLeft={2} marginBottom={1}>
         <Text dimColor>
-          {hasErrors ? '⚠️ ' : '🔧 '}
+          {hasErrors ? '[warn] ' : '[tools] '}
           Инструменты: {toolList}
           {' · '}{toolCalls.length} call{toolCalls.length !== 1 ? 's' : ''}
           {totalDuration > 0 ? ` · ${formatDuration(totalDuration)}` : ''}
@@ -163,7 +163,7 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
       <Box borderStyle='round' borderColor={colors.border} paddingX={1} paddingY={0}>
         <Box flexDirection='column'>
           {groups.map((group) => {
-            const icon = statusIcons[group.status] ?? '✳'
+            const icon = statusIcons[group.status] ?? '[?]'
             const color = statusColors[group.status] ?? 'white'
             const isRunning = group.status === 'running'
             const isChrome = group.name === 'chrome'
@@ -176,7 +176,7 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
               ? ` → ${group.latest.result.slice(0, 60)}${group.latest.result.length > 60 ? '…' : ''}`
               : null
             const inlineError = group.latest.status === 'failed' && group.latest.error
-              ? ` ✗ ${group.latest.error.slice(0, 100)}`
+              ? ` [err] ${group.latest.error.slice(0, 100)}`
               : null
 
             let durationDisplay: React.ReactNode = null
@@ -184,7 +184,7 @@ export const ToolActivityCard = React.memo(function ToolActivityCard ({ toolCall
               const elapsed = now - group.latest.startedAt
               const timeoutMs = isBash ? BASH_TIMEOUT_MS : DEFAULT_TIMEOUT_MS
               const eColor = elapsedColor(elapsed, timeoutMs)
-              const warning = elapsed / timeoutMs >= 0.75 ? ' ⚠' : ''
+              const warning = elapsed / timeoutMs >= 0.75 ? ' [slow]' : ''
               durationDisplay = <Text color={eColor}> {formatDuration(elapsed)}{warning}</Text>
             } else if (group.latest.durationMs) {
               durationDisplay = <Text dimColor> - {formatDuration(group.latest.durationMs)}</Text>

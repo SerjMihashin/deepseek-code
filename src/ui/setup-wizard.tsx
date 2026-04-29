@@ -79,7 +79,7 @@ function LangStep ({ cursor, langOptions, langLabels }: LangStepProps) {
       <Text bold>{i18n.t('selectLanguage')}</Text>
       {langOptions.map((lang, i) => (
         <Text key={lang} color={cursor === i ? 'cyan' : undefined}>
-          {cursor === i ? '❯ ' : '  '}{langLabels[lang] ?? lang}
+          {cursor === i ? '> ' : '  '}{langLabels[lang] ?? lang}
         </Text>
       ))}
     </Box>
@@ -115,7 +115,7 @@ function ThemeStep ({ cursor }: ThemeStepProps) {
         <Text bold>{i18n.t('selectTheme')}</Text>
         {themes.map((theme, i) => (
           <Text key={theme.name} color={cursor === i ? colors.primary : colors.textMuted}>
-            {cursor === i ? '❯ ' : '  '}{theme.name}{theme.description ? `  — ${theme.description}` : ''}
+            {cursor === i ? '> ' : '  '}{theme.name}{theme.description ? `  — ${theme.description}` : ''}
           </Text>
         ))}
       </Box>
@@ -135,7 +135,7 @@ function ModelStep ({ cursor }: ModelStepProps) {
       {DEEPSEEK_MODELS.map((model, i) => (
         <Box key={model.id} flexDirection='column'>
           <Text color={cursor === i ? colors.primary : colors.textMuted}>
-            {cursor === i ? '❯ ' : '  '}<Text bold={cursor === i}>{model.label}</Text>
+            {cursor === i ? '> ' : '  '}<Text bold={cursor === i}>{model.label}</Text>
             <Text dimColor>  {model.id}</Text>
           </Text>
           <Text color={cursor === i ? colors.textMuted : colors.textMuted} dimColor>
@@ -158,7 +158,7 @@ function ModeStep ({ cursor, modeOptions }: ModeStepProps) {
       <Text bold>{i18n.t('selectMode')}</Text>
       {modeOptions.map((mode, i) => (
         <Text key={mode} color={cursor === i ? 'cyan' : undefined}>
-          {cursor === i ? '❯ ' : '  '}{mode}
+          {cursor === i ? '> ' : '  '}{mode}
         </Text>
       ))}
     </Box>
@@ -222,7 +222,7 @@ export function useSetupWizard (
     setApiKeyError('')
     onMessage({
       role: 'assistant',
-      content: '⚠️ **Безопасность:** API-ключ хранится локально в `~/.deepseek-code/config.json`. Безопаснее использовать переменную окружения `DEEPSEEK_API_KEY`.',
+      content: '[warn] **Безопасность:** API-ключ хранится локально в `~/.deepseek-code/config.json`. Безопаснее использовать переменную окружения `DEEPSEEK_API_KEY`.',
     })
     setStep('theme')
   }, [config, onMessage])

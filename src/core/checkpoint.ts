@@ -5,13 +5,15 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
-const CHECKPOINTS_DIR = join(homedir(), '.deepseek-code', 'checkpoints')
-
 export interface Checkpoint {
   id: string;
   timestamp: string;
   message: string;
   files: string[];
+}
+
+function getCheckpointsDir (): string {
+  return join(homedir(), '.deepseek-code', 'checkpoints')
 }
 
 function getProjectHash (): string {
@@ -27,7 +29,7 @@ export async function createCheckpoint (message: string): Promise<Checkpoint | n
   }
 
   const projectHash = getProjectHash()
-  const checkpointDir = join(CHECKPOINTS_DIR, projectHash)
+  const checkpointDir = join(getCheckpointsDir(), projectHash)
 
   if (!existsSync(checkpointDir)) {
     await mkdir(checkpointDir, { recursive: true })
@@ -70,7 +72,7 @@ export async function createCheckpoint (message: string): Promise<Checkpoint | n
 
 export async function listCheckpoints (): Promise<Checkpoint[]> {
   const projectHash = getProjectHash()
-  const checkpointDir = join(CHECKPOINTS_DIR, projectHash)
+  const checkpointDir = join(getCheckpointsDir(), projectHash)
   const logPath = join(checkpointDir, 'checkpoints.jsonl')
 
   if (!existsSync(logPath)) return []
@@ -84,7 +86,7 @@ export async function listCheckpoints (): Promise<Checkpoint[]> {
 
 export async function restoreCheckpoint (id: string): Promise<boolean> {
   const projectHash = getProjectHash()
-  const checkpointDir = join(CHECKPOINTS_DIR, projectHash)
+  const checkpointDir = join(getCheckpointsDir(), projectHash)
   const patchPath = join(checkpointDir, `${id}.patch`)
 
   if (!existsSync(patchPath)) return false

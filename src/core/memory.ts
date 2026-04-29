@@ -5,9 +5,6 @@ import { join, basename, extname } from 'node:path'
 import { DeepSeekAPI } from '../api/index.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 
-const MEMORY_DIR = join(homedir(), '.deepseek-code', 'memory')
-const INDEX_FILE = join(MEMORY_DIR, 'MEMORY.md')
-
 export interface MemoryEntry {
   name: string;
   description: string;
@@ -27,9 +24,18 @@ function sanitizeFileName (name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') + '.md'
 }
 
+function getMemoryDir (): string {
+  return join(homedir(), '.deepseek-code', 'memory')
+}
+
+function getIndexFile (): string {
+  return join(getMemoryDir(), 'MEMORY.md')
+}
+
 export async function ensureMemoryDir (): Promise<void> {
-  if (!existsSync(MEMORY_DIR)) {
-    await mkdir(MEMORY_DIR, { recursive: true })
+  const memoryDir = getMemoryDir()
+  if (!existsSync(memoryDir)) {
+    await mkdir(memoryDir, { recursive: true })
   }
 }
 
@@ -38,7 +44,7 @@ export async function saveMemory (entry: Omit<MemoryEntry, 'createdAt' | 'update
 
   const now = new Date().toISOString()
   const fileName = sanitizeFileName(entry.name)
-  const filePath = join(MEMORY_DIR, fileName)
+  const filePath = join(getMemoryDir(), fileName)
 
   const fullEntry: MemoryEntry = {
     ...entry,
@@ -70,12 +76,13 @@ ${entry.content}
 export async function listMemories (): Promise<MemoryIndexEntry[]> {
   await ensureMemoryDir()
 
-  if (!existsSync(INDEX_FILE)) {
+  const indexFile = getIndexFile()
+  if (!existsSync(indexFile)) {
     return []
   }
 
   try {
-    const content = await readFile(INDEX_FILE, 'utf-8')
+    const content = await readFile(indexFile, 'utf-8')
     const entries: MemoryIndexEntry[] = []
 
     for (const line of content.split('\n').filter(Boolean)) {
@@ -97,7 +104,7 @@ export async function listMemories (): Promise<MemoryIndexEntry[]> {
 
 export async function readMemory (name: string): Promise<MemoryEntry | null> {
   const fileName = sanitizeFileName(name)
-  const filePath = join(MEMORY_DIR, fileName)
+  const filePath = join(getMemoryDir(), fileName)
 
   if (!existsSync(filePath)) {
     return null
@@ -108,7 +115,7 @@ export async function readMemory (name: string): Promise<MemoryEntry | null> {
 
 export async function deleteMemory (name: string): Promise<boolean> {
   const fileName = sanitizeFileName(name)
-  const filePath = join(MEMORY_DIR, fileName)
+  const filePath = join(getMemoryDir(), fileName)
 
   if (!existsSync(filePath)) {
     return false
@@ -190,7 +197,7 @@ export async function semanticSearchMemories (
     // Get embeddings for all memory entries
     const entryEmbeddings = await Promise.all(
       allEntries.map(async (entry) => {
-        const fullEntry = await readMemory(join(MEMORY_DIR, sanitizeFileName(entry.name)))
+        const fullEntry = await readMemory(entry.name)
         const text = fullEntry ? `${fullEntry.description}\n${fullEntry.content}` : entry.description
         try {
           const embedding = await getEmbedding(text.slice(0, 2000)) // Limit to 2000 chars
@@ -250,8 +257,9 @@ async function updateIndex (name: string, fileName: string, description: string)
   await ensureMemoryDir()
 
   let lines: string[] = []
-  if (existsSync(INDEX_FILE)) {
-    const content = await readFile(INDEX_FILE, 'utf-8')
+  const indexFile = getIndexFile()
+  if (existsSync(indexFile)) {
+    const content = await readFile(indexFile, 'utf-8')
     lines = content.split('\n').filter(Boolean)
     // Remove existing entry with same name
     lines = lines.filter(line => !line.includes(`[${name}]`))
@@ -262,23 +270,24 @@ async function updateIndex (name: string, fileName: string, description: string)
   // Sort alphabetically
   lines.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
 
-  await writeFile(INDEX_FILE, lines.join('\n') + '\n', 'utf-8')
+  await writeFile(indexFile, lines.join('\n') + '\n', 'utf-8')
 }
 
 async function rebuildIndex (): Promise<void> {
   await ensureMemoryDir()
 
-  const files = await readdir(MEMORY_DIR)
+  const memoryDir = getMemoryDir()
+  const files = await readdir(memoryDir)
   const mdFiles = files.filter(f => f.endsWith('.md') && f !== 'MEMORY.md')
 
   const entries: string[] = []
   for (const file of mdFiles) {
-    const entry = await readMemoryFile(join(MEMORY_DIR, file))
+    const entry = await readMemoryFile(join(memoryDir, file))
     if (entry) {
       entries.push(`- [${entry.name}](${file}) — ${entry.description}`)
     }
   }
 
   entries.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
-  await writeFile(INDEX_FILE, entries.join('\n') + '\n', 'utf-8')
+  await writeFile(getIndexFile(), entries.join('\n') + '\n', 'utf-8')
 }

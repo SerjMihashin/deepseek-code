@@ -4,8 +4,6 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-const SCHEDULER_FILE = join(homedir(), '.deepseek-code', 'scheduler-tasks.json')
-
 export interface ScheduledTask {
   id: string;
   prompt: string;
@@ -18,6 +16,10 @@ export interface ScheduledTask {
 }
 
 export type TaskCallback = (prompt: string) => Promise<void>
+
+function getSchedulerFile (): string {
+  return join(homedir(), '.deepseek-code', 'scheduler-tasks.json')
+}
 
 /**
  * Simple in-memory scheduler for recurring tasks (/loop command).
@@ -153,17 +155,20 @@ export class Scheduler extends EventEmitter {
       ...t,
       // Don't save timer references
     }))
-    await writeFile(SCHEDULER_FILE, JSON.stringify(tasks, null, 2), 'utf-8')
+    await writeFile(getSchedulerFile(), JSON.stringify(tasks, null, 2), 'utf-8')
   }
 
   /**
    * Load tasks from disk and re-activate them.
    */
   async load (callback?: TaskCallback): Promise<void> {
-    if (!existsSync(SCHEDULER_FILE)) return
+    if (callback) this.setCallback(callback)
+
+    const schedulerFile = getSchedulerFile()
+    if (!existsSync(schedulerFile)) return
 
     try {
-      const content = await readFile(SCHEDULER_FILE, 'utf-8')
+      const content = await readFile(schedulerFile, 'utf-8')
       const tasks = JSON.parse(content) as ScheduledTask[]
 
       for (const task of tasks) {

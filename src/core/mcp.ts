@@ -96,7 +96,10 @@ export class MCPServer extends EventEmitter {
         this._tools = this.filterTools(tools)
         this.connected = true
         resolve()
-      }).catch(reject)
+      }).catch((err) => {
+        clearTimeout(timeout)
+        reject(err)
+      })
     })
   }
 

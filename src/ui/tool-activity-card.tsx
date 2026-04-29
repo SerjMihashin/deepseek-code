@@ -2,6 +2,7 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import type { ToolCallEvent } from '../core/agent-loop.js'
 import { themeManager } from '../core/themes.js'
+import { formatDuration } from '../utils/string-width.js'
 
 interface ToolActivityCardProps {
   toolCalls: ToolCallEvent[];
@@ -14,12 +15,6 @@ const statusIcons: Record<string, string> = {
   completed: '✅',
   failed: '❌',
   rejected: '🚫',
-}
-
-function formatDuration (ms?: number): string {
-  if (ms === undefined) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
 }
 
 function formatArgs (args: Record<string, unknown>): string {

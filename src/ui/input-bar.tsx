@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { themeManager } from '../core/themes.js'
 import { COMMAND_NAMES } from '../commands/index.js'
+import { visualWidth } from '../utils/string-width.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void;
@@ -74,7 +75,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const terminalWidth = process.stdout.columns || 80
   const inputLines = input.split('\n').reduce((sum, line) => {
     if (line.length === 0) return sum + 1
-    return sum + Math.ceil(line.length / Math.max(1, terminalWidth - 6))
+    return sum + Math.ceil(visualWidth(line) / Math.max(1, terminalWidth - 6))
   }, 0)
   const needsScroll = inputLines > MAX_VISIBLE_ROWS
 
@@ -241,16 +242,28 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
 
   const colors = themeManager.getColors()
 
-  // Split display text into visible lines for internal scroll
+  // Split display text into visible lines for internal scroll (visual-width aware)
+  const maxLineWidth = Math.max(1, terminalWidth - 6)
   const allLines = displayText.split('\n')
   const wrappedLines: string[] = []
   for (const line of allLines) {
     if (line.length === 0) {
       wrappedLines.push('')
     } else {
-      for (let i = 0; i < line.length; i += Math.max(1, terminalWidth - 6)) {
-        wrappedLines.push(line.slice(i, i + Math.max(1, terminalWidth - 6)))
+      let current = ''
+      let currentWidth = 0
+      for (const ch of line) {
+        const cw = visualWidth(ch)
+        if (currentWidth + cw > maxLineWidth) {
+          wrappedLines.push(current)
+          current = ch
+          currentWidth = cw
+        } else {
+          current += ch
+          currentWidth += cw
+        }
       }
+      if (current) wrappedLines.push(current)
     }
   }
   const visibleLines = needsScroll

@@ -2,7 +2,8 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import type { ToolCallEvent } from '../core/agent-loop.js'
 import { themeManager } from '../core/themes.js'
-import { platform } from 'node:os'
+import { platform, homedir } from 'node:os'
+import { formatDuration } from '../utils/string-width.js'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -58,10 +59,12 @@ export type ActivityCardData =
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatDuration (ms?: number): string {
-  if (ms === undefined) return ''
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
+function abbreviatePath (p: string, maxCols: number): string {
+  const home = homedir()
+  const abbreviated = p.startsWith(home) ? '~' + p.slice(home.length) : p
+  if (abbreviated.length <= maxCols) return abbreviated
+  const half = Math.floor((maxCols - 3) / 2)
+  return abbreviated.slice(0, half) + '...' + abbreviated.slice(-half)
 }
 
 // ─── Shell Card ──────────────────────────────────────────────────────────────
@@ -153,7 +156,7 @@ function FileCard ({ data }: { data: FileCardData }) {
             <Text bold color={colors.info}>{toolLabel}</Text>
           </Box>
           <Box>
-            <Text dimColor>{data.path}</Text>
+            <Text dimColor>{abbreviatePath(data.path, (process.stdout.columns || 80) - 10)}</Text>
           </Box>
           <Box>
             <Text color={statusColor}>
@@ -162,7 +165,7 @@ function FileCard ({ data }: { data: FileCardData }) {
           </Box>
           {data.result && data.result.length > 0 && (
             <Box>
-              <Text color={colors.textMuted}>{data.result.slice(0, 150)}{data.result.length > 150 ? '…' : ''}</Text>
+              <Text color={colors.textMuted}>{data.result.slice(0, 300)}{data.result.length > 300 ? '…' : ''}</Text>
             </Box>
           )}
           {data.error && (

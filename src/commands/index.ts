@@ -1,3 +1,4 @@
+import { platform } from 'node:os'
 import type { ChatMessage } from '../api/index.js'
 import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
@@ -78,7 +79,20 @@ async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
     if (cmd.name === '/language') continue
     lines.push(`  ${cmd.name.padEnd(22)} ${cmd.description}`)
   }
-  lines.push('', '  /clear                 Clear chat history')
+  lines.push('', '  /clear                 Clear chat history (with confirmation)')
+  lines.push('', '**Keyboard shortcuts:**', '')
+  lines.push('  Ctrl+L                 Clear chat (opens confirmation dialog)')
+  lines.push('  Ctrl+C                 Cancel running agent / double-tap to exit')
+  lines.push('  Alt+V                  Paste image from clipboard (vision models only)')
+  if (platform() === 'win32') {
+    lines.push('  **Windows note:** If Alt+V does not work, ensure your terminal sends')
+    lines.push('  proper Alt/Meta sequences. Windows Terminal ≥ 1.14 works correctly.')
+    lines.push('  In older terminals try: Settings → Compatibility → "Use Alt as Meta key".')
+  }
+  lines.push('  Tab                    Cycle approval mode: plan → default → auto-edit → turbo')
+  lines.push('  PageUp / PageDown      Scroll chat history')
+  lines.push('  End                    Jump to latest message')
+  lines.push('  Shift+Enter            Insert newline in input')
   ctx.setMessages(prev => [...prev, { role: 'assistant', content: lines.join('\n') }])
   return true
 }

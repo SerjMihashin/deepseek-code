@@ -13,6 +13,7 @@ interface StatusBarProps {
   contextPercent?: number;
   totalTokens?: number;
   estimatedCost?: number;
+  model?: string;
 }
 
 function tokAbbr (n: number): string {
@@ -30,7 +31,7 @@ const modeLabels: Record<ApprovalMode, string> = {
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent, totalTokens, estimatedCost }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent, totalTokens, estimatedCost, model }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -100,6 +101,11 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
         {contextPercent !== undefined && contextPercent > 0 && (
           <Text color={contextPercent > 80 ? colors.error : contextPercent > 50 ? colors.warning : colors.textMuted}>
             ctx:{contextPercent}%{' '}
+          </Text>
+        )}
+        {model && (
+          <Text color={colors.textMuted}>
+            {model === 'deepseek-chat' ? 'V3' : model === 'deepseek-reasoner' ? 'R1' : model}{' '}
           </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>

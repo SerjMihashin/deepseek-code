@@ -1,5 +1,6 @@
 import { platform } from 'node:os'
 import type { ChatMessage } from '../api/index.js'
+import { DEEPSEEK_MODELS } from '../config/defaults.js'
 import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
 import { mcpManager } from '../core/mcp.js'
@@ -33,6 +34,8 @@ export interface SlashCommandContext {
   setSetupStep: (step: SetupStep) => void
   /** Called when /theme is entered without arguments — opens interactive picker */
   onThemePicker?: () => void
+  /** Called when /model is entered without arguments — opens interactive picker */
+  onModelPicker?: () => void
   /** Show a transient service notice (does NOT add to chat messages, does NOT break empty-state) */
   addServiceNotice?: (text: string) => void
   /** Returns current session metrics (tokens, cost, tool calls) */
@@ -628,6 +631,32 @@ async function cmdTheme (ctx: SlashCommandContext, input: string): Promise<boole
   return true
 }
 
+async function cmdModel (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const modelId = input.slice('/model'.length).trim()
+  if (!modelId) {
+    if (ctx.onModelPicker) {
+      ctx.onModelPicker()
+    } else {
+      const list = DEEPSEEK_MODELS.map(m =>
+        `- **${m.label}** (\`${m.id}\`): ${m.description}${m.id === ctx.config.model ? ' ✓ current' : ''}`
+      ).join('\n')
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `**Available Models:**\n${list}\n\nCurrent: **${ctx.config.model}**\nUse \`/model <id>\` to switch.`,
+      }])
+    }
+    return true
+  }
+  const found = DEEPSEEK_MODELS.find(m => m.id === modelId || m.label.toLowerCase() === modelId.toLowerCase())
+  const targetId = found?.id ?? modelId
+  ctx.config.model = targetId
+  const { saveConfig } = await import('../config/loader.js')
+  await saveConfig({ ...ctx.config, model: targetId })
+  const label = found?.label ?? targetId
+  ctx.addServiceNotice?.(`🤖 Модель: ${label} (${targetId})`)
+  return true
+}
+
 async function cmdLang (ctx: SlashCommandContext, input: string): Promise<boolean> {
   const code = input.split(/\s+/).pop()?.toLowerCase() as Locale | undefined
   if (!code || !['en', 'ru', 'zh'].includes(code)) {
@@ -981,6 +1010,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/loop', description: 'Schedule recurring task: /loop <interval> <prompt>', handler: cmdLoop },
   { name: '/stats', description: 'Session statistics with token usage', handler: cmdStats },
   { name: '/theme', description: 'Switch theme or open picker', handler: cmdTheme },
+  { name: '/model', description: 'Switch model or open picker: /model [id]', handler: cmdModel },
   { name: '/lang', description: 'Change language: /lang en|ru|zh', handler: cmdLang },
   { name: '/language', description: 'Alias for /lang', handler: cmdLang },
   { name: '/extensions', description: 'List installed extensions', handler: cmdExtensions },

@@ -51,3 +51,22 @@ export const MODEL_PRICING: Record<string, { inputPer1M: number; outputPer1M: nu
   'deepseek-chat': { inputPer1M: 0.14, outputPer1M: 0.28 },
   'deepseek-reasoner': { inputPer1M: 0.55, outputPer1M: 2.19 },
 }
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+  description: string;
+}
+
+export const DEEPSEEK_MODELS: ModelInfo[] = [
+  {
+    id: 'deepseek-chat',
+    label: 'DeepSeek V3',
+    description: 'Fast & capable — best for coding and general tasks',
+  },
+  {
+    id: 'deepseek-reasoner',
+    label: 'DeepSeek R1',
+    description: 'Deep reasoning, chain-of-thought — slower, higher quality',
+  },
+]

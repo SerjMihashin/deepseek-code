@@ -4,6 +4,7 @@ import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
+import { DEEPSEEK_MODELS } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
 import type { SessionOptions } from '../cli/interactive.js'
 import { type ChatMessage } from '../api/index.js'
@@ -69,6 +70,7 @@ export function App ({ config, options }: AppProps) {
   const [estimatedCost, setEstimatedCost] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
   const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
+  const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -108,8 +110,8 @@ export function App ({ config, options }: AppProps) {
       setMessages(prev => [...prev, msg])
     }
   )
-  const { step: setupStep, apiKeyError, langCursor, themeCursor, modeCursor, langOptions, modeOptions } = setupWizardState
-  const { handleApiKeySubmit, finishSetup, setLangCursor, setThemeCursor, setModeCursor, setStep: setSetupStep, setApiKeyError } = setupWizardActions
+  const { step: setupStep, apiKeyError, langCursor, themeCursor, modelCursor, modeCursor, langOptions, modeOptions } = setupWizardState
+  const { handleApiKeySubmit, finishSetup, setLangCursor, setThemeCursor, setModelCursor, setModeCursor, setStep: setSetupStep, setApiKeyError } = setupWizardActions
   const setupStepRef = useRef(setupStep)
   setupStepRef.current = setupStep
 
@@ -223,6 +225,10 @@ export function App ({ config, options }: AppProps) {
         const currentName = themeManager.theme.name
         const idx = themes.findIndex(t => t.name === currentName)
         setThemePicker({ themes, selectedIndex: Math.max(0, idx) })
+      },
+      onModelPicker: () => {
+        const idx = DEEPSEEK_MODELS.findIndex(m => m.id === config.model)
+        setModelPicker({ selectedIndex: Math.max(0, idx) })
       },
     }
     return executeSlashCommand(input, ctx)
@@ -651,6 +657,32 @@ export function App ({ config, options }: AppProps) {
         }
         return
       }
+      // Model picker: interactive selection
+      if (modelPicker) {
+        if (key.escape) {
+          setModelPicker(null)
+          return
+        }
+        if (key.upArrow) {
+          setModelPicker(prev => prev ? { selectedIndex: Math.max(0, prev.selectedIndex - 1) } : null)
+          return
+        }
+        if (key.downArrow) {
+          setModelPicker(prev => prev ? { selectedIndex: Math.min(DEEPSEEK_MODELS.length - 1, prev.selectedIndex + 1) } : null)
+          return
+        }
+        if (key.return) {
+          const chosen = DEEPSEEK_MODELS[modelPicker.selectedIndex]
+          if (chosen) {
+            saveConfig({ ...config, model: chosen.id }).catch(() => {})
+            config.model = chosen.id
+            setModelPicker(null)
+            addServiceNotice(`🤖 Модель: ${chosen.label} (${chosen.id})`)
+          }
+          return
+        }
+        return
+      }
       // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
       // When InputBar is active, arrows belong to input history/suggestions.
       if (key.upArrow && isProcessing) {
@@ -717,17 +749,33 @@ export function App ({ config, options }: AppProps) {
         themeManager.setTheme(themes[prev].name)
         setThemeCursor(prev)
       } else if (key.return) {
+        setSetupStep('model')
+        setModelCursor(0)
+      }
+      return
+    }
+
+    // Step 4: Model selection — arrows + Enter + Escape
+    if (step === 'model') {
+      if (key.escape) {
+        setSetupStep('theme')
+        return
+      }
+      if (key.downArrow) {
+        setModelCursor(Math.min(modelCursor + 1, DEEPSEEK_MODELS.length - 1))
+      } else if (key.upArrow) {
+        setModelCursor(Math.max(modelCursor - 1, 0))
+      } else if (key.return) {
         setSetupStep('mode')
         setModeCursor(0)
       }
       return
     }
 
-    // Step 4: Mode selection — arrows + Enter + Escape
+    // Step 5: Mode selection — arrows + Enter + Escape
     if (step === 'mode') {
       if (key.escape) {
-        setSetupStep('theme')
-        setThemeCursor(0)
+        setSetupStep('model')
         return
       }
       if (key.downArrow) {
@@ -792,6 +840,7 @@ export function App ({ config, options }: AppProps) {
           apiKeyError,
           langCursor,
           themeCursor,
+          modelCursor,
           modeCursor,
           langOptions,
           modeOptions,
@@ -819,6 +868,28 @@ export function App ({ config, options }: AppProps) {
                         {t.name}
                         {t.name === themeManager.theme.name ? ' (текущая)' : ''}
                       </Text>
+                    </Box>
+                  ))}
+                </Box>
+                <Box marginLeft={1} marginBottom={1} marginTop={1}>
+                  <Text color={colors.textMuted}>↑↓ — навигация  Enter — применить  Esc — отмена</Text>
+                </Box>
+              </Box>
+            )}
+            {modelPicker && (
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.primary}>
+                <Box marginLeft={1} marginTop={1}>
+                  <Text bold color={colors.primary}>🤖 Выберите модель</Text>
+                </Box>
+                <Box marginLeft={1} marginTop={1} flexDirection='column'>
+                  {DEEPSEEK_MODELS.map((m, i) => (
+                    <Box key={m.id} flexDirection='column'>
+                      <Text color={i === modelPicker.selectedIndex ? colors.primary : colors.textMuted}>
+                        {i === modelPicker.selectedIndex ? '▸ ' : '  '}
+                        <Text bold={i === modelPicker.selectedIndex}>{m.label}</Text>
+                        {m.id === config.model ? <Text dimColor> (текущая)</Text> : null}
+                      </Text>
+                      <Text dimColor>{'    '}{m.description}</Text>
                     </Box>
                   ))}
                 </Box>
@@ -910,6 +981,7 @@ export function App ({ config, options }: AppProps) {
         contextPercent={contextPercent}
         totalTokens={totalTokens}
         estimatedCost={estimatedCost}
+        model={config.model}
       />
     </Box>
   )

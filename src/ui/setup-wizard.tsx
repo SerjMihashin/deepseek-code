@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { Box, Text } from 'ink'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
+import { DEEPSEEK_MODELS } from '../config/defaults.js'
 import { saveConfig } from '../config/loader.js'
 import { DeepSeekAPI } from '../api/index.js'
 import { i18n, type Locale } from '../core/i18n.js'
@@ -122,6 +123,30 @@ function ThemeStep ({ cursor }: ThemeStepProps) {
   )
 }
 
+interface ModelStepProps {
+  cursor: number;
+}
+
+function ModelStep ({ cursor }: ModelStepProps) {
+  const colors = themeManager.getColors()
+  return (
+    <Box flexDirection='column' marginLeft={2}>
+      <Text bold>Select model</Text>
+      {DEEPSEEK_MODELS.map((model, i) => (
+        <Box key={model.id} flexDirection='column'>
+          <Text color={cursor === i ? colors.primary : colors.textMuted}>
+            {cursor === i ? '❯ ' : '  '}<Text bold={cursor === i}>{model.label}</Text>
+            <Text dimColor>  {model.id}</Text>
+          </Text>
+          <Text color={cursor === i ? colors.textMuted : colors.textMuted} dimColor>
+            {'    '}{model.description}
+          </Text>
+        </Box>
+      ))}
+    </Box>
+  )
+}
+
 interface ModeStepProps {
   cursor: number;
   modeOptions: ApprovalMode[];
@@ -142,13 +167,14 @@ function ModeStep ({ cursor, modeOptions }: ModeStepProps) {
 
 // ─── Setup Wizard Hook ───────────────────────────────────────────────────────
 
-export type SetupStep = 'lang' | 'apikey' | 'theme' | 'mode' | 'done'
+export type SetupStep = 'lang' | 'apikey' | 'theme' | 'model' | 'mode' | 'done'
 
 export interface SetupWizardState {
   step: SetupStep;
   apiKeyError: string;
   langCursor: number;
   themeCursor: number;
+  modelCursor: number;
   modeCursor: number;
   langOptions: Locale[];
   modeOptions: ApprovalMode[];
@@ -159,6 +185,7 @@ export interface SetupWizardActions {
   finishSetup: () => Promise<void>;
   setLangCursor: (c: number) => void;
   setThemeCursor: (c: number) => void;
+  setModelCursor: (c: number) => void;
   setModeCursor: (c: number) => void;
   setStep: (s: SetupStep) => void;
   setApiKeyError: (e: string) => void;
@@ -174,6 +201,7 @@ export function useSetupWizard (
   const [apiKeyError, setApiKeyError] = useState('')
   const [langCursor, setLangCursor] = useState(0)
   const [themeCursor, setThemeCursor] = useState(0)
+  const [modelCursor, setModelCursor] = useState(0)
   const [modeCursor, setModeCursor] = useState(0)
 
   const langOptions: Locale[] = ['en', 'ru', 'zh']
@@ -201,11 +229,13 @@ export function useSetupWizard (
 
   const finishSetup = useCallback(async () => {
     const themeName = themeManager.listThemes()[themeCursor]?.name ?? 'default-dark'
+    const modelId = DEEPSEEK_MODELS[modelCursor]?.id ?? 'deepseek-chat'
     const mode = modeOptions[modeCursor] ?? 'default'
     await saveConfig({
       ...config,
       language: langOptions[langCursor] ?? 'en',
       theme: themeName,
+      model: modelId,
       approvalMode: mode,
     })
     i18n.setLocale(langOptions[langCursor] ?? 'en')
@@ -214,16 +244,18 @@ export function useSetupWizard (
       ...config,
       language: langOptions[langCursor] ?? 'en',
       theme: themeName,
+      model: modelId,
       approvalMode: mode,
     })
     setStep('done')
-  }, [config, langCursor, themeCursor, modeCursor, langOptions, modeOptions, onSetupComplete])
+  }, [config, langCursor, themeCursor, modelCursor, modeCursor, langOptions, modeOptions, onSetupComplete])
 
   const state: SetupWizardState = {
     step,
     apiKeyError,
     langCursor,
     themeCursor,
+    modelCursor,
     modeCursor,
     langOptions,
     modeOptions,
@@ -234,6 +266,7 @@ export function useSetupWizard (
     finishSetup,
     setLangCursor,
     setThemeCursor,
+    setModelCursor,
     setModeCursor,
     setStep,
     setApiKeyError,
@@ -245,7 +278,7 @@ export function useSetupWizard (
 // ─── Setup Wizard Render ─────────────────────────────────────────────────────
 
 export function SetupWizard ({ state }: { state: SetupWizardState }) {
-  const { step, apiKeyError, langCursor, themeCursor, modeCursor, langOptions, modeOptions } = state
+  const { step, apiKeyError, langCursor, themeCursor, modelCursor, modeCursor, langOptions, modeOptions } = state
 
   const langLabels: Record<string, string> = {
     en: 'English',
@@ -263,9 +296,11 @@ export function SetupWizard ({ state }: { state: SetupWizardState }) {
             ? <ApiKeyStep apiKeyError={apiKeyError} />
             : step === 'theme'
               ? <ThemeStep cursor={themeCursor} />
-              : step === 'mode'
-                ? <ModeStep cursor={modeCursor} modeOptions={modeOptions} />
-                : null}
+              : step === 'model'
+                ? <ModelStep cursor={modelCursor} />
+                : step === 'mode'
+                  ? <ModeStep cursor={modeCursor} modeOptions={modeOptions} />
+                  : null}
       </Box>
     </Box>
   )

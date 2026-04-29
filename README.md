@@ -1,14 +1,13 @@
 <div align="center">
   <br/>
-  <h1>🦊 DeepSeek Code</h1>
-  <p><strong>Open-source AI coding agent for your terminal — cheaper than Copilot, more powerful than a shell</strong></p>
+  <h1>DeepSeek Code</h1>
+  <p><strong>Open-source AI coding agent for developers who want a fast terminal workflow without Copilot pricing.</strong></p>
 
   <p>
-    <a href="https://github.com/SerjMihashin/deep-code/blob/master/LICENSE">
+    <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
-    <img src="https://img.shields.io/badge/build-passing-brightgreen" alt="Build"/>
     <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek"/>
     <img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status"/>
   </p>
@@ -21,137 +20,113 @@
 
 ---
 
-## Why DeepSeek Code?
+## The Short Version
 
-| | DeepSeek Code | GitHub Copilot | Claude Code |
-|---|---|---|---|
-| **Cost** | ~$0.001/request | $10–19/month | $20+/month |
-| **Runs in terminal** | ✅ | ❌ | ✅ |
-| **File editing** | ✅ | ✅ | ✅ |
-| **Browser automation** | ✅ | ❌ | ❌ |
-| **Open source** | ✅ | ❌ | ❌ |
-| **Self-hosted** | ✅ | ❌ | ❌ |
+DeepSeek Code is a terminal-first AI coding agent. It reads your project, edits files, runs commands, reviews code, remembers context, and can automate Chrome when a task needs a browser.
 
-**DeepSeek API costs ~30× less than GPT-4** — run hundreds of coding sessions for the price of one Copilot month.
+It is built for developers who want a practical local workflow:
+
+- **Lower cost**: use DeepSeek API directly instead of a fixed monthly coding subscription.
+- **Real project work**: inspect files, patch code, run tests, and continue from previous sessions.
+- **Terminal-native**: no IDE lock-in, no heavy desktop app, no cloud workspace requirement.
+- **User-controlled automation**: choose read-only planning, manual approvals, auto-edit, or full turbo mode.
 
 ---
 
-**DeepSeek Code** is an open-source AI coding agent that runs entirely in your terminal.  
-It reads your project, edits files, runs commands, searches code, and even automates Chrome — all through natural conversation.
-
-```
-You: "Find the memory leak in server.ts and fix it"
-  → read_file("server.ts")
-  → grep_search("EventEmitter|listener|removeListener")
-  → edit("server.ts")   ← shows diff, asks for approval
-  → run_shell_command("npm test")
-  ✅ "Fixed: EventEmitter listener was never removed in cleanup()"
-```
-
----
-
-## ✨ Features
-
-| | |
-|---|---|
-| 🧠 **Autonomous Agent** | Reads files, writes code, runs commands, searches — plans and executes multi-step tasks |
-| 🖥️ **Beautiful TUI** | Full terminal UI with streaming chat, tool call chain, spinner, syntax highlighting |
-| 🔒 **4 Approval Modes** | Plan · Default · Auto-Edit · Turbo — you choose the level of AI autonomy |
-| 🌐 **Browser Automation** | Open pages, click, fill forms, screenshot, read console — Chrome built right in |
-| 🧩 **MCP Protocol** | Connect external tool servers (filesystem, database, custom tools) |
-| 🧠 **Persistent Memory** | `/remember` — AI remembers project context across sessions |
-| 📋 **AI Code Review** | `/review` — analyzes your code for bugs, vulnerabilities, performance issues |
-| 🎨 **6 Themes** | Default dark · Light · Dracula · Nord · Solarized · Matrix |
-| 🌍 **3 Languages** | English · Русский · 中文 |
-| 📊 **Token Metrics** | Real-time cost tracking, context usage %, execution timing |
-| ⏰ **Scheduler** | `/loop 5m "check build"` — recurring background tasks |
-| 🤖 **CI/CD Mode** | `--headless --json` — pipe-friendly output for automation |
-
----
-
-## 🚀 Quick Start
+## Install
 
 ```bash
-# Install globally
-npm install -g deep-code
-
-# Or run without installing
-npx deep-code
+npm install -g @serjm/deepseek-code
 ```
 
-On first run, the setup wizard guides you through:
-1. Choose language (English / Русский / 中文)
-2. Enter your [DeepSeek API key](https://platform.deepseek.com/api_keys) — free tier available
-3. Choose approval mode
-4. Start coding
+Run it:
 
 ```bash
-deep-code             # interactive mode
-dsc                    # short alias
-dsc -p "Fix the bug"   # one-shot prompt
-dsc --turbo            # auto-approve all actions (no confirmation)
-dsc --headless --json  # CI/CD mode with JSON output
-dsc -c                 # continue last session
+deepseek-code
+```
+
+Or run without installing:
+
+```bash
+npx @serjm/deepseek-code
+```
+
+Short alias:
+
+```bash
+dsc
+dsc -p "Find the bug in auth.ts and patch it"
+dsc --headless --json -p "Review this repository"
 ```
 
 ---
 
-## 🔒 Approval Modes
+## Why Use It
 
-You stay in control. Choose how much autonomy the AI has:
-
-| Mode | Behavior |
+| Need | DeepSeek Code |
 |---|---|
-| **Plan** | Read-only — AI can search and analyze, no changes |
-| **Default** | AI proposes changes, you approve each one |
-| **Auto-Edit** | File edits auto-approved, shell commands need approval |
-| **Turbo** | Fully autonomous — approves everything automatically |
-
-Switch modes anytime with `Tab` — even while the agent is running.
-
----
-
-## 🌐 Browser Automation
-
-The browser is a first-class tool, not a plugin:
-
-```
-> Open github.com and take a screenshot of the trending repos
-> Fill out the login form on my local app at localhost:3000
-> Click "Submit" and check the network tab for the API response
-> Read the browser console for any JavaScript errors
-```
-
-Supports: `open` · `click` · `fill` · `screenshot` · `eval` · `scroll` · `wait` · `network` · `console` · `cookies` · `storage` · and more.
+| Fix code from the terminal | Reads files, proposes patches, and runs verification commands |
+| Keep costs predictable | Uses your DeepSeek API key directly |
+| Work inside existing repos | Runs where your code already lives |
+| Avoid blind automation | Approval modes keep edits and shell commands under your control |
+| Debug browser flows | Built-in Chrome automation for pages, forms, console, screenshots, and network state |
+| Keep context over time | Project memory and resumable sessions help with longer work |
 
 ---
 
-## ⌨️ Commands
+## What It Can Do
+
+```text
+You: "Find why checkout fails after login and fix it"
+
+DeepSeek Code:
+  1. Searches the relevant files
+  2. Reads the auth and checkout code
+  3. Applies a focused patch
+  4. Runs tests or the command you approve
+  5. Summarizes the change
+```
+
+Core features:
+
+- **Autonomous coding agent**: plans, reads, edits, searches, and runs commands.
+- **Full terminal UI**: streaming output, tool activity, status, costs, and context usage.
+- **Approval modes**: Plan, Default, Auto-Edit, and Turbo.
+- **Browser automation**: open pages, click, fill forms, inspect console/network, take screenshots.
+- **MCP support**: connect external tool servers for custom workflows.
+- **Persistent memory**: save project facts with `/remember`.
+- **AI code review**: use `/review` to inspect bugs, risks, and security issues.
+- **Headless mode**: CI-friendly JSON output with `--headless --json`.
+
+---
+
+## Commands
 
 | Command | Description |
 |---|---|
-| `/help` | Show all commands |
-| `/remember <text>` | Save to AI memory |
-| `/forget` | Clear memories |
-| `/memory` | List saved memories |
-| `/review` | AI code review |
-| `/checkpoint` | Save git checkpoint |
-| `/restore` | Restore checkpoint |
-| `/theme` | Switch UI theme |
+| `/help` | Show available commands |
+| `/setup` | Configure API key, language, and approval mode |
+| `/remember <text>` | Save project context |
+| `/memory` | Show saved memories |
+| `/review` | Run AI code review |
+| `/checkpoint` | Save a git checkpoint |
+| `/restore` | Restore a checkpoint |
+| `/theme` | Switch terminal theme |
 | `/lang` | Switch language |
-| `/git <cmd>` | Git operations |
-| `/loop <interval> <task>` | Recurring tasks |
-| `/sandbox` | Docker-isolated execution |
+| `/git <cmd>` | Run git operations |
+| `/loop <interval> <task>` | Schedule recurring work |
+| `/sandbox` | Run commands in Docker isolation |
 | `/mcp` | Manage MCP servers |
-| `/stats` | Session statistics |
+| `/stats` | Show session statistics |
 | `/clear` | Clear chat |
 
 ---
 
-## ⚙️ Configuration
+## Configuration
+
+Use environment variables:
 
 ```bash
-# Environment variables
 export DEEPSEEK_API_KEY="sk-..."
 export DEEPSEEK_MODEL="deepseek-chat"
 ```
@@ -169,49 +144,51 @@ Or create `.deepseek-code/settings.json` in your project:
 
 ---
 
-## 📁 Architecture
+## Safety Model
 
-```
-src/
-  cli/    — Entry point, Commander CLI, headless mode
-  core/   — Agent loop, memory, sessions, MCP, i18n, metrics
-  api/    — DeepSeek API client with streaming + function calling
-  tools/  — read · write · edit · bash · glob · grep · chrome
-  ui/     — Ink/React TUI (chat, input bar, status bar, tool cards)
-  config/ — Config loader and defaults
-```
+DeepSeek Code is designed around explicit control:
 
----
+- **Plan**: read-only analysis.
+- **Default**: asks before edits and commands.
+- **Auto-Edit**: file edits are automatic, shell commands still need approval.
+- **Turbo**: full automation for trusted local work.
 
-## 🛡️ Safety
-
-- **Approval modes** — choose how much the AI can do autonomously
-- **Command sanitization** — dangerous shell patterns are blocked
-- **File size limits** — writes capped at 1MB
-- **Sandbox mode** — Docker-isolated execution via `/sandbox`
-- **`.deepseekignore`** — exclude sensitive files from AI access
+It also supports command sanitization, file size limits, `.deepseekignore`, checkpoints, and optional Docker sandboxing.
 
 ---
 
-## 🤝 Contributing
-
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+## Development
 
 ```bash
-git clone https://github.com/SerjMihashin/deep-code.git
-cd deep-code
+git clone https://github.com/SerjMihashin/deepseek-code.git
+cd deepseek-code
 npm install
-npm run dev
+npm run build
+npm test
+```
+
+Package check:
+
+```bash
+npm pack --dry-run
+npm publish --dry-run --access public
+```
+
+Publish to npm:
+
+```bash
+npm login
+npm publish --access public
+```
+
+If npm asks for two-factor authentication:
+
+```bash
+npm publish --access public --otp=123456
 ```
 
 ---
 
-## 📄 License
+## License
 
 Apache-2.0 © 2026 Serj Mikhashin
-
----
-
-<p align="center">
-  <sub>Built with ❤️ and TypeScript · Powered by <a href="https://deepseek.com">DeepSeek API</a></sub>
-</p>

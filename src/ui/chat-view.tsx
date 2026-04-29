@@ -130,7 +130,7 @@ export const ChatView = React.memo(
                   <>
                     <MatrixRain />
                     <Box position='absolute' flexDirection='column' alignItems='center'>
-                      <Text bold color={colors.primary}>deep-code</Text>
+                      <Text bold color={colors.primary}>deepseek-code</Text>
                       <Text color={colors.textMuted}>/help — помощь  |  /setup — настройки  |  Alt+V — изображение{process.platform === 'win32' ? ' (Win Terminal ≥1.14)' : ''}</Text>
                     </Box>
                   </>

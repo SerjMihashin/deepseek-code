@@ -16,7 +16,7 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { version: string }
 const program = new Command()
 
 program
-  .name('deep-code')
+  .name('deepseek-code')
   .description('AI-powered CLI agent for software development')
   .version(pkg.version)
   .argument('[query...]', 'Optional query to run in non-interactive mode')

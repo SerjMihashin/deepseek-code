@@ -52,6 +52,8 @@ export function App ({ config, options }: AppProps) {
     resolve: (value: boolean) => void;
   } | null>(null)
   const [approvalCursor, setApprovalCursor] = useState(0)
+  const [pendingClear, setPendingClear] = useState(false)
+  const [clearCursor, setClearCursor] = useState(0)
   const exemptedToolsRef = useRef<Set<string>>(new Set())
   const approvalModeRef = useRef<ApprovalMode>(approvalMode)
   const sessionIdRef = useRef<string>('')
@@ -529,6 +531,20 @@ export function App ({ config, options }: AppProps) {
 
     // When not in setup mode, let InputBar handle all keyboard input
     if (step === 'done') {
+      // Handle clear confirmation dialog
+      if (pendingClear) {
+        if (key.upArrow) {
+          setClearCursor(prev => Math.max(0, prev - 1))
+        } else if (key.downArrow) {
+          setClearCursor(prev => Math.min(1, prev + 1))
+        } else if (key.return) {
+          if (clearCursor === 0) executeClear()
+          else setPendingClear(false)
+        } else if (key.escape) {
+          setPendingClear(false)
+        }
+        return
+      }
       // Handle approval dialog
       if (pendingApproval) {
         if (key.upArrow) {
@@ -740,7 +756,7 @@ export function App ({ config, options }: AppProps) {
     return () => clearInterval(interval)
   }, [isProcessing])
 
-  const handleClear = useCallback(() => {
+  const executeClear = useCallback(() => {
     setMessages([])
     setToolCalls([])
     setPendingApproval(null)
@@ -754,7 +770,17 @@ export function App ({ config, options }: AppProps) {
       clearTimeout(serviceNoticeTimerRef.current)
       serviceNoticeTimerRef.current = null
     }
+    setPendingClear(false)
   }, [])
+
+  const handleClear = useCallback(() => {
+    if (messages.length === 0 && toolCalls.length === 0) {
+      executeClear()
+      return
+    }
+    setPendingClear(true)
+    setClearCursor(0)
+  }, [messages.length, toolCalls.length, executeClear])
   const handleExit = useCallback(() => { exit() }, [exit])
   const colors = themeManager.getColors()
 
@@ -831,6 +857,28 @@ export function App ({ config, options }: AppProps) {
                 </Box>
               </Box>
             )}
+            {pendingClear && (
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.warning}>
+                <Box>
+                  <Text bold color={colors.warning}>⚠️  Очистить историю чата?</Text>
+                </Box>
+                <Box marginLeft={1}>
+                  <Text color={colors.textMuted}>{messages.length} сообщений будет удалено. Отмену нельзя.</Text>
+                </Box>
+                <Box flexDirection='column' marginTop={1}>
+                  {['✅  Да, очистить', '❌  Отмена'].map((label, i) => (
+                    <Box key={i} marginLeft={1}>
+                      <Text color={clearCursor === i ? colors.primary : colors.text}>
+                        {clearCursor === i ? '❯ ' : '  '}{label}
+                      </Text>
+                    </Box>
+                  ))}
+                  <Box marginLeft={1} marginTop={1}>
+                    <Text color={colors.textMuted}>↑↓ — навигация  Enter — выбрать  Esc — отмена</Text>
+                  </Box>
+                </Box>
+              </Box>
+            )}
           </Box>
           )}
       <InputBar
@@ -840,7 +888,7 @@ export function App ({ config, options }: AppProps) {
         onExit={handleExit}
         isMasked={setupStep === 'apikey'}
         isSetupMode={setupStep !== 'done'}
-        blockInput={setupStep === 'done' && pendingApproval !== null}
+        blockInput={setupStep === 'done' && (pendingApproval !== null || pendingClear)}
         emptyHint={emptyInputHint}
         onImagePaste={(base64, mimeType) => {
           const model = config.model ?? ''

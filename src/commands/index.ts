@@ -169,7 +169,7 @@ async function cmdMemory (ctx: SlashCommandContext): Promise<boolean> {
   ).join('\n')
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-      content: `**Memories** (${memories.length}):\n\n${memoryList}`,
+    content: `**Memories** (${memories.length}):\n\n${memoryList}`,
   }])
   return true
 }

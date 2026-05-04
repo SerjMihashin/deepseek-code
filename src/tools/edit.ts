@@ -41,6 +41,19 @@ export const editTool: Tool = {
       assertPathInWorkspace(filePath)
       const content = await readFile(filePath, 'utf-8')
 
+      // Check if old_string exists
+      const index = content.indexOf(oldString)
+      if (index === -1) {
+        return {
+          success: false,
+          output: '',
+          error: 'String not found in file',
+          changed: false,
+          verified: false,
+          changedFiles: [],
+        }
+      }
+
       if (replaceAll) {
         const replaced = content.replaceAll(oldString, newString)
         if (replaced === content) {
@@ -48,27 +61,34 @@ export const editTool: Tool = {
             success: false,
             output: '',
             error: 'String not found in file',
+            changed: false,
+            verified: false,
+            changedFiles: [],
           }
         }
         await writeFile(filePath, replaced, 'utf-8')
+        // Verify by re-reading
+        const writtenContent = await readFile(filePath, 'utf-8')
+        const verified = writtenContent === replaced
         return {
           success: true,
           output: `Replaced all occurrences in ${filePath}`,
+          changed: true,
+          verified,
+          changedFiles: [filePath],
         }
       } else {
-        const index = content.indexOf(oldString)
-        if (index === -1) {
-          return {
-            success: false,
-            output: '',
-            error: 'String not found in file',
-          }
-        }
         const replaced = content.replace(oldString, newString)
         await writeFile(filePath, replaced, 'utf-8')
+        // Verify by re-reading
+        const writtenContent = await readFile(filePath, 'utf-8')
+        const verified = writtenContent === replaced
         return {
           success: true,
           output: `Successfully edited ${filePath}`,
+          changed: true,
+          verified,
+          changedFiles: [filePath],
         }
       }
     } catch (err) {
@@ -76,6 +96,9 @@ export const editTool: Tool = {
         success: false,
         output: '',
         error: `Failed to edit file: ${(err as Error).message}`,
+        changed: false,
+        verified: false,
+        changedFiles: [],
       }
     }
   },

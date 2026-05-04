@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from 'node:fs/promises'
+import { writeFile, readFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 import { assertPathInWorkspace } from './path-safety.js'
@@ -32,6 +32,9 @@ export const writeTool: Tool = {
         success: false,
         output: '',
         error: `File too large: ${content.length} bytes exceeds the maximum of ${MAX_FILE_SIZE} bytes (1MB). Use run_shell_command to write large files.`,
+        changed: false,
+        verified: false,
+        changedFiles: [],
       }
     }
 
@@ -39,15 +42,26 @@ export const writeTool: Tool = {
       assertPathInWorkspace(filePath)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, content, 'utf-8')
+
+      // Verify by re-reading the file
+      const writtenContent = await readFile(filePath, 'utf-8')
+      const verified = writtenContent === content
+
       return {
         success: true,
         output: `Successfully wrote ${content.length} bytes to ${filePath}`,
+        changed: true,
+        verified,
+        changedFiles: [filePath],
       }
     } catch (err) {
       return {
         success: false,
         output: '',
         error: `Failed to write file: ${(err as Error).message}`,
+        changed: false,
+        verified: false,
+        changedFiles: [],
       }
     }
   },

@@ -16,6 +16,12 @@ export interface ToolResult {
   success: boolean;
   output: string;
   error?: string;
+  /** Whether the tool actually changed something (e.g., file written/modified) */
+  changed?: boolean;
+  /** Whether the change was verified by re-reading from disk */
+  verified?: boolean;
+  /** List of files that were changed */
+  changedFiles?: string[];
 }
 
 export type ApprovalRequirement = 'always' | 'auto' | 'never'

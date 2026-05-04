@@ -18,6 +18,7 @@ export class MetricsCollector {
   private _outputTokens: number = 0
   private _reasoningOutputTokens: number = 0
   private _lastInputTokens: number = 0
+  private _apiCalls: number = 0
   private toolTimings: Map<string, { start: number; duration?: number }> = new Map()
   private toolCallLog: Array<{ tool: string; duration: number; success: boolean }> = []
 
@@ -47,6 +48,10 @@ export class MetricsCollector {
 
   get totalTokens (): number {
     return this._inputTokens + this._outputTokens
+  }
+
+  get apiCalls (): number {
+    return this._apiCalls
   }
 
   get elapsedMs (): number {
@@ -85,6 +90,7 @@ export class MetricsCollector {
     this._outputTokens += usage.output ?? 0
     this._reasoningOutputTokens += usage.reasoningOutput ?? 0
     if (input > 0) this._lastInputTokens = input
+    this._apiCalls++
   }
 
   /**
@@ -130,15 +136,38 @@ export class MetricsCollector {
     const costStr = cost > 0 ? ` · $${cost.toFixed(4)}` : ''
 
     let summary = '\n\n━━━ Execution Summary ━━━\n'
-    const cacheStr = this._cacheHitInputTokens > 0 || this._cacheMissInputTokens > 0
-      ? `, cache hit: ${this._cacheHitInputTokens.toLocaleString()}, cache miss: ${this._cacheMissInputTokens.toLocaleString()}`
-      : ''
-    const reasoningStr = this._reasoningOutputTokens > 0 ? `, reasoning: ${this._reasoningOutputTokens.toLocaleString()}` : ''
-    summary += `Tool uses: ${this._toolCalls} · Tokens: ${this.totalTokens.toLocaleString()} (in: ${this._inputTokens.toLocaleString()}${cacheStr}, out: ${this._outputTokens.toLocaleString()}${reasoningStr})${costStr} · Time: ${mins}m ${secs}s\n`
 
-    // Add compact tool breakdown if there were calls
+    // API calls count
+    const apiCallStr = this._apiCalls > 0
+      ? `API calls: ${this._apiCalls}\n`
+      : ''
+    summary += apiCallStr
+
+    // Session input/output totals (sum across all API calls)
+    const inputStr = this._inputTokens.toLocaleString()
+    const outputStr = this._outputTokens.toLocaleString()
+    const totalStr = this.totalTokens.toLocaleString()
+    const reasoningStr = this._reasoningOutputTokens > 0
+      ? ` (reasoning: ${this._reasoningOutputTokens.toLocaleString()})`
+      : ''
+
+    summary += `  Session input tokens:  ${inputStr}`
+    if (this._cacheHitInputTokens > 0 || this._cacheMissInputTokens > 0) {
+      summary += ` (cache hit: ${this._cacheHitInputTokens.toLocaleString()}, cache miss: ${this._cacheMissInputTokens.toLocaleString()})`
+    }
+    summary += '\n'
+    summary += `  Session output tokens: ${outputStr}${reasoningStr}\n`
+    summary += `  Session total tokens:  ${totalStr}\n`
+
+    // Last request context window (the actual size of the last prompt)
+    const contextPercent = this.getCurrentWindowPercent()
+    if (contextPercent > 0 && this._lastInputTokens > 0) {
+      summary += `\nLast request context: ${this._lastInputTokens.toLocaleString()} tokens (${contextPercent}% of 128k window)\n`
+    }
+
+    // Tool breakdown
     if (this.toolCallLog.length > 0) {
-      // Group by tool name for compact display
+      summary += '\n'
       const groups = new Map<string, { count: number; totalDuration: number; success: number; fail: number }>()
       for (const call of this.toolCallLog) {
         const g = groups.get(call.tool) ?? { count: 0, totalDuration: 0, success: 0, fail: 0 }
@@ -152,6 +181,7 @@ export class MetricsCollector {
       ).join(', ')}\n`
     }
 
+    summary += `Time: ${mins}m ${secs}s${costStr}\n`
     summary += '━━━━━━━━━━━━━━━━━━━━━━━━━━\n'
     return summary
   }
@@ -165,6 +195,7 @@ export class MetricsCollector {
     this._outputTokens = 0
     this._reasoningOutputTokens = 0
     this._lastInputTokens = 0
+    this._apiCalls = 0
     this.toolTimings.clear()
     this.toolCallLog = []
   }

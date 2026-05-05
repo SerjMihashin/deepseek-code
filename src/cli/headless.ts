@@ -1,6 +1,7 @@
 import { loadConfig } from '../config/loader.js'
 import { AgentLoop } from '../core/agent-loop.js'
 import { saveSession, writeExecutionBundle, writeSessionHandoff } from '../core/session.js'
+import { AUDIT_BUDGET_PRESET } from '../tools/types.js'
 import type { SessionOptions } from './interactive.js'
 
 export interface HeadlessToolCallSummary {
@@ -41,6 +42,7 @@ export async function headlessMode (
   const agent = new AgentLoop(config, {
     approvalMode,
     cwd: process.cwd(),
+    budget: AUDIT_BUDGET_PRESET,
     onApprovalRequest: async (toolName) => {
       if (approvalMode === 'plan') {
         // In plan mode, only reject tools that need approval (write/edit/bash)

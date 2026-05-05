@@ -50,6 +50,17 @@ export interface ToolDefinition {
 }
 
 /**
+ * Preset budget for small/audit tasks (headless mode).
+ * Limits tool calls, API calls, read_file, and shell commands.
+ */
+export const AUDIT_BUDGET_PRESET: TaskBudget = {
+  maxToolCalls: 12,
+  maxApiCalls: 6,
+  maxReadFiles: 5,
+  maxShellCommands: 4,
+}
+
+/**
  * OpenAI-compatible tool format for DeepSeek API function calling.
  */
 export interface OpenAITool {

@@ -50,6 +50,12 @@ export interface ToolCallEvent {
   error?: string;
   durationMs?: number;
   startedAt?: number;
+  /** Whether the tool actually changed something (e.g., file written/modified) */
+  changed?: boolean;
+  /** Whether the change was verified by re-reading from disk */
+  verified?: boolean;
+  /** List of files that were changed */
+  changedFiles?: string[];
 }
 
 export interface ToolResultEvent {
@@ -475,6 +481,9 @@ export class AgentLoop extends EventEmitter {
               toolCallEvent.result = toolResult.output
               toolCallEvent.error = toolResult.error
               toolCallEvent.durationMs = duration
+              toolCallEvent.changed = toolResult.changed
+              toolCallEvent.verified = toolResult.verified
+              toolCallEvent.changedFiles = toolResult.changedFiles
               this.toolCallHistory.set(tc.id, toolCallEvent)
 
               this.options.onToolResult({
@@ -651,7 +660,7 @@ export class AgentLoop extends EventEmitter {
   private async executeTool (
     name: string,
     args: Record<string, unknown>
-  ): Promise<{ success: boolean; output: string; error?: string }> {
+  ): Promise<{ success: boolean; output: string; error?: string; changed?: boolean; verified?: boolean; changedFiles?: string[] }> {
     const def = this.tools.find(t => t.tool.name === name)
     if (!def) {
       return { success: false, output: '', error: `Неизвестный инструмент: "${name}"` }
@@ -674,6 +683,9 @@ export class AgentLoop extends EventEmitter {
         success: result.success,
         output: result.output,
         error: result.error,
+        changed: result.changed,
+        verified: result.verified,
+        changedFiles: result.changedFiles,
       }
     } catch (err) {
       return {

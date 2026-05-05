@@ -110,7 +110,7 @@ Execution Summary показывал огромные значения токе�
 
 ## P0.1 — Task Budget Guard
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -168,6 +168,24 @@ large task:
 - Маленькая задача не уходит в 50 tool calls.
 - Агент останавливается и даёт partial report.
 - Budget не ломает обычные задачи.
+
+### Факт проверки
+
+- Добавлен TaskBudget: maxToolCalls, maxApiCalls, maxIterations, maxReadFiles, maxShellCommands.
+- Budget guard добавлен в AgentLoop.
+- Headless режим использует AUDIT_BUDGET_PRESET.
+- Interactive режим получил локальную команду: /budget status, /budget off, /budget small, /budget audit.
+- Команды /budget локальные: не уходят в модель и не дают Execution Summary.
+- Visible halt проверен вручную: maxApiCalls: 6/6 показал budget halt report.
+- Halt report теперь выводится через stream output.
+
+### Коммиты
+
+- feat: add task budget guard scaffold
+- feat: enable budget guard for headless tasks
+- feat: add interactive budget command
+- fix: show budget halt after usage accounting
+- fix: show budget halt in stream output
 
 ---
 

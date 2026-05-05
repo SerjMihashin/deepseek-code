@@ -26,6 +26,24 @@ export interface ToolResult {
 
 export type ApprovalRequirement = 'always' | 'auto' | 'never'
 
+/**
+ * Budget limits for a task session.
+ * All values are optional — unset means unlimited.
+ * 0 is treated as "no limit" (falsy check).
+ */
+export interface TaskBudget {
+  /** Maximum total tool calls across all iterations */
+  maxToolCalls?: number
+  /** Maximum API calls (round trips to model) */
+  maxApiCalls?: number
+  /** Maximum iterations (overrides AgentLoopOptions.maxIterations if set) */
+  maxIterations?: number
+  /** Maximum calls to read_file tool */
+  maxReadFiles?: number
+  /** Maximum calls to shell/bash/run_shell_command tools */
+  maxShellCommands?: number
+}
+
 export interface ToolDefinition {
   tool: Tool;
   approval: ApprovalRequirement;

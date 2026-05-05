@@ -58,6 +58,22 @@ export class MetricsCollector {
     return Date.now() - this.startTime
   }
 
+  /** Get a copy of the tool call log for budget/inspection purposes */
+  get toolCallLogEntries (): Array<{ tool: string; duration: number; success: boolean }> {
+    return [...this.toolCallLog]
+  }
+
+  /** Get count of a specific tool in the call log */
+  getToolCallCount (name: string): number {
+    return this.toolCallLog.filter(t => t.tool === name).length
+  }
+
+  /** Get count of tool calls matching any of the given names */
+  getToolCallCountAny (names: string[]): number {
+    const nameSet = new Set(names)
+    return this.toolCallLog.filter(t => nameSet.has(t.tool)).length
+  }
+
   recordToolCallStart (toolName: string): void {
     this.toolTimings.set(toolName, { start: Date.now() })
   }

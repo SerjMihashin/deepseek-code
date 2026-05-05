@@ -1,5 +1,5 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
-import { type ToolDefinition, type ApprovalRequirement, toOpenAITools, sanitizeArgs } from '../tools/types.js'
+import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
@@ -37,6 +37,8 @@ export interface AgentLoopOptions {
   systemPrompt?: string;
   /** AbortSignal for cancellation support */
   signal?: AbortSignal;
+  /** Budget limits for the task session */
+  budget?: TaskBudget;
 }
 
 export interface ToolCallEvent {
@@ -275,11 +277,21 @@ export class AgentLoop extends EventEmitter {
       messageCount: this.messages.length,
     }).catch(() => {})
 
-    while (this.iterationCount < this.options.maxIterations) {
+    while (this.iterationCount < Math.min(this.options.maxIterations, this.options.budget?.maxIterations ?? this.options.maxIterations)) {
       this.iterationCount++
+
+      // Budget: check maxToolCalls at top of each iteration
+      if (this.checkBudgetHalt()) {
+        return this.buildBudgetHaltMessage()
+      }
 
       try {
         // Use streaming chat to get real-time output
+        // Budget: check maxApiCalls before API call
+        if (this.options.budget?.maxApiCalls && this.metrics.apiCalls >= this.options.budget.maxApiCalls) {
+          return this.buildBudgetHaltMessage()
+        }
+
         const stream = this.api.streamChat(this.messages, openAITools)
         let responseContent = ''
         let toolCalls: Array<{
@@ -329,6 +341,11 @@ export class AgentLoop extends EventEmitter {
 
         if (toolCalls.length === 0 && (!responseContent || responseContent.trim().length === 0)) {
           // Streaming не дал результата — пробуем non-streaming как fallback
+          // Budget: check maxApiCalls before fallback API call
+          if (this.options.budget?.maxApiCalls && this.metrics.apiCalls >= this.options.budget.maxApiCalls) {
+            return this.buildBudgetHaltMessage()
+          }
+
           const fallbackResult = await this.api.chat(this.messages, openAITools)
           if (fallbackResult.usage) {
             this.metrics.recordUsage(fallbackResult.usage)
@@ -408,6 +425,27 @@ export class AgentLoop extends EventEmitter {
                   tool_call_id: tc.id,
                 })
                 continue
+              }
+            }
+
+            // Budget: check limits before tool execution
+            if (this.options.budget?.maxToolCalls && this.metrics.toolCalls >= this.options.budget.maxToolCalls) {
+              return this.buildBudgetHaltMessage()
+            }
+
+            // Budget: check maxReadFiles
+            if (this.options.budget?.maxReadFiles && tc.function.name === 'read_file') {
+              const readFileCount = this.metrics.getToolCallCount('read_file')
+              if (readFileCount >= this.options.budget.maxReadFiles) {
+                return this.buildBudgetHaltMessage()
+              }
+            }
+
+            // Budget: check maxShellCommands
+            if (this.options.budget?.maxShellCommands && ['run_shell_command', 'bash', 'shell'].includes(tc.function.name)) {
+              const shellCount = this.metrics.getToolCallCountAny(['run_shell_command', 'bash', 'shell'])
+              if (shellCount >= this.options.budget.maxShellCommands) {
+                return this.buildBudgetHaltMessage()
               }
             }
 
@@ -512,6 +550,72 @@ export class AgentLoop extends EventEmitter {
   /**
    * Parse tool arguments from JSON string.
    */
+  /**
+   * Check if any budget limit has been exceeded (called at top of each iteration).
+   * Returns the field name that exceeded or null if all good.
+   */
+  private checkBudgetHalt (): boolean {
+    const budget = this.options.budget
+    if (!budget) return false
+
+    if (budget.maxToolCalls && this.metrics.toolCalls >= budget.maxToolCalls) return true
+    if (budget.maxApiCalls && this.metrics.apiCalls >= budget.maxApiCalls) return true
+    if (budget.maxIterations && this.iterationCount >= budget.maxIterations) return true
+
+    return false
+  }
+
+  /**
+   * Build the partial report message when budget is exceeded.
+   * This is used as a fallback when the iteration-level check catches overruns.
+   */
+  private buildBudgetHaltMessage (): string {
+    const budget = this.options.budget!
+
+    // Find which limit was hit
+    const reasons: string[] = []
+    if (budget.maxToolCalls && this.metrics.toolCalls >= budget.maxToolCalls) {
+      reasons.push(`maxToolCalls: ${this.metrics.toolCalls}/${budget.maxToolCalls}`)
+    }
+    if (budget.maxApiCalls && this.metrics.apiCalls >= budget.maxApiCalls) {
+      reasons.push(`maxApiCalls: ${this.metrics.apiCalls}/${budget.maxApiCalls}`)
+    }
+    if (budget.maxIterations && this.iterationCount >= budget.maxIterations) {
+      reasons.push(`maxIterations: ${this.iterationCount}/${budget.maxIterations}`)
+    }
+
+    const reasonStr = reasons.length > 0 ? reasons.join(', ') : 'budget limit exceeded'
+
+    // Build tool breakdown
+    const groups = new Map<string, number>()
+    for (const call of this.metrics.toolCallLogEntries) {
+      groups.set(call.tool, (groups.get(call.tool) || 0) + 1)
+    }
+    const toolList = Array.from(groups.entries())
+      .map(([name, count]) => `${name} x${count}`)
+      .join(', ')
+
+    const msg = [
+      `[Budget] Agent stopped by budget limit: ${reasonStr}.`,
+      `  API calls: ${this.metrics.apiCalls}`,
+      `  Tool calls: ${this.metrics.toolCalls}`,
+      `  Tools used: ${toolList}`,
+      `  Iterations: ${this.iterationCount}`,
+      '',
+      'To continue, increase the budget limit or set budget to unlimited.',
+    ].join('\n')
+
+    this.messages.push({ role: 'assistant', content: msg })
+    this.options.onResponse(msg)
+
+    // Append execution summary
+    const summary = this.metrics.getSummary(this.model)
+    this.options.onStreamChunk(summary)
+
+    return msg
+  }
+
+  /** @inheritdoc */
   private parseArguments (argsStr: string): Record<string, unknown> {
     try {
       return JSON.parse(argsStr) as Record<string, unknown>

@@ -492,6 +492,10 @@ export class AgentLoop extends EventEmitter {
                 content: this.formatToolResult(toolResult, duration),
                 tool_call_id: tc.id,
               })
+
+              if (this.checkBudgetHalt()) {
+                return this.buildBudgetHaltMessage()
+              }
             } catch (err) {
               const duration = Date.now() - startTime
               const errorMsg = (err as Error).message
@@ -615,7 +619,7 @@ export class AgentLoop extends EventEmitter {
     ].join('\n')
 
     this.messages.push({ role: 'assistant', content: msg })
-    this.options.onResponse(msg)
+    this.options.onStreamChunk(msg + '\n')
 
     // Append execution summary
     const summary = this.metrics.getSummary(this.model)

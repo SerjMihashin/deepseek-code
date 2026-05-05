@@ -339,6 +339,11 @@ export class AgentLoop extends EventEmitter {
           }
         }
 
+        // Budget: catch limits reached during streaming usage accounting.
+        if (this.checkBudgetHalt()) {
+          return this.buildBudgetHaltMessage()
+        }
+
         if (toolCalls.length === 0 && (!responseContent || responseContent.trim().length === 0)) {
           // Streaming не дал результата — пробуем non-streaming как fallback
           // Budget: check maxApiCalls before fallback API call
@@ -349,6 +354,10 @@ export class AgentLoop extends EventEmitter {
           const fallbackResult = await this.api.chat(this.messages, openAITools)
           if (fallbackResult.usage) {
             this.metrics.recordUsage(fallbackResult.usage)
+            // Budget: catch limits reached during fallback usage accounting.
+            if (this.checkBudgetHalt()) {
+              return this.buildBudgetHaltMessage()
+            }
           }
 
           if (fallbackResult.toolCalls && fallbackResult.toolCalls.length > 0) {

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Box, Text, useInput } from 'ink'
+import { Box, Text, useInput, useStdin } from 'ink'
 import { themeManager } from '../core/themes.js'
 import { COMMAND_NAMES, COMMAND_MAP } from '../commands/index.js'
 import { visualWidth } from '../utils/string-width.js'
@@ -28,8 +28,93 @@ const MAX_VISIBLE_ROWS = 5
 /** Max visible suggestions in the dropdown before scrolling */
 const SUGGESTIONS_MAX_VISIBLE = 8
 
+// ── Visual line helpers ──────────────────────────────────────────────────────
+
+interface VisualLine {
+  /** Character index in original text where this visual segment starts */
+  start: number
+  /** Character index (exclusive) where this visual segment ends */
+  end: number
+  /** The text content of this visual line */
+  text: string
+  /** Visual width of this line (in terminal columns) */
+  width: number
+}
+
+/**
+ * Splits `text` into visual lines considering:
+ * - logical newlines (\n)
+ * - visual-width wrapping at `maxWidth` columns
+ *
+ * Each VisualLine stores its original character range [start, end) so we
+ * can map cursor positions to visual lines and vice versa.
+ */
+function computeVisualLines (text: string, maxWidth: number): VisualLine[] {
+  const lines: VisualLine[] = []
+
+  if (text.length === 0) {
+    lines.push({ start: 0, end: 0, text: '', width: 0 })
+    return lines
+  }
+
+  const logicalLines = text.split('\n')
+  let pos = 0
+
+  for (let li = 0; li < logicalLines.length; li++) {
+    const logicalLine = logicalLines[li]
+
+    if (logicalLine.length === 0) {
+      // Empty logical line — still renders as one visual line
+      lines.push({ start: pos, end: pos, text: '', width: 0 })
+    } else {
+      let current = ''
+      let currentWidth = 0
+      let segStart = pos
+
+      for (let ci = 0; ci < logicalLine.length; ci++) {
+        const ch = logicalLine[ci]
+        const cw = visualWidth(ch)
+
+        if (currentWidth + cw > maxWidth) {
+          lines.push({ start: segStart, end: pos + ci, text: current, width: currentWidth })
+          current = ch
+          currentWidth = cw
+          segStart = pos + ci
+        } else {
+          current += ch
+          currentWidth += cw
+        }
+      }
+
+      // Last (or only) segment of this logical line
+      lines.push({ start: segStart, end: pos + logicalLine.length, text: current, width: currentWidth })
+    }
+
+    pos += logicalLine.length + 1
+  }
+
+  return lines
+}
+
+/**
+ * Returns the index of the visual line that contains `cursorIndex`.
+ * cursorIndex must be in range [0, text.length].
+ */
+function findVisualLine (lines: VisualLine[], cursorIndex: number): number {
+  for (let i = 0; i < lines.length; i++) {
+    if (cursorIndex >= lines[i].start && cursorIndex <= lines[i].end) {
+      return i
+    }
+  }
+  // Fallback: last line
+  return Math.max(0, lines.length - 1)
+}
+
+// ── Component ────────────────────────────────────────────────────────────────
+
 export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSetupMode, emptyHint, onImagePaste, blockInput }: InputBarProps) {
   const [input, setInput] = useState('')
+  const [cursorIndex, setCursorIndex] = useState(0)
   const [history, setHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [suggestionIndex, setSuggestionIndex] = useState(-1)
@@ -37,8 +122,29 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const [cursorVisible, setCursorVisible] = useState(true)
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
   const [inputScrollOffset, setInputScrollOffset] = useState(0)
+
+  // eslint-disable-next-line camelcase
+  const { internal_eventEmitter } = useStdin()
+
   const inputRef = useRef(input)
   inputRef.current = input
+  const cursorIndexRef = useRef(cursorIndex)
+  cursorIndexRef.current = cursorIndex
+  const lastRawInputRef = useRef('')
+
+  // Listen to raw input BEFORE useInput processes it (prependListener),
+  // so we can distinguish physical Backspace (\x7f, \b) from Delete (\x1b[3~) on Windows.
+  useEffect(() => {
+    const handler = (data: string) => {
+      lastRawInputRef.current = String(data)
+    }
+    // eslint-disable-next-line camelcase
+    internal_eventEmitter.prependListener('input', handler)
+    return () => {
+      // eslint-disable-next-line camelcase
+      internal_eventEmitter.removeListener('input', handler)
+    }
+  }, [internal_eventEmitter]) // eslint-disable-line camelcase
 
   useEffect(() => {
     setCursorVisible(!disabled)
@@ -76,13 +182,54 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const getSuggestions = (text: string) =>
     text.startsWith('/') ? COMMAND_NAMES.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
 
-  // Calculate number of visual lines the input text occupies
+  // ── Visual line computation (for both rendering and cursor navigation) ────
+
   const terminalWidth = process.stdout.columns || 80
-  const inputLines = input.split('\n').reduce((sum, line) => {
-    if (line.length === 0) return sum + 1
-    return sum + Math.ceil(visualWidth(line) / Math.max(1, terminalWidth - 6))
-  }, 0)
-  const needsScroll = inputLines > MAX_VISIBLE_ROWS
+  const maxLineWidth = Math.max(1, terminalWidth - 6)
+  const displayText = isMasked && input.length > 0
+    ? '•'.repeat(input.length)
+    : input
+
+  const visualLines = computeVisualLines(displayText, maxLineWidth)
+  const totalVisualLines = visualLines.length
+  const needsScroll = totalVisualLines > MAX_VISIBLE_ROWS
+  const cursorVisualLineIdx = findVisualLine(visualLines, cursorIndex)
+
+  // ── Adjust scroll whenever cursor moves off-screen ────────────────────────
+
+  useEffect(() => {
+    if (cursorVisualLineIdx < inputScrollOffset) {
+      setInputScrollOffset(cursorVisualLineIdx)
+    } else if (cursorVisualLineIdx >= inputScrollOffset + MAX_VISIBLE_ROWS) {
+      setInputScrollOffset(Math.max(0, cursorVisualLineIdx - MAX_VISIBLE_ROWS + 1))
+    }
+  }, [cursorVisualLineIdx, inputScrollOffset])
+
+  // Get the current visual column of the cursor within its visual line
+  function getCursorVisualColumn (cursorIdx: number, lines: VisualLine[]): number {
+    const lineIdx = findVisualLine(lines, cursorIdx)
+    const line = lines[lineIdx]
+    const localOffset = cursorIdx - line.start
+    return visualWidth(line.text.slice(0, localOffset))
+  }
+
+  // Move cursor to a target visual column on a specific visual line
+  function cursorIndexAtColumn (targetLine: VisualLine, targetCol: number): number {
+    let accumulatedWidth = 0
+    let bestLocalOffset = 0
+
+    for (let ci = 0; ci < targetLine.text.length; ci++) {
+      const cw = visualWidth(targetLine.text[ci])
+      if (accumulatedWidth + cw > targetCol) {
+        // Place cursor before this character — closer to targetCol wins
+        break
+      }
+      accumulatedWidth += cw
+      bestLocalOffset = ci + 1
+    }
+
+    return targetLine.start + bestLocalOffset
+  }
 
   useInput((_input, key) => {
     if (disabled) return
@@ -91,32 +238,48 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     // do NOT consume any keys — let parent useInput handle them.
     if (blockInput) return
 
-    // In setup mode, only handle Enter and character input, not arrows/tab
+    // ── Setup mode ────────────────────────────────────────────────────────
     if (isSetupMode) {
       if (key.return && input.trim()) {
         onSubmit(input)
         setInput('')
-      } else if (key.backspace || key.delete) {
-        setInput(prev => prev.slice(0, -1))
+        setCursorIndex(0)
+      } else if (key.backspace) {
+        const curIdx = cursorIndexRef.current
+        if (curIdx > 0) {
+          setInput(prev => prev.slice(0, curIdx - 1) + prev.slice(curIdx))
+          setCursorIndex(prev => prev - 1)
+        }
+        setSuggestionIndex(-1)
+      } else if (key.delete) {
+        const curIdx = cursorIndexRef.current
+        if (curIdx < (inputRef.current.length)) {
+          setInput(prev => prev.slice(0, curIdx) + prev.slice(curIdx + 1))
+          // cursorIndex unchanged for Delete
+        }
         setSuggestionIndex(-1)
       } else if (_input && !key.ctrl && !key.meta && !key.return && !key.escape && !key.backspace && !key.delete) {
-        setInput(prev => prev + _input)
+        const normalized = _input.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        const curIdx = cursorIndexRef.current
+        setInput(prev => prev.slice(0, curIdx) + normalized + prev.slice(curIdx))
+        setCursorIndex(prev => prev + normalized.length)
         setSuggestionIndex(-1)
       }
       return
     }
 
-    // Normal mode
+    // ── Normal mode ───────────────────────────────────────────────────────
     const currentInput = inputRef.current
+    const currentCursor = cursorIndexRef.current
     const currentSuggestions = getSuggestions(currentInput)
     const hasSuggestions = currentSuggestions.length > 0
 
+    // ── Suggestion navigation ─────────────────────────────────────────────
     if (hasSuggestions) {
       // Arrows cycle through suggestions — only change index, NOT input
       if (key.downArrow) {
         const newIdx = (suggestionIndex + 1) % currentSuggestions.length
         setSuggestionIndex(newIdx)
-        // Scroll down if active item goes below visible area
         setSuggestionsScrollOffset(prev => {
           if (newIdx >= prev + SUGGESTIONS_MAX_VISIBLE) {
             return newIdx - SUGGESTIONS_MAX_VISIBLE + 1
@@ -128,12 +291,10 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       if (key.upArrow) {
         const newIdx = suggestionIndex <= 0 ? currentSuggestions.length - 1 : suggestionIndex - 1
         setSuggestionIndex(newIdx)
-        // Scroll up if active item goes above visible area
         setSuggestionsScrollOffset(prev => {
           if (newIdx < prev) {
             return Math.max(0, newIdx)
           }
-          // Wrap-around from top to bottom
           if (suggestionIndex <= 0 && newIdx >= SUGGESTIONS_MAX_VISIBLE) {
             return Math.max(0, newIdx - SUGGESTIONS_MAX_VISIBLE + 1)
           }
@@ -157,6 +318,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
         onSubmit(cmd)
         setHistory(prev => [cmd, ...prev].slice(0, 100))
         setInput('')
+        setCursorIndex(0)
         setHistoryIndex(-1)
         setSuggestionIndex(-1)
         setPendingImageLabel(null)
@@ -167,33 +329,75 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       // (falls through to the backspace handler below)
     }
 
-    // Backspace / delete
-    if (key.backspace || key.delete) {
-      setInput(prev => prev.slice(0, -1))
+    // ── Cursor movement: Left / Right ─────────────────────────────────────
+    if (key.leftArrow) {
+      setCursorIndex(prev => Math.max(0, prev - 1))
+      return
+    }
+    if (key.rightArrow) {
+      setCursorIndex(prev => Math.min(currentInput.length, prev + 1))
+      return
+    }
+
+    // ── Backspace / Delete (cursor-aware) ─────────────────────────────────
+    if (key.backspace) {
+      if (currentCursor > 0) {
+        const newInput = currentInput.slice(0, currentCursor - 1) + currentInput.slice(currentCursor)
+        setInput(newInput)
+        setCursorIndex(currentCursor - 1)
+        // refetch new input value after state update — but we already have it
+      }
+      setSuggestionIndex(-1)
+      return
+    }
+    // Windows workaround: Backspace (\x7f, \b) arrives as key.delete in Ink,
+    // but physical Delete (\x1b[3~) also arrives as key.delete.
+    // Distinguish via raw input captured via internal_eventEmitter.
+    if (key.delete && lastRawInputRef.current && (lastRawInputRef.current === '\x7f' || lastRawInputRef.current === '\b')) {
+      if (currentCursor > 0) {
+        const newInput = currentInput.slice(0, currentCursor - 1) + currentInput.slice(currentCursor)
+        setInput(newInput)
+        setCursorIndex(currentCursor - 1)
+      }
+      setSuggestionIndex(-1)
+      return
+    }
+    if (key.delete) {
+      if (currentCursor < currentInput.length) {
+        const newInput = currentInput.slice(0, currentCursor) + currentInput.slice(currentCursor + 1)
+        setInput(newInput)
+        // cursorIndex unchanged
+      }
       setSuggestionIndex(-1)
       return
     }
 
-    // Regular character input
+    // ── Character input (cursor-aware) ────────────────────────────────────
     if (_input && !key.ctrl && !key.meta && !key.return && !key.tab && !key.escape && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow && !key.backspace && !key.delete) {
-      setInput(prev => prev + _input)
+      // Normalize Windows line endings (\r\n -> \n, \r -> \n) before storing
+      const normalizedInput = _input.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+      const newInput = currentInput.slice(0, currentCursor) + normalizedInput + currentInput.slice(currentCursor)
+      setInput(newInput)
+      setCursorIndex(currentCursor + normalizedInput.length)
       setSuggestionIndex(-1)
-      if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
       return
     }
 
-    // Shift+Enter = newline
+    // ── Shift+Enter = newline at cursor ───────────────────────────────────
     if (key.return && key.shift) {
-      setInput(prev => prev + '\n')
+      const newInput = currentInput.slice(0, currentCursor) + '\n' + currentInput.slice(currentCursor)
+      setInput(newInput)
+      setCursorIndex(currentCursor + 1)
       setSuggestionIndex(-1)
-      if (needsScroll) setInputScrollOffset(Math.max(0, inputLines - MAX_VISIBLE_ROWS))
       return
     }
-    // Enter = send (when no suggestions OR when suggestions exist but we fall back here)
+
+    // ── Enter = send ──────────────────────────────────────────────────────
     if (key.return && currentInput.trim()) {
       onSubmit(currentInput)
       setHistory(prev => [currentInput, ...prev].slice(0, 100))
       setInput('')
+      setCursorIndex(0)
       setHistoryIndex(-1)
       setInputScrollOffset(0)
       setPendingImageLabel(null)
@@ -201,39 +405,68 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       return
     }
 
-    // History navigation (only when no suggestions active)
-    if (!hasSuggestions) {
-      if (key.upArrow) {
+    // ── Up / Down arrows: multiline cursor navigation or history ──────────
+
+    if (key.upArrow) {
+      if (totalVisualLines > 1) {
+        // Move cursor up one visual line
+        const lines = computeVisualLines(currentInput, maxLineWidth)
+        const currentLineIdx = findVisualLine(lines, currentCursor)
+        if (currentLineIdx > 0) {
+          const targetCol = getCursorVisualColumn(currentCursor, lines)
+          const targetLine = lines[currentLineIdx - 1]
+          const newCursor = cursorIndexAtColumn(targetLine, targetCol)
+          setCursorIndex(newCursor)
+        }
+      } else if (currentInput === '') {
+        // History navigation — only when input is empty and not multiline
         if (history.length > 0) {
           const newIndex = Math.min(historyIndex + 1, history.length - 1)
           setHistoryIndex(newIndex)
           setInput(history[newIndex])
+          setCursorIndex(history[newIndex].length)
           setInputScrollOffset(0)
         }
-        return
       }
-      if (key.downArrow) {
+      return
+    }
+
+    if (key.downArrow) {
+      if (totalVisualLines > 1) {
+        // Move cursor down one visual line
+        const lines = computeVisualLines(currentInput, maxLineWidth)
+        const currentLineIdx = findVisualLine(lines, currentCursor)
+        if (currentLineIdx < lines.length - 1) {
+          const targetCol = getCursorVisualColumn(currentCursor, lines)
+          const targetLine = lines[currentLineIdx + 1]
+          const newCursor = cursorIndexAtColumn(targetLine, targetCol)
+          setCursorIndex(newCursor)
+        }
+      } else if (currentInput === '') {
+        // History navigation — only when input is empty
         if (historyIndex > 0) {
           const newIndex = historyIndex - 1
           setHistoryIndex(newIndex)
           setInput(history[newIndex])
+          setCursorIndex(history[newIndex].length)
           setInputScrollOffset(0)
         } else {
           setHistoryIndex(-1)
           setInput('')
+          setCursorIndex(0)
           setInputScrollOffset(0)
         }
-        return
       }
+      return
     }
 
-    // Alt+V — paste image from clipboard
+    // ── Alt+V — paste image from clipboard ────────────────────────────────
     if (key.meta && _input === 'v') {
       handleImagePaste().catch(() => {})
       return
     }
 
-    // Ctrl+L clear, Ctrl+C exit
+    // ── Ctrl+L clear, Ctrl+C exit ─────────────────────────────────────────
     if (key.ctrl && _input === 'l') {
       onClear()
     } else if (key.ctrl && _input === 'c') {
@@ -241,39 +474,16 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     }
   })
 
-  const displayText = isMasked && input.length > 0
-    ? '•'.repeat(input.length)
-    : input
+  // ── Rendering ─────────────────────────────────────────────────────────────
 
   const colors = themeManager.getColors()
 
-  // Split display text into visible lines for internal scroll (visual-width aware)
-  const maxLineWidth = Math.max(1, terminalWidth - 6)
-  const allLines = displayText.split('\n')
-  const wrappedLines: string[] = []
-  for (const line of allLines) {
-    if (line.length === 0) {
-      wrappedLines.push('')
-    } else {
-      let current = ''
-      let currentWidth = 0
-      for (const ch of line) {
-        const cw = visualWidth(ch)
-        if (currentWidth + cw > maxLineWidth) {
-          wrappedLines.push(current)
-          current = ch
-          currentWidth = cw
-        } else {
-          current += ch
-          currentWidth += cw
-        }
-      }
-      if (current) wrappedLines.push(current)
-    }
-  }
+  // Compute visible slice of visual lines
   const visibleLines = needsScroll
-    ? wrappedLines.slice(inputScrollOffset, inputScrollOffset + MAX_VISIBLE_ROWS)
-    : wrappedLines
+    ? visualLines.slice(inputScrollOffset, inputScrollOffset + MAX_VISIBLE_ROWS)
+    : visualLines
+
+  const visibleStartOffset = needsScroll ? inputScrollOffset : 0
 
   return (
     <Box flexDirection='column'>
@@ -318,16 +528,39 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
               </Box>
               )
             : (
-                visibleLines.map((line, i) => (
-                  <Box key={i}>
-                    {i === 0 && <Text bold color={colors.primary}>{'>'}</Text>}
-                    {i > 0 && <Text> </Text>}
-                    <Text color={colors.text}>{line || ' '}</Text>
-                    {i === visibleLines.length - 1 && !disabled && (
-                      <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text>
-                    )}
-                  </Box>
-                ))
+                visibleLines.map((line, i) => {
+                  const actualVisualIdx = visibleStartOffset + i
+                  const isCursorLine = actualVisualIdx === cursorVisualLineIdx
+
+                  // Determine prefix: first visual line of the input gets '>', others get ' '
+                  const prefix = actualVisualIdx === 0
+                    ? <Text bold color={colors.primary}>{'>'}</Text>
+                    : <Text> </Text>
+
+                  if (isCursorLine) {
+                    const localOffset = cursorIndex - line.start
+                    const beforeCursor = line.text.slice(0, localOffset)
+                    const afterCursor = line.text.slice(localOffset)
+
+                    return (
+                      <Box key={actualVisualIdx}>
+                        {prefix}
+                        <Text color={colors.text}>
+                          {beforeCursor}
+                          {!disabled ? <Text color={colors.primary}>{cursorVisible ? '▋' : ' '}</Text> : null}
+                          {afterCursor || ' '}
+                        </Text>
+                      </Box>
+                    )
+                  }
+
+                  return (
+                    <Box key={actualVisualIdx}>
+                      {prefix}
+                      <Text color={colors.text}>{line.text || ' '}</Text>
+                    </Box>
+                  )
+                })
               )}
           {pendingImageLabel && (
             <Box>

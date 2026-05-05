@@ -317,6 +317,14 @@ export function App ({ config, options }: AppProps) {
       ]
       setPendingImage(null)
     }
+    // Show local diagnostic notice for large prompts (not sent to model)
+    const charCount = input.length
+    const lineCount = (input.match(/\r\n|\r|\n/g) || []).length + 1
+    if (charCount > 500 || lineCount > 5) {
+      const msg = i18n.t('promptSending').replace('{chars}', String(charCount)).replace('{lines}', String(lineCount))
+      addServiceNotice(msg)
+    }
+
     const userMessage: ChatMessage = { role: 'user', content: userContent }
     setMessages(prev => [...prev, userMessage])
     setIsProcessing(true)

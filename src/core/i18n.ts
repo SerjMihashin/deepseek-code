@@ -71,6 +71,9 @@ interface LocaleStrings {
   themeSolarized: string;
   themeMatrix: string;
 
+  // Prompt sending diagnostics
+  promptSending: string;
+
   // Agent errors
   agentEmptyResponse: string;
 
@@ -159,6 +162,8 @@ const EN: LocaleStrings = {
 
   agentEmptyResponse: 'The model returned an empty response. Please try again.',
 
+  promptSending: 'Sending prompt: {chars} chars · {lines} lines',
+
   working: 'Working...',
   thinking: 'Thinking...',
   cancelled: 'Cancelled',
@@ -241,6 +246,8 @@ const RU: LocaleStrings = {
 
   agentEmptyResponse: 'Модель вернула пустой ответ. Попробуйте ещё раз.',
 
+  promptSending: 'Отправка prompt: {chars} символов · {lines} строк',
+
   working: 'Работаю...',
   thinking: 'Думаю...',
   cancelled: 'Отменено',
@@ -322,6 +329,8 @@ const ZH: LocaleStrings = {
   themeMatrix: '黑客帝国 — 绿色代码雨',
 
   agentEmptyResponse: '模型返回了空响应，请重试。',
+
+  promptSending: '发送 prompt: {chars} 字符 · {lines} 行',
 
   working: '工作中...',
   thinking: '思考中...',

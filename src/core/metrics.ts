@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { MODEL_PRICING } from '../config/defaults.js'
 
 export interface TokenUsage {
@@ -7,6 +8,107 @@ export interface TokenUsage {
   output: number
   reasoningOutput: number
   total: number
+}
+
+export interface GitStatusSnapshot {
+  dirty: string[]
+  untracked: string[]
+  added: string[]
+  deleted: string[]
+  all: string[]
+}
+
+/**
+ * Safely capture git status --porcelain output.
+ * Returns null outside git repos or on any error.
+ */
+export function captureGitStatus (cwd: string): GitStatusSnapshot | null {
+  try {
+    const stdout = execSync('git status --porcelain', {
+      cwd,
+      encoding: 'utf-8',
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+    return parsePorcelain(stdout)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Parse git status --porcelain output into GitStatusSnapshot.
+ */
+export function parsePorcelain (stdout: string): GitStatusSnapshot {
+  const lines = stdout.split(/\r?\n/).filter(Boolean)
+
+  const dirty: string[] = []
+  const untracked: string[] = []
+  const added: string[] = []
+  const deleted: string[] = []
+  const allMap = new Map<string, true>()
+
+  for (const line of lines) {
+    // XY <path> or XY "<quoted path>"
+    const match = line.match(/^([ MADRC?!]{2})\s+(.+)$/)
+    if (!match) continue
+
+    const xy = match[1]!
+    let path = match[2]!
+
+    // Remove surrounding quotes that git adds for special characters
+    if (path.startsWith('"') && path.endsWith('"')) {
+      path = path.slice(1, -1)
+    }
+
+    const staged = xy[0]!
+    const worktree = xy[1]!
+
+    // Untracked: ??
+    if (staged === '?' && worktree === '?') {
+      untracked.push(path)
+      allMap.set(path, true)
+      continue
+    }
+
+    // Added (staged): A<space>
+    if (staged === 'A') {
+      added.push(path)
+      allMap.set(path, true)
+    }
+
+    // Deleted: D<space> or <space>D
+    if (staged === 'D' || worktree === 'D') {
+      deleted.push(path)
+      allMap.set(path, true)
+    }
+
+    // Modified: M<space>, <space>M, MM, or renamed (R)
+    if (
+      staged === 'M' || worktree === 'M' ||
+      staged === 'R' || worktree === 'R'
+    ) {
+      dirty.push(path)
+      allMap.set(path, true)
+    }
+
+    // Also handle staged modifications with other indicators
+    if (staged !== '?' && worktree !== '?' && !['A', 'D', 'M', 'R'].includes(staged) && !['D', 'M', 'R'].includes(worktree)) {
+      // Anything else that's not clean: treat as dirty
+      if (staged !== ' ' || worktree !== ' ') {
+        dirty.push(path)
+        allMap.set(path, true)
+      }
+    }
+  }
+
+  return {
+    dirty,
+    untracked,
+    added,
+    deleted,
+    all: Array.from(allMap.keys()),
+  }
 }
 
 export class MetricsCollector {
@@ -21,6 +123,8 @@ export class MetricsCollector {
   private _apiCalls: number = 0
   private toolTimings: Map<string, { start: number; duration?: number }> = new Map()
   private toolCallLog: Array<{ tool: string; duration: number; success: boolean }> = []
+  private _gitBaseline: GitStatusSnapshot | null = null
+  private _gitFinal: GitStatusSnapshot | null = null
 
   get toolCalls (): number {
     return this._toolCalls
@@ -214,5 +318,37 @@ export class MetricsCollector {
     this._apiCalls = 0
     this.toolTimings.clear()
     this.toolCallLog = []
+    this._gitBaseline = null
+    this._gitFinal = null
+  }
+
+  /** Capture git baseline at the start of a session. */
+  captureGitBaseline (cwd: string): void {
+    this._gitBaseline = captureGitStatus(cwd)
+  }
+
+  /** Capture git final at the end of a session. */
+  captureGitFinal (cwd: string): void {
+    this._gitFinal = captureGitStatus(cwd)
+  }
+
+  /**
+   * Get a structured change report comparing baseline and final statuses.
+   * Returns null if either baseline or final hasn't been captured.
+   */
+  getGitChangeReport (): { beforeRun: string[]; duringRun: string[]; newUntracked: string[] } | null {
+    if (this._gitBaseline === null || this._gitFinal === null) return null
+
+    const baselineSet = new Set(this._gitBaseline.all)
+    const baselineUntrackedSet = new Set(this._gitBaseline.untracked)
+
+    const duringRun = this._gitFinal.all.filter(p => !baselineSet.has(p))
+    const newUntracked = this._gitFinal.untracked.filter(p => !baselineUntrackedSet.has(p))
+
+    return {
+      beforeRun: [...this._gitBaseline.all],
+      duringRun,
+      newUntracked,
+    }
   }
 }

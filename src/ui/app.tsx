@@ -20,6 +20,7 @@ import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 import { executeSlashCommand, type SlashCommandContext } from '../commands/index.js'
+import type { TaskBudget } from '../tools/types.js'
 
 /** Empty input hint timeout in ms before showing the guide text */
 const EMPTY_INPUT_HINT_DELAY = 2000
@@ -96,6 +97,7 @@ export function App ({ config, options }: AppProps) {
   const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const budgetRef = useRef<TaskBudget | undefined>(undefined)
 
   const addServiceNotice = useCallback((text: string) => {
     setServiceNotice(text)
@@ -243,6 +245,8 @@ export function App ({ config, options }: AppProps) {
       setSetupStep,
       addServiceNotice,
       getMetrics: () => agentLoopRef.current?.getMetrics(),
+      getBudget: () => budgetRef.current,
+      setBudget: (budget) => { budgetRef.current = budget },
       onThemePicker: () => {
         const themes = themeManager.listThemes()
         const currentName = themeManager.theme.name
@@ -348,6 +352,7 @@ export function App ({ config, options }: AppProps) {
           approvalMode,
           cwd: process.cwd(),
           signal: abortController.signal,
+          budget: budgetRef.current,
           onToolCall: (tc) => {
             const updatedCalls = [...prevToolCallsRef.current, tc]
             prevToolCallsRef.current = updatedCalls

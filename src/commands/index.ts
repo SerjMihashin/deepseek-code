@@ -22,6 +22,8 @@ import type { SetupStep } from '../ui/setup-wizard.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools/chrome.js'
 import { chromeManager } from '../tools/chrome-manager.js'
+import type { TaskBudget } from '../tools/types.js'
+import { AUDIT_BUDGET_PRESET } from '../tools/types.js'
 
 // ─── Command handler type ────────────────────────────────────────────────────
 
@@ -40,6 +42,10 @@ export interface SlashCommandContext {
   addServiceNotice?: (text: string) => void
   /** Returns current session metrics (tokens, cost, tool calls) */
   getMetrics?: () => MetricsCollector | undefined
+  /** Returns current budget (undefined means unlimited) */
+  getBudget?: () => TaskBudget | undefined
+  /** Sets the budget for the next agent run */
+  setBudget?: (budget: TaskBudget | undefined) => void
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -984,6 +990,55 @@ async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
   return true
 }
 
+// ─── Budget command handler ──────────────────────────────────────────────────
+
+async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const sub = input.slice('/budget'.length).trim()
+  const notice = ctx.addServiceNotice ?? ((text: string) => {
+    ctx.setMessages(prev => [...prev, { role: 'assistant', content: text }])
+  })
+
+  if (sub === 'status') {
+    const budget = ctx.getBudget?.()
+    if (!budget) {
+      notice('Budget: off')
+    } else {
+      const prefix = 'Budget: active'
+      const lines = [
+        prefix,
+        `maxToolCalls: ${budget.maxToolCalls}`,
+        `maxApiCalls: ${budget.maxApiCalls}`,
+        `maxReadFiles: ${budget.maxReadFiles}`,
+        `maxShellCommands: ${budget.maxShellCommands}`,
+      ]
+      notice(lines.join('\n'))
+    }
+    return true
+  }
+
+  if (sub === 'off') {
+    ctx.setBudget?.(undefined)
+    notice('Budget: off')
+    return true
+  }
+
+  if (sub === 'audit' || sub === 'small') {
+    ctx.setBudget?.({ ...AUDIT_BUDGET_PRESET })
+    const lines = [
+      'Budget: audit enabled',
+      `maxToolCalls: ${AUDIT_BUDGET_PRESET.maxToolCalls}`,
+      `maxApiCalls: ${AUDIT_BUDGET_PRESET.maxApiCalls}`,
+      `maxReadFiles: ${AUDIT_BUDGET_PRESET.maxReadFiles}`,
+      `maxShellCommands: ${AUDIT_BUDGET_PRESET.maxShellCommands}`,
+    ]
+    notice(lines.join('\n'))
+    return true
+  }
+
+  notice('Usage: /budget status|off|audit|small')
+  return true
+}
+
 // ─── Command registry ────────────────────────────────────────────────────────
 
 export interface CommandEntry {
@@ -1023,6 +1078,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/browser-real-test', description: 'Smoke test on real websites', handler: cmdBrowserRealTest },
   { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
   { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
+  { name: '/budget', description: 'Budget: /budget status|off|audit|small', handler: cmdBudget },
 ]
 
 export const COMMAND_NAMES: string[] = COMMANDS.map(c => c.name)

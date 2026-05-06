@@ -721,9 +721,10 @@ export class AgentLoop extends EventEmitter {
   /**
    * Format tool result for the AI model.
    * Truncate very long outputs to save tokens.
+   * Appends structured metadata (changed/verified/changedFiles) if present.
    */
   private formatToolResult (
-    result: { success: boolean; output: string; error?: string },
+    result: { success: boolean; output: string; error?: string; changed?: boolean; verified?: boolean; changedFiles?: string[] },
     durationMs: number
   ): string {
     const maxOutputLength = 50000 // 50KB max for tool output
@@ -738,6 +739,17 @@ export class AgentLoop extends EventEmitter {
       return `Tool execution error (${durationMs}ms):\n${result.error ?? result.output}`
     }
 
-    return `Tool output (${durationMs}ms):\n${output}`
+    let formatted = `Tool output (${durationMs}ms):\n${output}`
+
+    // Append structured metadata only if at least one verification field is present
+    if (result.changed !== undefined || result.verified !== undefined || (result.changedFiles && result.changedFiles.length > 0)) {
+      const metaParts: string[] = []
+      if (result.changed !== undefined) metaParts.push(`changed=${result.changed}`)
+      if (result.verified !== undefined) metaParts.push(`verified=${result.verified}`)
+      if (result.changedFiles && result.changedFiles.length > 0) metaParts.push(`files=${result.changedFiles.join(',')}`)
+      formatted += `\n\n[verification: ${metaParts.join(', ')}]`
+    }
+
+    return formatted
   }
 }

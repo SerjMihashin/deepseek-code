@@ -444,7 +444,7 @@ Delete    → ABCE
 
 ## P0.8 — Honest Reports
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -467,6 +467,23 @@ Delete    → ABCE
 - Вопрос `что ты изменил?` при пустом diff → `ничего не изменено`.
 - Отчёт не содержит выдуманных файлов.
 - Summary не противоречит tool calls.
+
+
+### Факт проверки
+
+- ToolResult changed/verified/changedFiles пробрасываются в AgentLoop.
+- formatToolResult добавляет verification metadata в tool message.
+- System prompt получил раздел Honest Reporting.
+- Execution Summary уже показывает git truth через Files section.
+- Модель получила правило не заявлять "изменил/проверил/тесты прошли" без tool evidence.
+
+### Коммиты
+
+- fix: preserve tool change verification fields
+- fix: include change verification in tool results
+- docs: add honest reporting rules to system prompt
+- feat: show git change report in execution summary
+
 
 ---
 

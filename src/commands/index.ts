@@ -148,7 +148,7 @@ async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
     lines.push('', helpLine('Tab', 'Цикл режимов: plan → default → auto-edit → turbo'))
     lines.push('', helpLine('PageUp / PageDown', 'Прокрутка истории чата'))
     lines.push('', helpLine('End', 'Перейти к последнему сообщению'))
-    lines.push('', helpLine('Shift+Enter', 'Новая строка в поле ввода'))
+    lines.push('', helpLine('Shift+Enter / Alt+Enter', 'Новая строка в поле ввода'))
   } else {
     lines.push('', helpLine('Ctrl+L', 'Clear chat (opens confirmation dialog)'))
     lines.push('', helpLine('Ctrl+C', 'Cancel running agent / double-tap to exit'))
@@ -161,7 +161,7 @@ async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
     lines.push('', helpLine('Tab', 'Cycle approval mode: plan → default → auto-edit → turbo'))
     lines.push('', helpLine('PageUp / PageDown', 'Scroll chat history'))
     lines.push('', helpLine('End', 'Jump to latest message'))
-    lines.push('', helpLine('Shift+Enter', 'Insert newline in input'))
+    lines.push('', helpLine('Shift+Enter / Alt+Enter', 'Insert newline in input'))
   }
   ctx.setMessages(prev => [...prev, { role: 'assistant', content: lines.join('\n') }])
   return true

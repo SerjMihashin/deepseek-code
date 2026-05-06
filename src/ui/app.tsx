@@ -95,6 +95,7 @@ export function App ({ config, options }: AppProps) {
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
   const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
   const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
+  const [langPicker, setLangPicker] = useState<{ selectedIndex: number } | null>(null)
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetRef = useRef<TaskBudget | undefined>(undefined)
@@ -256,6 +257,11 @@ export function App ({ config, options }: AppProps) {
       onModelPicker: () => {
         const idx = DEEPSEEK_MODELS.findIndex(m => m.id === config.model)
         setModelPicker({ selectedIndex: Math.max(0, idx) })
+      },
+      onLangPicker: () => {
+        const loc = i18n.listLocales()
+        const idx = loc.findIndex(l => l.code === i18n.getLocale())
+        setLangPicker({ selectedIndex: Math.max(0, idx) })
       },
     }
     return executeSlashCommand(input, ctx)
@@ -710,6 +716,34 @@ export function App ({ config, options }: AppProps) {
         }
         return
       }
+      // Language picker: interactive selection
+      if (langPicker) {
+        if (key.escape) {
+          setLangPicker(null)
+          return
+        }
+        if (key.upArrow) {
+          setLangPicker(prev => prev ? { selectedIndex: Math.max(0, prev.selectedIndex - 1) } : null)
+          return
+        }
+        if (key.downArrow) {
+          const locales = i18n.listLocales()
+          setLangPicker(prev => prev ? { selectedIndex: Math.min(locales.length - 1, prev.selectedIndex + 1) } : null)
+          return
+        }
+        if (key.return) {
+          const locales = i18n.listLocales()
+          const chosen = locales[langPicker.selectedIndex]
+          if (chosen) {
+            i18n.setLocale(chosen.code)
+            saveConfig({ ...config, language: chosen.code }).catch(() => {})
+            setLangPicker(null)
+            addServiceNotice(`[lang] Язык изменён: ${chosen.name} (${chosen.code})`)
+          }
+          return
+        }
+        return
+      }
       // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
       // When InputBar is active, arrows belong to input history/suggestions.
       if (key.upArrow && isProcessing) {
@@ -917,6 +951,27 @@ export function App ({ config, options }: AppProps) {
                         {m.id === config.model ? <Text dimColor> (текущая)</Text> : null}
                       </Text>
                       <Text dimColor>{'    '}{m.description}</Text>
+                    </Box>
+                  ))}
+                </Box>
+                <Box marginLeft={1} marginBottom={1} marginTop={1}>
+                  <Text color={colors.textMuted}>↑↓ — навигация  Enter — применить  Esc — отмена</Text>
+                </Box>
+              </Box>
+            )}
+            {langPicker && (
+              <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.primary}>
+                <Box marginLeft={1} marginTop={1}>
+                  <Text bold color={colors.primary}>Выберите язык / Select language / 选择语言</Text>
+                </Box>
+                <Box marginLeft={1} marginTop={1} flexDirection='column'>
+                  {i18n.listLocales().map((loc, i) => (
+                    <Box key={loc.code}>
+                      <Text color={i === langPicker.selectedIndex ? colors.primary : colors.textMuted}>
+                        {i === langPicker.selectedIndex ? '▸ ' : '  '}
+                        {loc.name}
+                        {loc.code === i18n.getLocale() ? <Text dimColor> (текущий)</Text> : null}
+                      </Text>
                     </Box>
                   ))}
                 </Box>

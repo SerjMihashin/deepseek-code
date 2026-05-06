@@ -38,6 +38,8 @@ export interface SlashCommandContext {
   onThemePicker?: () => void
   /** Called when /model is entered without arguments — opens interactive picker */
   onModelPicker?: () => void
+  /** Called when /lang is entered without arguments — opens interactive picker */
+  onLangPicker?: () => void
   /** Show a transient service notice (does NOT add to chat messages, does NOT break empty-state) */
   addServiceNotice?: (text: string) => void
   /** Returns current session metrics (tokens, cost, tool calls) */
@@ -725,10 +727,15 @@ async function cmdModel (ctx: SlashCommandContext, input: string): Promise<boole
 async function cmdLang (ctx: SlashCommandContext, input: string): Promise<boolean> {
   const code = input.split(/\s+/).pop()?.toLowerCase() as Locale | undefined
   if (!code || !['en', 'ru', 'zh'].includes(code)) {
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: 'Usage: `/lang en|ru|zh`',
-    }])
+    // Open interactive picker if available, fallback to usage text
+    if (ctx.onLangPicker) {
+      ctx.onLangPicker()
+    } else {
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: 'Usage: `/lang en|ru|zh`',
+      }])
+    }
     return true
   }
   i18n.setLocale(code)

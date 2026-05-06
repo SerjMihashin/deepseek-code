@@ -17,4 +17,4 @@
 
 ### Notes
 - `Shift+Enter` may be indistinguishable from `Enter` in some Windows terminals. Use `Alt+Enter` for a new line.
-- `/changelog` and `/update-check` are planned for a future release.
+- `/changelog` and `/update-check` are now available in the CLI.

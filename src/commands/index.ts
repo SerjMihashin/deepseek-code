@@ -115,6 +115,8 @@ const RU_DESCRIPTIONS: Record<string, string> = {
   '/last-browser-test': 'Показать последний отчёт browser-test',
   '/chrome': 'Режим Chrome: --headed|--headless|-s',
   '/budget': 'Бюджет: /budget status|off|audit|small',
+  '/changelog': 'Показать список изменений',
+  '/update-check': 'Проверить новую версию',
 }
 
 function getDescription (name: string): string {
@@ -1105,6 +1107,123 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
   return true
 }
 
+// ─── Changelog and Update Check ──────────────────────────────────────────────
+
+function semverCompare (a: string, b: string): -1 | 0 | 1 {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1
+    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1
+  }
+  return 0
+}
+
+async function cmdChangelog (ctx: SlashCommandContext): Promise<boolean> {
+  const { readFileSync } = await import('node:fs')
+  const { resolve, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = dirname(__filename)
+  const changelogPath = resolve(__dirname, '../../CHANGELOG.md')
+
+  try {
+    const content = readFileSync(changelogPath, 'utf-8')
+    // Show up to 4000 chars to avoid overwhelming the chat
+    const truncated = content.length > 4000 ? content.slice(0, 3997) + '...' : content
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: truncated,
+    }])
+  } catch {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'CHANGELOG.md not found. Reinstall the package or check your installation.',
+    }])
+  }
+  return true
+}
+
+async function cmdUpdateCheck (ctx: SlashCommandContext): Promise<boolean> {
+  const { readFileSync } = await import('node:fs')
+  const { resolve, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const { get } = await import('node:https')
+
+  // Get current version from package.json
+  const __filename = fileURLToPath(import.meta.url)
+  const __dirname = dirname(__filename)
+  const pkgPath = resolve(__dirname, '../../package.json')
+
+  let currentVersion: string
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+    currentVersion = pkg.version
+  } catch {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'Could not read package version. Check your installation.',
+    }])
+    return true
+  }
+
+  // Check npm registry for latest version
+  try {
+    const latest = await new Promise<string>((resolve, reject) => {
+      const url = 'https://registry.npmjs.org/@serjm%2Fdeepseek-code/latest'
+      const req = get(url, { timeout: 10000 }, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data)
+            resolve(json.version)
+          } catch {
+            reject(new Error('Invalid response from registry'))
+          }
+        })
+      })
+      req.on('error', reject)
+      req.on('timeout', () => {
+        req.destroy()
+        reject(new Error('Request timed out'))
+      })
+    })
+
+    const cmp = semverCompare(latest, currentVersion)
+    if (cmp > 0) {
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: [
+          '## Update available',
+          '',
+          `**Current:** ${currentVersion}`,
+          `**Latest:** ${latest}`,
+          '',
+          'Run:',
+          '```',
+          'npm install -g @serjm/deepseek-code@latest',
+          '```',
+          '',
+          'Run `/changelog` to see what\'s new.',
+        ].join('\n'),
+      }])
+    } else {
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `You are up to date: **${currentVersion}**`,
+      }])
+    }
+  } catch {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'Could not check for updates. Try again later.',
+    }])
+  }
+  return true
+}
+
 // ─── Command registry ────────────────────────────────────────────────────────
 
 export interface CommandEntry {
@@ -1145,6 +1264,8 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
   { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
   { name: '/budget', description: 'Budget: /budget status|off|audit|small', handler: cmdBudget },
+  { name: '/changelog', description: 'Show changelog', handler: cmdChangelog },
+  { name: '/update-check', description: 'Check latest npm version', handler: cmdUpdateCheck },
 ]
 
 export const COMMAND_NAMES: string[] = COMMANDS.map(c => c.name)

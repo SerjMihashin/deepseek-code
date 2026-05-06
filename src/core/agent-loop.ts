@@ -120,6 +120,7 @@ function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
   // Build tools capability section from registry
   const allTools = getDefaultTools()
   const mode = approvalMode ?? 'default'
+  const locale = i18n.getLocale()
   const modeTools = getToolsForMode(mode)
   const modeToolNames = new Set(modeTools.map(t => t.tool.name))
 
@@ -136,9 +137,15 @@ function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
     ...toolListLines,
   ].join('\n')
 
+  let responseLanguage = 'English'
+  if (locale === 'ru') responseLanguage = 'Russian'
+  if (locale === 'zh') responseLanguage = 'Chinese'
+
+  const languageSection = `\n## Language\n- Respond in ${responseLanguage} unless the user explicitly asks otherwise.`
+
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
-You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}
+You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${languageSection}
 
 ## Guidelines
 1. **Plan first** — Before making changes, explore the codebase to understand the context.

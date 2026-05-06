@@ -285,6 +285,21 @@ export class MetricsCollector {
       summary += `\nLast request context: ${this._lastInputTokens.toLocaleString()} tokens (${contextPercent}% of 128k window)\n`
     }
 
+    // Git change report
+    const gitReport = this.getGitChangeReport()
+    if (gitReport && (gitReport.duringRun.length > 0 || gitReport.newUntracked.length > 0 || gitReport.beforeRun.length > 0)) {
+      const formatList = (items: string[]): string => {
+        if (items.length === 0) return '(none)'
+        const limited = items.slice(0, 10)
+        const suffix = items.length > 10 ? ', ... +' + (items.length - 10) + ' more' : ''
+        return limited.join(', ') + suffix
+      }
+      summary += '\nFiles:\n'
+      summary += `  changed during run: ${formatList(gitReport.duringRun)}\n`
+      summary += `  new untracked:      ${formatList(gitReport.newUntracked)}\n`
+      summary += `  dirty before run:   ${formatList(gitReport.beforeRun)}\n`
+    }
+
     // Tool breakdown
     if (this.toolCallLog.length > 0) {
       summary += '\n'

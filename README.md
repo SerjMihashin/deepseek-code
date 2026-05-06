@@ -20,6 +20,18 @@
 
 ---
 
+## What's new in 0.4.0
+
+- Stability and honest reporting improvements.
+- `/budget` commands to limit runaway agent loops.
+- Git Files section in Execution Summary.
+- Interactive `/lang` picker and runtime response language.
+- InputBar Home/End and Alt+Enter newline fallback.
+
+See [CHANGELOG.md](./CHANGELOG.md) for details.
+
+---
+
 ## The Short Version
 
 DeepSeek Code is a terminal-first AI coding agent. It reads your project, edits files, runs commands, reviews code, remembers context, and can automate Chrome when a task needs a browser.

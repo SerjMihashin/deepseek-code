@@ -1,6 +1,6 @@
 {
   "name": "@serjm/deepseek-code",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "AI-powered CLI agent for software development, powered by DeepSeek API",
   "bin": {
     "dsc": "dist/cli/index.js",
@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "README.md",
     "README.ru.md",
     "CONTRIBUTING.md"

@@ -20,6 +20,18 @@
 
 ---
 
+## Что нового в 0.4.0
+
+- Улучшена стабильность и честность отчётов.
+- `/budget` команды ограничивают runaway tool/API calls.
+- Execution Summary показывает Files: changed/untracked/dirty before run.
+- `/lang` picker и ответы на выбранном языке.
+- InputBar: Home/End и Alt+Enter для новой строки.
+
+Подробнее в [CHANGELOG.md](./CHANGELOG.md).
+
+---
+
 ## Коротко
 
 DeepSeek Code — это AI-агент для разработки прямо в терминале. Он читает проект, редактирует файлы, запускает команды, делает code review, запоминает контекст и умеет управлять Chrome, когда задача выходит за пределы кода.

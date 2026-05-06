@@ -42,7 +42,6 @@ wikipedia-screenshot.png
 google-screenshot.png
 
 # Internal development artifacts (not for open-source)
-CHANGELOG.md
 ITERATIONS.md
 NEXT_ITERATION.md
 SPEC.md

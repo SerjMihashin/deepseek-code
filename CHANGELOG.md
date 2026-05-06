@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1 — Update Visibility
+
+### New Features
+- Added `/changelog` command to show release notes inside the CLI.
+- Added `/update-check` command to check the latest published npm version.
+
+### Improvements
+- Updated changelog notes now reflect that `/changelog` and `/update-check` are available.
+
 ## 0.4.0 — Stability & UX Release
 
 ### New Features

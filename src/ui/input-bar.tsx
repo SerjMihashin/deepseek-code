@@ -399,8 +399,8 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       return
     }
 
-    // ── Shift+Enter = newline at cursor ───────────────────────────────────
-    if (key.return && key.shift) {
+    // ── Shift+Enter / Alt+Enter = newline at cursor ──────────────────────
+    if (key.return && (key.shift || lastRawInputRef.current === '\x1b\r')) {
       const newInput = currentInput.slice(0, currentCursor) + '\n' + currentInput.slice(currentCursor)
       setInput(newInput)
       setCursorIndex(currentCursor + 1)

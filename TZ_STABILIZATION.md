@@ -340,7 +340,7 @@ Delete    → ABCE
 
 ## P0.6 — Change Verification / Execution Ledger
 
-Статус: `IN_PROGRESS`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -366,11 +366,24 @@ Delete    → ABCE
 - Failed edit не отображается как success.
 - Untracked-файлы учитываются.
 
+### Факт проверки
+
+- ToolResult fields `changed`/`verified`/`changedFiles` теперь не теряются в AgentLoop.
+- ToolCallEvent сохраняет `changed`/`verified`/`changedFiles`.
+- `write_file`/`edit` verification metadata теперь проходит до AgentLoop.
+
+### Коммиты
+
+- fix: preserve tool change verification fields
+- feat: add git status change report metrics
+- feat: capture git status around agent runs
+- feat: show git change report in execution summary
+
 ---
 
 ## P0.7 — Untracked Files in Change Reports
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -411,6 +424,21 @@ Delete    → ABCE
 ```text
 Изменений за этот запуск нет.
 ```
+
+### Факт проверки
+
+- MetricsCollector умеет `captureGitBaseline`/`captureGitFinal`.
+- `getGitChangeReport` разделяет dirty before run / changed during run / new untracked.
+- AgentLoop снимает baseline/final вокруг run.
+- Execution Summary показывает Files section.
+- Ручной тест `TEST_AGENT_WRITE.md` показал new untracked и dirty before run корректно.
+
+### Коммиты
+
+- fix: preserve tool change verification fields
+- feat: add git status change report metrics
+- feat: capture git status around agent runs
+- feat: show git change report in execution summary
 
 ---
 

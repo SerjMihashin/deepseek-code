@@ -20,8 +20,10 @@
 
 ---
 
-## Что нового в 0.4.0
+## Что нового в 0.4.x
 
+- `/changelog` показывает список изменений прямо в CLI.
+- `/update-check` проверяет последнюю версию в npm.
 - Улучшена стабильность и честность отчётов.
 - `/budget` команды ограничивают runaway tool/API calls.
 - Execution Summary показывает Files: changed/untracked/dirty before run.

@@ -20,8 +20,10 @@
 
 ---
 
-## What's new in 0.4.0
+## What's new in 0.4.x
 
+- `/changelog` command to view release notes inside the CLI.
+- `/update-check` command to check the latest npm version.
 - Stability and honest reporting improvements.
 - `/budget` commands to limit runaway agent loops.
 - Git Files section in Execution Summary.

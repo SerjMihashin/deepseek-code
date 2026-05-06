@@ -39,6 +39,7 @@ interface LocaleStrings {
 
   // Commands help
   helpCommands: string;
+  helpKeyboard: string;
   helpMemory: string;
   helpAdvanced: string;
   helpReview: string;
@@ -132,6 +133,7 @@ const EN: LocaleStrings = {
   deepseek: 'DeepSeek',
 
   helpCommands: 'Available commands',
+  helpKeyboard: 'Keyboard shortcuts',
   helpMemory: 'Memory commands',
   helpAdvanced: 'Advanced commands',
   helpReview: 'Review commands',
@@ -216,6 +218,7 @@ const RU: LocaleStrings = {
   deepseek: 'DeepSeek',
 
   helpCommands: 'Доступные команды',
+  helpKeyboard: 'Горячие клавиши',
   helpMemory: 'Команды памяти',
   helpAdvanced: 'Расширенные команды',
   helpReview: 'Команды ревью',
@@ -300,6 +303,7 @@ const ZH: LocaleStrings = {
   deepseek: 'DeepSeek',
 
   helpCommands: '可用命令',
+  helpKeyboard: '键盘快捷键',
   helpMemory: '记忆命令',
   helpAdvanced: '高级命令',
   helpReview: '审查命令',

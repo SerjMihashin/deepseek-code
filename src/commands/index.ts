@@ -80,28 +80,87 @@ function generateFollowups (lastContent: string): string[] {
   return suggestions
 }
 
+// ─── Russian descriptions for commands ──────────────────────────────────────
+
+const RU_DESCRIPTIONS: Record<string, string> = {
+  '/help': 'Показать эту справку',
+  '/setup': 'Настройки: язык, API-ключ, тема, режим',
+  '/remember': 'Сохранить в память: /remember <текст>',
+  '/forget': 'Удалить из памяти по поиску',
+  '/memory': 'Показать все сохранённые записи',
+  '/compress': 'Сжать историю чата',
+  '/checkpoint': 'Создать git-чекпоинт',
+  '/restore': 'Список или восстановление чекпоинта: /restore [id]',
+  '/mcp': 'MCP-серверы: /mcp list | connect',
+  '/skills': 'Список или описание навыка',
+  '/agents': 'Список активных под-агентов',
+  '/review': 'Ревью кода: /review all|diff|auto',
+  '/sandbox': 'Запустить команду в sandbox',
+  '/git': 'Git: /git commit|branch|diff|status',
+  '/loop': 'Планировщик: /loop <интервал> <задача>',
+  '/stats': 'Статистика сессии с токенами',
+  '/theme': 'Сменить тему или открыть выбор',
+  '/model': 'Сменить модель или открыть выбор: /model [id]',
+  '/lang': 'Сменить язык: /lang en|ru|zh',
+  '/extensions': 'Список установленных расширений',
+  '/followup': 'Сгенерировать предложения продолжения',
+  '/logs': 'Показать последние логи',
+  '/plan': 'Обзор возможностей',
+  '/tools': 'Показать доступные инструменты и статус',
+  '/capabilities': 'Полная матрица возможностей',
+  '/browser-test': 'Запустить тест Chrome',
+  '/browser-real-test': 'Smoke-тест реальных сайтов',
+  '/last-browser-test': 'Показать последний отчёт browser-test',
+  '/chrome': 'Режим Chrome: --headed|--headless|-s',
+  '/budget': 'Бюджет: /budget status|off|audit|small',
+}
+
+function getDescription (name: string): string {
+  if (i18n.getLocale() === 'ru') {
+    return RU_DESCRIPTIONS[name] ?? COMMANDS.find(c => c.name === name)?.description ?? ''
+  }
+  return COMMANDS.find(c => c.name === name)?.description ?? ''
+}
+
 // ─── Command handlers ────────────────────────────────────────────────────────
 
 async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
-  const lines = ['**Available commands:**', '']
+  const locale = i18n.getLocale()
+  const helpLine = (left: string, right: string) => `${left}\n  ${right}`
+  const lines: string[] = [`${i18n.t('helpCommands')}:`]
   for (const cmd of COMMANDS) {
     if (cmd.name === '/language') continue
-    lines.push(`  ${cmd.name.padEnd(22)} ${cmd.description}`)
+    lines.push('', helpLine(cmd.name, getDescription(cmd.name)))
   }
-  lines.push('', '  /clear                 Clear chat history (with confirmation)')
-  lines.push('', '**Keyboard shortcuts:**', '')
-  lines.push('  Ctrl+L                 Clear chat (opens confirmation dialog)')
-  lines.push('  Ctrl+C                 Cancel running agent / double-tap to exit')
-  lines.push('  Alt+V                  Paste image from clipboard (vision models only)')
-  if (platform() === 'win32') {
-    lines.push('  **Windows note:** If Alt+V does not work, ensure your terminal sends')
-    lines.push('  proper Alt/Meta sequences. Windows Terminal ≥ 1.14 works correctly.')
-    lines.push('  In older terminals try: Settings → Compatibility → "Use Alt as Meta key".')
+  lines.push('', helpLine('/clear', locale === 'ru' ? 'Очистить историю чата (с подтверждением)' : 'Clear chat history (with confirmation)'))
+  lines.push('', `${i18n.t('helpKeyboard')}:`)
+  if (locale === 'ru') {
+    lines.push('', helpLine('Ctrl+L', 'Очистить чат (открывает диалог подтверждения)'))
+    lines.push('', helpLine('Ctrl+C', 'Отменить выполнение / двойное нажатие для выхода'))
+    lines.push('', helpLine('Alt+V', 'Вставить изображение из буфера (только vision модели)'))
+    if (platform() === 'win32') {
+      lines.push('', '  Для Windows: Если Alt+V не работает, убедитесь, что терминал передаёт')
+      lines.push('  правильные Alt/Meta-последовательности. Windows Terminal ≥ 1.14 работает корректно.')
+      lines.push('  В старых терминалах попробуйте: Настройки → Совместимость → "Использовать Alt как Meta".')
+    }
+    lines.push('', helpLine('Tab', 'Цикл режимов: plan → default → auto-edit → turbo'))
+    lines.push('', helpLine('PageUp / PageDown', 'Прокрутка истории чата'))
+    lines.push('', helpLine('End', 'Перейти к последнему сообщению'))
+    lines.push('', helpLine('Shift+Enter', 'Новая строка в поле ввода'))
+  } else {
+    lines.push('', helpLine('Ctrl+L', 'Clear chat (opens confirmation dialog)'))
+    lines.push('', helpLine('Ctrl+C', 'Cancel running agent / double-tap to exit'))
+    lines.push('', helpLine('Alt+V', 'Paste image from clipboard (vision models only)'))
+    if (platform() === 'win32') {
+      lines.push('', '  Windows note: If Alt+V does not work, ensure your terminal sends')
+      lines.push('  proper Alt/Meta sequences. Windows Terminal ≥ 1.14 works correctly.')
+      lines.push('  In older terminals try: Settings → Compatibility → "Use Alt as Meta key".')
+    }
+    lines.push('', helpLine('Tab', 'Cycle approval mode: plan → default → auto-edit → turbo'))
+    lines.push('', helpLine('PageUp / PageDown', 'Scroll chat history'))
+    lines.push('', helpLine('End', 'Jump to latest message'))
+    lines.push('', helpLine('Shift+Enter', 'Insert newline in input'))
   }
-  lines.push('  Tab                    Cycle approval mode: plan → default → auto-edit → turbo')
-  lines.push('  PageUp / PageDown      Scroll chat history')
-  lines.push('  End                    Jump to latest message')
-  lines.push('  Shift+Enter            Insert newline in input')
   ctx.setMessages(prev => [...prev, { role: 'assistant', content: lines.join('\n') }])
   return true
 }

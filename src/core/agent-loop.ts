@@ -276,6 +276,9 @@ export class AgentLoop extends EventEmitter {
   private async executeLoop (): Promise<string> {
     const openAITools = toOpenAITools(this.tools)
 
+    // Capture git baseline before session starts
+    this.metrics.captureGitBaseline(this.options.cwd)
+
     // Execute hooks at start of loop
     await hooksManager.execute('AgentLoopStart', {
       event: 'AgentLoopStart',
@@ -311,6 +314,7 @@ export class AgentLoop extends EventEmitter {
           const cancelledMsg = i18n.t('agentCancelled')
           this.messages.push({ role: 'assistant', content: cancelledMsg })
           this.options.onResponse(cancelledMsg)
+          this.finalizeSession()
           return cancelledMsg
         }
 
@@ -320,6 +324,7 @@ export class AgentLoop extends EventEmitter {
             const cancelledMsg = i18n.t('agentCancelled')
             this.messages.push({ role: 'assistant', content: cancelledMsg })
             this.options.onResponse(cancelledMsg)
+            this.finalizeSession()
             return cancelledMsg
           }
 
@@ -543,6 +548,7 @@ export class AgentLoop extends EventEmitter {
           const fallback = 'I have completed the requested actions. What else would you like me to do?'
           this.messages.push({ role: 'assistant', content: fallback })
           this.options.onResponse(fallback)
+          this.finalizeSession()
           const summary = this.metrics.getSummary(this.model)
           this.options.onStreamChunk(summary)
           return fallback
@@ -551,6 +557,7 @@ export class AgentLoop extends EventEmitter {
         this.options.onResponse(responseContent)
 
         // Output execution summary
+        this.finalizeSession()
         const summary = this.metrics.getSummary(this.model)
         this.options.onStreamChunk(summary)
 
@@ -566,6 +573,7 @@ export class AgentLoop extends EventEmitter {
     const timeoutMsg = `Агент достиг максимального числа итераций (${this.options.maxIterations}). Задача может быть не завершена.`
     this.messages.push({ role: 'assistant', content: timeoutMsg })
     this.options.onResponse(timeoutMsg)
+    this.finalizeSession()
     return timeoutMsg
   }
 
@@ -592,6 +600,8 @@ export class AgentLoop extends EventEmitter {
    * This is used as a fallback when the iteration-level check catches overruns.
    */
   private buildBudgetHaltMessage (): string {
+    this.finalizeSession()
+
     const budget = this.options.budget!
 
     // Find which limit was hit
@@ -635,6 +645,18 @@ export class AgentLoop extends EventEmitter {
     this.options.onStreamChunk(summary)
 
     return msg
+  }
+
+  /**
+   * Finalize the session: capture git final status.
+   * Safe and idempotent — repeated calls will not throw or corrupt state.
+   */
+  private finalizeSession (): void {
+    try {
+      this.metrics.captureGitFinal(this.options.cwd)
+    } catch {
+      // Ignore errors from git final capture (e.g., outside a git repo)
+    }
   }
 
   /** @inheritdoc */

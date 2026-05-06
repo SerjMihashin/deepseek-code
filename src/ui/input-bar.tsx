@@ -339,6 +339,22 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       return
     }
 
+    // ── Home / End ────────────────────────────────────────────────────────
+    // Ink's Key type doesn't expose home/end, so we detect them via raw input.
+    if (!_input && lastRawInputRef.current) {
+      const raw = lastRawInputRef.current
+      if (raw === '\x1b[H' || raw === '\x1bOH' || raw === '\x1b[1~') {
+        setCursorIndex(0)
+        setSuggestionIndex(-1)
+        return
+      }
+      if (raw === '\x1b[F' || raw === '\x1bOF' || raw === '\x1b[4~') {
+        setCursorIndex(currentInput.length)
+        setSuggestionIndex(-1)
+        return
+      }
+    }
+
     // ── Backspace / Delete (cursor-aware) ─────────────────────────────────
     if (key.backspace) {
       if (currentCursor > 0) {

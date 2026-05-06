@@ -631,7 +631,7 @@ npm test
 
 ## P2.3 — Runtime Language Enforcement
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -658,6 +658,18 @@ Respond in Russian unless the user explicitly asks otherwise.
 ```
 
 следующий агентский ответ и отчёт — на русском.
+
+### Факт проверки
+
+- `buildSystemPrompt` читает `i18n.getLocale()`.
+- System prompt получает секцию `## Language`.
+- Для `ru` добавляется правило отвечать на русском, если пользователь явно не попросил иначе.
+- Для `en`/`zh` добавляется соответствующее правило.
+- Ручная проверка `/lang ru` → обычный вопрос выполнена, ответ на русском.
+
+### Коммиты
+
+- fix: enforce runtime response language
 
 ---
 

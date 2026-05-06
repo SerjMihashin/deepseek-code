@@ -711,7 +711,7 @@ Respond in Russian unless the user explicitly asks otherwise.
 
 ## P3.2 — Home/End/Unicode Cursor
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -729,9 +729,51 @@ Respond in Russian unless the user explicitly asks otherwise.
 - Emoji не режется пополам.
 - Home/End работают.
 
+### Факт проверки
+
+- Home перемещает курсор в начало input.
+- End перемещает курсор в конец input.
+- Работает на вставленном многострочном тексте.
+
+### Коммиты
+
+- fix: add home and end navigation to input bar
+
 ---
 
-## P3.3 — Slash Suggestions
+## P3.3 — InputBar Newline
+
+Статус: `VERIFIED`
+
+### Требования
+
+- Shift+Enter — новая строка в multiline input.
+- Alt+Enter — Windows fallback для новой строки в терминалах, где Shift+Enter перехватывается.
+- /help показывает оба варианта.
+- Обычный Enter отправляет prompt.
+
+### Acceptance
+
+- Shift+Enter вставляет `\n` в input.
+- Alt+Enter вставляет `\n` в input.
+- Enter отправляет prompt.
+- /help показывает Shift+Enter / Alt+Enter.
+
+### Факт проверки
+
+- Shift+Enter остаётся для терминалов, где он определяется.
+- Alt+Enter добавлен как Windows fallback для новой строки.
+- /help обновлён и показывает Shift+Enter / Alt+Enter.
+- Ручная проверка Alt+Enter выполнена.
+
+### Коммиты
+
+- fix: add alt-enter newline fallback
+- docs: document alt-enter newline shortcut
+
+---
+
+## P3.4 — Slash Suggestions
 
 Статус: `TODO`
 

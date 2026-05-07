@@ -24,6 +24,7 @@ import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools
 import { chromeManager } from '../tools/chrome-manager.js'
 import type { TaskBudget } from '../tools/types.js'
 import { AUDIT_BUDGET_PRESET } from '../tools/types.js'
+import { checkLatestVersion } from './update-checker.js'
 
 // ─── Command handler type ────────────────────────────────────────────────────
 
@@ -1109,16 +1110,6 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
 
 // ─── Changelog and Update Check ──────────────────────────────────────────────
 
-function semverCompare (a: string, b: string): -1 | 0 | 1 {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] ?? 0) > (pb[i] ?? 0)) return 1
-    if ((pa[i] ?? 0) < (pb[i] ?? 0)) return -1
-  }
-  return 0
-}
-
 async function cmdChangelog (ctx: SlashCommandContext): Promise<boolean> {
   const { readFileSync } = await import('node:fs')
   const { resolve, dirname } = await import('node:path')
@@ -1146,79 +1137,36 @@ async function cmdChangelog (ctx: SlashCommandContext): Promise<boolean> {
 }
 
 async function cmdUpdateCheck (ctx: SlashCommandContext): Promise<boolean> {
-  const { readFileSync } = await import('node:fs')
-  const { resolve, dirname } = await import('node:path')
-  const { fileURLToPath } = await import('node:url')
-  const { get } = await import('node:https')
-
-  // Get current version from package.json
-  const __filename = fileURLToPath(import.meta.url)
-  const __dirname = dirname(__filename)
-  const pkgPath = resolve(__dirname, '../../package.json')
-
-  let currentVersion: string
-  try {
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-    currentVersion = pkg.version
-  } catch {
+  const result = await checkLatestVersion()
+  if (!result) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: 'Could not read package version. Check your installation.',
+      content: 'Could not check for updates. Try again later.',
     }])
     return true
   }
 
-  // Check npm registry for latest version
-  try {
-    const latest = await new Promise<string>((resolve, reject) => {
-      const url = 'https://registry.npmjs.org/@serjm%2Fdeepseek-code/latest'
-      const req = get(url, { timeout: 10000 }, (res) => {
-        let data = ''
-        res.on('data', chunk => { data += chunk })
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data)
-            resolve(json.version)
-          } catch {
-            reject(new Error('Invalid response from registry'))
-          }
-        })
-      })
-      req.on('error', reject)
-      req.on('timeout', () => {
-        req.destroy()
-        reject(new Error('Request timed out'))
-      })
-    })
-
-    const cmp = semverCompare(latest, currentVersion)
-    if (cmp > 0) {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: [
-          '## Update available',
-          '',
-          `**Current:** ${currentVersion}`,
-          `**Latest:** ${latest}`,
-          '',
-          'Run:',
-          '```',
-          'npm install -g @serjm/deepseek-code@latest',
-          '```',
-          '',
-          'Run `/changelog` to see what\'s new.',
-        ].join('\n'),
-      }])
-    } else {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `You are up to date: **${currentVersion}**`,
-      }])
-    }
-  } catch {
+  if (result.hasUpdate) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: 'Could not check for updates. Try again later.',
+      content: [
+        '## Update available',
+        '',
+        `**Current:** ${result.current}`,
+        `**Latest:** ${result.latest}`,
+        '',
+        'Run:',
+        '```',
+        'npm install -g @serjm/deepseek-code@latest',
+        '```',
+        '',
+        'Run `/changelog` to see what\'s new.',
+      ].join('\n'),
+    }])
+  } else {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `You are up to date: **${result.current}**`,
     }])
   }
   return true

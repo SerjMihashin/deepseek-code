@@ -20,6 +20,7 @@ import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 import { executeSlashCommand, type SlashCommandContext } from '../commands/index.js'
+import { checkLatestVersion } from '../commands/update-checker.js'
 import type { TaskBudget } from '../tools/types.js'
 
 /** Empty input hint timeout in ms before showing the guide text */
@@ -175,6 +176,22 @@ export function App ({ config, options }: AppProps) {
       //   - агент вызывает chrome tool
       //   - пользователь запускает /browser-test
       //   - пользователь запускает /chrome
+
+      // Startup update check (fire-and-forget, не блокирует UI)
+      const ONE_DAY_MS = 24 * 60 * 60 * 1000
+      const lastCheck = config.lastUpdateCheckAt
+      if (!lastCheck || Date.now() - lastCheck >= ONE_DAY_MS) {
+        checkLatestVersion().then(result => {
+          if (result?.hasUpdate) {
+            addServiceNotice(`Update available: ${result.current} -> ${result.latest}. Run /update-check.`)
+          }
+          // Save last check timestamp regardless of result (avoids re-check on network error every startup)
+          saveConfig({ lastUpdateCheckAt: Date.now() }).catch(() => {})
+        }).catch(() => {
+          // Silent fail — save timestamp anyway to avoid hammering npm on every startup
+          saveConfig({ lastUpdateCheckAt: Date.now() }).catch(() => {})
+        })
+      }
 
       setStatusText(i18n.t('ready'))
     })()

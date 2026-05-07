@@ -19,6 +19,8 @@ export interface DeepSeekConfig {
   systemPrompt?: string;
   /** Chrome browser mode: false = headed (visible), true = headless (background) */
   chromeHeadless?: boolean;
+  /** Timestamp of last npm update check (ms since epoch) */
+  lastUpdateCheckAt?: number;
 }
 
 export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'turbo'

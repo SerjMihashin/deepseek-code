@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.2 — Update Visibility Improvements
+
+### New Features
+- Added startup update notice that checks npm for a newer version.
+- Added 24-hour cooldown to avoid checking npm on every launch.
+- Added `/changelog` modes:
+  - `/changelog` shows the latest release notes.
+  - `/changelog full` shows the full changelog.
+  - `/changelog <version>` shows a specific version.
+
+### Reliability
+- Update checks run in the background and do not block CLI startup.
+- Network/offline errors are handled silently during startup.
+- Fixed changelog section parsing on Windows CRLF files.
+
 ## 0.4.1 — Update Visibility
 
 ### New Features

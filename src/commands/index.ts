@@ -116,7 +116,7 @@ const RU_DESCRIPTIONS: Record<string, string> = {
   '/last-browser-test': 'Показать последний отчёт browser-test',
   '/chrome': 'Режим Chrome: --headed|--headless|-s',
   '/budget': 'Бюджет: /budget status|off|audit|small',
-  '/changelog': 'Показать список изменений',
+  '/changelog': 'Показать изменения: /changelog [full|version]',
   '/update-check': 'Проверить новую версию',
 }
 
@@ -1110,7 +1110,34 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
 
 // ─── Changelog and Update Check ──────────────────────────────────────────────
 
-async function cmdChangelog (ctx: SlashCommandContext): Promise<boolean> {
+function parseChangelogSections (content: string): Array<{ version: string; content: string }> {
+  const sections: Array<{ version: string; content: string }> = []
+  const lines = content.split(/\r?\n/)
+  let currentVersion = ''
+  let currentLines: string[] = []
+
+  for (const line of lines) {
+    const match = line.match(/^##\s+(\d+\.\d+\.\d+)/)
+    if (match) {
+      if (currentVersion) {
+        sections.push({ version: currentVersion, content: currentLines.join('\n') })
+      }
+      currentVersion = match[1]
+      currentLines = [line]
+    } else if (currentVersion) {
+      currentLines.push(line)
+    }
+  }
+
+  // Push last section
+  if (currentVersion) {
+    sections.push({ version: currentVersion, content: currentLines.join('\n') })
+  }
+
+  return sections
+}
+
+async function cmdChangelog (ctx: SlashCommandContext, input: string): Promise<boolean> {
   const { readFileSync } = await import('node:fs')
   const { resolve, dirname } = await import('node:path')
   const { fileURLToPath } = await import('node:url')
@@ -1119,14 +1146,56 @@ async function cmdChangelog (ctx: SlashCommandContext): Promise<boolean> {
   const __dirname = dirname(__filename)
   const changelogPath = resolve(__dirname, '../../CHANGELOG.md')
 
+  const arg = input.slice('/changelog'.length).trim()
+
   try {
     const content = readFileSync(changelogPath, 'utf-8')
-    // Show up to 4000 chars to avoid overwhelming the chat
-    const truncated = content.length > 4000 ? content.slice(0, 3997) + '...' : content
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: truncated,
-    }])
+
+    // full mode — show entire file with 4000 char limit (current behavior)
+    if (arg === 'full') {
+      const truncated = content.length > 4000 ? content.slice(0, 3997) + '...' : content
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: truncated,
+      }])
+      return true
+    }
+
+    // Parse sections
+    const sections = parseChangelogSections(content)
+
+    // No arg — show only the latest release
+    if (!arg) {
+      if (sections.length === 0) {
+        // fallback: no sections found, show whole file
+        const truncated = content.length > 4000 ? content.slice(0, 3997) + '...' : content
+        ctx.setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: truncated,
+        }])
+        return true
+      }
+      const latest = sections[0].content
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: latest.length > 4000 ? latest.slice(0, 3997) + '...' : latest,
+      }])
+      return true
+    }
+
+    // Try to find specific version
+    const section = sections.find(s => s.version === arg)
+    if (section) {
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: section.content.length > 4000 ? section.content.slice(0, 3997) + '...' : section.content,
+      }])
+    } else {
+      ctx.setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Changelog version not found: ${arg}`,
+      }])
+    }
   } catch {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
@@ -1212,7 +1281,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
   { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
   { name: '/budget', description: 'Budget: /budget status|off|audit|small', handler: cmdBudget },
-  { name: '/changelog', description: 'Show changelog', handler: cmdChangelog },
+  { name: '/changelog', description: 'Show changelog: /changelog [full|version]', handler: cmdChangelog },
   { name: '/update-check', description: 'Check latest npm version', handler: cmdUpdateCheck },
 ]
 

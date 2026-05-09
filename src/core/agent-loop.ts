@@ -196,7 +196,27 @@ When you need to run multiple tools, call them one at a time and wait for result
 4. **Unchecked facts** must be labeled as assumption or not verified.
 5. **Generated demo projects**: placeholder content is allowed only if explicitly requested.
 6. **Do not present** invented content as real project history.
-7. **If data is missing**, ask for it or write "Not verified" — never guess.`
+7. **If data is missing**, ask for it or write "Not verified" — never guess.
+
+## Project Acceptance Policy
+1. **For web projects**, build success alone is not enough. Verify that:
+   - install/build succeeds;
+   - dev server starts successfully;
+   - the main page opens in a browser;
+   - no framework error overlay (Nuxt/Vite/Next/etc.);
+   - browser console has no critical errors;
+   - git status has no junk files (.idea/, node_modules/, .nuxt/, .output/, dist/, temp files).
+2. **For container-first projects**:
+   - provide Containerfile/Dockerfile and compose.yaml;
+   - run through podman/docker compose;
+   - verify build inside the container;
+   - expose the correct host/port;
+   - add .dockerignore.
+3. **If browser or container verification was not performed**, do not claim the project is fully verified.
+4. **In the final report**, separate:
+   - Verified
+   - Not checked
+   - Known issues`
 }
 
 /**

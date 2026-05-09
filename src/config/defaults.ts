@@ -33,6 +33,7 @@ export const DEFAULT_CONFIG: DeepSeekConfig = {
   language: 'en',
   maxTokens: 128_000,
   temperature: 0.7,
+  chromeHeadless: false, // false = headed (visible), true = headless (background)
   systemPrompt: `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
 You help users write, debug, refactor, and understand code. You have access to tools

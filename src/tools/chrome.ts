@@ -985,6 +985,7 @@ function buildBrowserTestReport (
     '## 🧪 Browser Test Report',
     '',
     '> **Verified** — все результаты подтверждены реальными chrome tool calls.',
+    `> **Browser mode:** ${actualMode}`,
     `> **Запрошенный режим:** ${requestedMode}`,
     `> **Фактический режим:** ${actualMode}`,
     `> **PID процесса:** ${pid ?? '—'}`,

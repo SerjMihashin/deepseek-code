@@ -851,6 +851,7 @@ async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
 
 async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise<boolean> {
   // Parse flags: /browser-test --headed or /browser-test --headless
+  // Default uses the configured chromeHeadless mode
   const parts = input.trim().split(/\s+/)
   const flag = parts.length > 1 ? parts[1].toLowerCase() : ''
 
@@ -860,7 +861,7 @@ async function cmdBrowserTest (ctx: SlashCommandContext, input: string): Promise
   } else if (flag === '--headless') {
     headless = true
   } else {
-    headless = false // default: headed (видимое окно)
+    headless = ctx.config.chromeHeadless ?? false // default from config
   }
 
   ctx.setStatusText('Запуск browser test...')
@@ -895,6 +896,8 @@ async function cmdBrowserRealTest (ctx: SlashCommandContext, input: string): Pro
   const parts = input.trim().split(/\s+/).slice(1)
   const saveReport = parts.includes('--save-report')
   const headless = parts.includes('--headless')
+  const headed = parts.includes('--headed')
+  const effectiveHeadless = headed ? false : headless ? true : (ctx.config.chromeHeadless ?? false)
   const siteArgs = parts.filter(p => !p.startsWith('--'))
   const sites = siteArgs.length > 0 ? siteArgs : undefined
 
@@ -902,7 +905,7 @@ async function cmdBrowserRealTest (ctx: SlashCommandContext, input: string): Pro
   const prevState = chromeManager.getState()
 
   try {
-    const report = await browserRealTest({ sites, headless })
+    const report = await browserRealTest({ sites, headless: effectiveHeadless })
 
     if (saveReport) {
       const { writeFile } = await import('node:fs/promises')
@@ -930,15 +933,19 @@ async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<bool
   const parts = input.trim().split(/\s+/)
   const flag = parts.length > 1 ? parts[1].toLowerCase() : ''
 
-  // No flag — show status
+  // No flag — show status only
   if (!flag || flag === '--status' || flag === '-s') {
     const state = chromeManager.getState()
-    const modeStr = state.connected
-      ? (state.headless ? 'headless (фоновый)' : 'headed (видимое окно)')
-      : 'не запущен'
-    ctx.addServiceNotice?.(
-      `Chrome: ${modeStr}${state.connected ? ` | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}` : ''}`
-    )
+    const desiredMode = ctx.config.chromeHeadless ? 'headless' : 'headed'
+    const runningStr = state.connected
+      ? (state.headless ? 'headless' : 'headed')
+      : 'not running'
+
+    let notice = `Browser desired mode: ${desiredMode}\nRunning Chrome: ${runningStr}`
+    if (state.connected) {
+      notice += ` | PID: ${state.managedProcessPid ?? '—'} | Port: ${state.debugPort}`
+    }
+    ctx.addServiceNotice?.(notice)
     return true
   }
 
@@ -949,24 +956,37 @@ async function cmdChrome (ctx: SlashCommandContext, input: string): Promise<bool
   } else if (flag === '--headed' || flag === '-v') {
     desiredHeadless = false
   } else {
-    ctx.addServiceNotice?.('[err] /chrome: используйте --headed, --headless или без флага для статуса')
+    ctx.addServiceNotice?.('[err] /chrome: use --headed, --headless or no flag for status')
     return true
   }
 
-  try {
-    await chromeManager.ensureMode(desiredHeadless)
-    const state = chromeManager.getState()
-    const modeStr = state.headless ? 'headless (фоновый)' : 'headed (видимое окно)'
+  // Capture runtime state BEFORE changing the desired mode
+  const stateBefore = chromeManager.getState()
+  const wasRunning = stateBefore.connected
+  const actualRunningMode = wasRunning ? (stateBefore.headless ? 'headless' : 'headed') : null
 
-    // Save to config
-    ctx.config.chromeHeadless = state.headless
-    saveConfig({ chromeHeadless: state.headless }).catch(() => {})
+  // Set the mode WITHOUT launching the browser
+  chromeManager.setHeadlessMode(desiredHeadless)
 
-    ctx.addServiceNotice?.(`Chrome: ${modeStr} | PID: ${state.managedProcessPid ?? '—'} | Порт: ${state.debugPort}`)
-  } catch (err) {
-    ctx.addServiceNotice?.(`[err] Chrome: ${String(err)}`)
+  // Save to config
+  ctx.config.chromeHeadless = desiredHeadless
+  saveConfig({ chromeHeadless: desiredHeadless }).catch(() => {})
+
+  // Build status message
+  const desiredModeStr = desiredHeadless ? 'headless' : 'headed'
+  const runningStr = wasRunning ? actualRunningMode! : 'not running'
+
+  let notice = `Browser desired mode: ${desiredModeStr}\nRunning Chrome: ${runningStr}`
+  if (wasRunning) {
+    notice += ` | PID: ${stateBefore.managedProcessPid ?? '—'} | Port: ${stateBefore.debugPort}`
   }
 
+  // Warn if Chrome is running in a different mode
+  if (wasRunning && stateBefore.headless !== desiredHeadless) {
+    notice += `\n\n⚠️ Chrome is currently running in ${actualRunningMode} mode.\nNew mode will be used on next browser start.`
+  }
+
+  ctx.addServiceNotice?.(notice)
   return true
 }
 

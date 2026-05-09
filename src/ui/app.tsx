@@ -16,6 +16,7 @@ import { subAgentManager } from '../core/subagent.js'
 import { skillsManager } from '../core/skills.js'
 import { lspManager } from '../core/lsp.js'
 import { scheduler } from '../core/scheduler.js'
+import { chromeManager } from '../tools/chrome-manager.js'
 import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
@@ -170,6 +171,11 @@ export function App ({ config, options }: AppProps) {
         subAgentManager.loadFromDir(),
         scheduler.load(),
       ])
+
+      // Применяем сохранённый режим Chrome (headed/headless) из конфига.
+      // Только обновляет headlessMode в chrome-manager, НЕ запускает браузер.
+      // Браузер стартует только при реальном вызове chrome tool, browser-test или /chrome.
+      chromeManager.setHeadlessMode(config.chromeHeadless ?? false)
 
       // Chrome не инициализируется при старте.
       // Он запускается только когда:

@@ -179,7 +179,15 @@ When you need to run multiple tools, call them one at a time and wait for result
 - Do not claim a change was verified unless tool results include verified=true.
 - Do not claim tests/checks passed unless you actually ran the command and saw success.
 - If no files changed, say "No files changed".
-- Final report must match tool results and Execution Summary.`
+- Final report must match tool results and Execution Summary.
+
+## Execution Policy
+1. **Minimal reading**: for a small task, first locate the target with as few reads as possible. Usually 1-2 read_file calls and 1 edit is enough. Do not run a broad grep/glob if you already know the file.
+2. **Do not repeat identical tool calls**: do not call read_file/grep_search/glob with the same arguments twice unless you have reason to believe the file changed.
+3. **Checks**: run lint/typecheck/build/test only after making changes. Do not run the same check multiple times without a new edit. If you did not run a check, do not claim it passed.
+4. **Temporary files**: do not create lint_out.txt, test_out.txt, temp/debug files unnecessarily. If you created a temporary file, remove it before the final report. Do not leave garbage in the working tree.
+5. **Report**: the final report must match the real tool results. Only mention what you actually read, changed, or verified. If no files were changed, explicitly say "No files changed". If there were errors, report them — do not hide them.
+6. **Stop**: when the goal is achieved and checks are done — stop. Do not continue looking for extra issues without the user asking. Do not refactor beyond the task scope.`
 }
 
 /**

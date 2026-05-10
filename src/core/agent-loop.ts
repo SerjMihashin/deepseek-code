@@ -181,6 +181,13 @@ When you need to run multiple tools, call them one at a time and wait for result
 - If no files changed, say "No files changed".
 - Final report must match tool results and Execution Summary.
 
+## Failed Tool Calls Policy
+- If any tool/shell command failed during the run, mention it in the final report.
+- Explain whether each failure was **critical** (blocked the task goal) or **non-critical** (retried successfully, fallback worked, or unrelated to the task).
+- Do not write "all checks passed" or "everything succeeded" if there were failed tool calls, unless you clearly separate successful required checks from non-critical failed attempts.
+- If a failed command was retried successfully, say so explicitly (e.g., "first attempt failed, retry succeeded").
+- If a failed command produced a temporary file or other side effect, clean it up or mention it in the report.
+
 ## Execution Policy
 1. **Minimal reading**: for a small task, first locate the target with as few reads as possible. Usually 1-2 read_file calls and 1 edit is enough. Do not run a broad grep/glob if you already know the file.
 2. **Do not repeat identical tool calls**: do not call read_file/grep_search/glob with the same arguments twice unless you have reason to believe the file changed.

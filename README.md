@@ -22,6 +22,7 @@
 
 ## What's new in 0.4.x
 
+- Better project-mode guardrails and visible browser-mode control.
 - Startup update notice and improved `/changelog` modes.
 - `/changelog` command to view release notes inside the CLI.
 - `/update-check` command to check the latest npm version.

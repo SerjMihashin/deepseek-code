@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.3 — Project Mode & Browser Control
+
+### Improvements
+- Improved Chrome browser mode handling.
+- `/chrome --headed` and `/chrome --headless` now switch the desired browser mode without launching Chrome.
+- Browser checks remain headed by default and open visibly unless headless mode is explicitly selected.
+- Browser test reports now show the actual browser mode.
+
+### Agent Quality
+- Added Execution Policy to reduce unnecessary reads, repeated tool calls, temporary files, and over-scoped work.
+- Added Source of Truth Policy to prevent invented versions, release notes, features, links, dates, and metrics.
+- Added Project Acceptance Policy for web/container projects: build alone is not enough; dev server, browser page, error overlay, console, container build, and git hygiene must be checked when relevant.
+- Added Failed Tool Calls Policy: failed commands must be reported and classified as critical or non-critical.
+
 ## 0.4.2 — Update Visibility Improvements
 
 ### New Features

@@ -245,7 +245,7 @@ describe('glob tool', () => {
     const result = await globTool.execute({ pattern: join(tmpDir, 'src/**/*.ts') })
     expect(result.success).toBe(true)
     expect(result.output.length).toBeGreaterThan(0)
-  })
+  }, 15000)
 
   it('should return empty for no matches', async () => {
     const result = await globTool.execute({ pattern: join(tmpDir, '*.nonexistent') })

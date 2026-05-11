@@ -537,8 +537,9 @@ export class AgentLoop extends EventEmitter {
             try {
               const toolResult = await this.executeTool(tc.function.name, args)
               const duration = Date.now() - startTime
+              const toolLabel = this.buildToolCallLabel(tc.function.name, args)
 
-              this.metrics.recordToolCallEnd(tc.function.name, toolResult.success)
+              this.metrics.recordToolCallEnd(tc.function.name, toolResult.success, toolLabel, toolResult.success ? undefined : toolResult.error)
 
               toolCallEvent.status = toolResult.success ? 'completed' : 'failed'
               toolCallEvent.result = toolResult.output
@@ -571,8 +572,9 @@ export class AgentLoop extends EventEmitter {
             } catch (err) {
               const duration = Date.now() - startTime
               const errorMsg = (err as Error).message
+              const toolLabel = this.buildToolCallLabel(tc.function.name, args)
 
-              this.metrics.recordToolCallEnd(tc.function.name, false)
+              this.metrics.recordToolCallEnd(tc.function.name, false, toolLabel, errorMsg)
 
               toolCallEvent.status = 'failed'
               toolCallEvent.error = errorMsg
@@ -636,8 +638,45 @@ export class AgentLoop extends EventEmitter {
   }
 
   /**
-   * Parse tool arguments from JSON string.
+   * Build a short human-readable label for a tool call.
+   * Used in Execution Summary to identify which files/commands failed.
    */
+  private buildToolCallLabel (toolName: string, args: Record<string, unknown>): string {
+    try {
+      switch (toolName) {
+        case 'run_shell_command': {
+          const cmd = args.command ?? args.cmd ?? ''
+          if (typeof cmd === 'string' && cmd.length > 0) {
+            return cmd.length > 120 ? cmd.slice(0, 117) + '...' : cmd
+          }
+          break
+        }
+        case 'read_file':
+        case 'edit':
+        case 'write_file': {
+          const path = args.path ?? args.file_path ?? args.file ?? ''
+          if (typeof path === 'string' && path.length > 0) {
+            return path.length > 120 ? path.slice(0, 117) + '...' : path
+          }
+          break
+        }
+        case 'grep_search':
+        case 'glob': {
+          const pattern = args.pattern ?? ''
+          if (typeof pattern === 'string' && pattern.length > 0) {
+            return pattern.length > 120 ? pattern.slice(0, 117) + '...' : pattern
+          }
+          break
+        }
+      }
+      // Fallback: serialize first meaningful string value
+      const fallback = JSON.stringify(args)
+      return fallback.length > 120 ? fallback.slice(0, 117) + '...' : fallback
+    } catch {
+      return String(args)
+    }
+  }
+
   /**
    * Check if any budget limit has been exceeded (called at top of each iteration).
    * Returns the field name that exceeded or null if all good.

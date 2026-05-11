@@ -122,7 +122,7 @@ export class MetricsCollector {
   private _lastInputTokens: number = 0
   private _apiCalls: number = 0
   private toolTimings: Map<string, { start: number; duration?: number }> = new Map()
-  private toolCallLog: Array<{ tool: string; duration: number; success: boolean }> = []
+  private toolCallLog: Array<{ tool: string; duration: number; success: boolean; label?: string; error?: string }> = []
   private _gitBaseline: GitStatusSnapshot | null = null
   private _gitFinal: GitStatusSnapshot | null = null
 
@@ -163,7 +163,7 @@ export class MetricsCollector {
   }
 
   /** Get a copy of the tool call log for budget/inspection purposes */
-  get toolCallLogEntries (): Array<{ tool: string; duration: number; success: boolean }> {
+  get toolCallLogEntries (): Array<{ tool: string; duration: number; success: boolean; label?: string; error?: string }> {
     return [...this.toolCallLog]
   }
 
@@ -182,13 +182,13 @@ export class MetricsCollector {
     this.toolTimings.set(toolName, { start: Date.now() })
   }
 
-  recordToolCallEnd (toolName: string, success: boolean = true): void {
+  recordToolCallEnd (toolName: string, success: boolean = true, label?: string, error?: string): void {
     const entry = this.toolTimings.get(toolName)
     if (entry) {
       const duration = Date.now() - entry.start
       entry.duration = duration
       this._toolCalls++
-      this.toolCallLog.push({ tool: toolName, duration, success })
+      this.toolCallLog.push({ tool: toolName, duration, success, label, error })
     }
   }
 
@@ -314,6 +314,24 @@ export class MetricsCollector {
       summary += `Tools: ${Array.from(groups.entries()).map(([name, g]) =>
         `${name} x${g.count}${g.fail > 0 ? ` (${g.success} ok ${g.fail} failed)` : ''}`
       ).join(', ')}\n`
+
+      // Failed tool calls detail block (max 5 entries)
+      const failedCalls = this.toolCallLog.filter(c => !c.success)
+      if (failedCalls.length > 0) {
+        summary += '\nFailed tool calls:\n'
+        for (const fc of failedCalls.slice(0, 5)) {
+          const label = fc.label
+            ? (fc.label.length > 120 ? fc.label.slice(0, 117) + '...' : fc.label)
+            : ''
+          const error = fc.error
+            ? (fc.error.length > 160 ? fc.error.slice(0, 157) + '...' : fc.error)
+            : 'failed'
+          summary += `- ${fc.tool}${label ? `: ${label}` : ''} -> ${error}\n`
+        }
+        if (failedCalls.length > 5) {
+          summary += `  ... and ${failedCalls.length - 5} more failed call(s)\n`
+        }
+      }
     }
 
     summary += `Time: ${mins}m ${secs}s${costStr}\n`

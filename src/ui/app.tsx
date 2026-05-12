@@ -102,6 +102,46 @@ export function App ({ config, options }: AppProps) {
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetRef = useRef<TaskBudget | undefined>(undefined)
 
+  // ── Stream chunk batching ──────────────────────────────────────────────
+  const pendingChunksRef = useRef('')
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current) return
+    flushTimerRef.current = setTimeout(() => {
+      flushTimerRef.current = null
+      const buffered = pendingChunksRef.current
+      if (!buffered) return
+      pendingChunksRef.current = ''
+      setMessages(prev => {
+        const last = prev[prev.length - 1]
+        if (last?.role === 'assistant') {
+          const updated = [...prev]
+          updated[updated.length - 1] = { ...last, content: last.content + buffered }
+          return updated
+        }
+        return [...prev, { role: 'assistant', content: buffered }]
+      })
+    }, 75)
+  }, [])
+  const flushBuffer = useCallback(() => {
+    if (flushTimerRef.current) {
+      clearTimeout(flushTimerRef.current)
+      flushTimerRef.current = null
+    }
+    const buffered = pendingChunksRef.current
+    if (!buffered) return
+    pendingChunksRef.current = ''
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'assistant') {
+        const updated = [...prev]
+        updated[updated.length - 1] = { ...last, content: last.content + buffered }
+        return updated
+      }
+      return [...prev, { role: 'assistant', content: buffered }]
+    })
+  }, [])
+
   const addServiceNotice = useCallback((text: string) => {
     setServiceNotice(text)
     if (serviceNoticeTimerRef.current) clearTimeout(serviceNoticeTimerRef.current)
@@ -225,7 +265,8 @@ export function App ({ config, options }: AppProps) {
 
   const { stdin } = useStdin()
 
-  // Compensate scroll offset when new visible messages arrive while paused
+  // Compensate scroll offset when new visible messages arrive while paused.
+  // Use a ref-based approach to avoid re-render loops.
   useEffect(() => {
     if (setupStepRef.current !== 'done') return
     const visible = messages.filter(m => m.role !== 'tool').length
@@ -235,7 +276,7 @@ export function App ({ config, options }: AppProps) {
       setNewMessagesWhilePaused(true)
     }
     visibleMessageCountRef.current = visible
-  }, [messages.length, scrollMode])
+  }, [messages])
 
   // Sync prevToolCallsRef with toolCalls state
   useEffect(() => {
@@ -298,7 +339,16 @@ export function App ({ config, options }: AppProps) {
       emptyInputTimerRef.current = setTimeout(() => setEmptyInputHint(false), EMPTY_INPUT_HINT_DELAY)
       return
     }
-    if (isProcessing) return
+    if (isProcessing) {
+      // Live follow-up: inject into current active AgentLoop
+      if (agentLoopRef.current) {
+        agentLoopRef.current.addUserFollowUp(input.trim())
+        addServiceNotice('Follow-up added. The agent will continue after the current step.')
+      } else {
+        addServiceNotice('Agent is not active. Send it as a new message.')
+      }
+      return
+    }
 
     // Handle setup wizard steps
     if (setupStep === 'apikey') {
@@ -408,16 +458,8 @@ export function App ({ config, options }: AppProps) {
           },
           onReasoningChunk: () => {},
           onStreamChunk: (chunk) => {
-            setMessages(prev => {
-              const last = prev[prev.length - 1]
-              if (last?.role === 'assistant') {
-                // If last content is empty, replace with chunk; otherwise append
-                const updated = [...prev]
-                updated[updated.length - 1] = { ...last, content: last.content + chunk }
-                return updated
-              }
-              return [...prev, { role: 'assistant', content: chunk }]
-            })
+            pendingChunksRef.current += chunk
+            scheduleFlush()
           },
           // onResponse intentionally removed — onStreamChunk handles all text
           // Avoids duplicate "assistant" message push that caused text doubling
@@ -552,8 +594,10 @@ export function App ({ config, options }: AppProps) {
       })
     } finally {
       // Safety net: ensure UI is always reset regardless of exit path
+      flushBuffer()
       setIsProcessing(false)
       setStatusText(i18n.t('ready'))
+
       // Clear any pending approval (covers error/abort exit paths)
       if (pendingApprovalResolveRef.current) {
         pendingApprovalResolveRef.current(false)
@@ -1059,7 +1103,9 @@ export function App ({ config, options }: AppProps) {
           )}
       <InputBar
         onSubmit={handleSubmit}
-        disabled={isProcessing}
+        disabled={false}
+        // disabled is no longer tied to isProcessing — input is allowed during processing.
+        // blockInput still handles approval/clear dialogs.
         onClear={handleClear}
         onExit={handleExit}
         isMasked={setupStep === 'apikey'}

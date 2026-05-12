@@ -48,7 +48,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
     if (!isProcessing) return
     const interval = setInterval(() => {
       setSpinnerFrame(prev => (prev + 1) % SPINNER_FRAMES.length)
-    }, 80)
+    }, 150)
     return () => clearInterval(interval)
   }, [isProcessing])
 
@@ -56,7 +56,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
     if (!isProcessing) return
     const interval = setInterval(() => {
       setPulseIdx(prev => (prev + 1) % 4)
-    }, 400)
+    }, 600)
     return () => clearInterval(interval)
   }, [isProcessing])
 

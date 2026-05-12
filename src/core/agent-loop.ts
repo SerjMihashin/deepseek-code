@@ -241,6 +241,7 @@ export class AgentLoop extends EventEmitter {
   private toolCallHistory: Map<string, ToolCallEvent> = new Map()
   private metrics: MetricsCollector = new MetricsCollector()
   private iterationCount = 0
+  private followUpSeq = 0
 
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
     super()
@@ -284,6 +285,21 @@ export class AgentLoop extends EventEmitter {
   /** Get the metrics collector for this session */
   getMetrics (): MetricsCollector {
     return this.metrics
+  }
+
+  /**
+   * Add a user follow-up message during an active agent loop.
+   * The message will be picked up on the next API iteration.
+   * Does NOT start a new loop or reset state.
+   */
+  addUserFollowUp (content: string): void {
+    const trimmed = content?.trim()
+    if (!trimmed) return
+    this.followUpSeq++
+    this.messages.push({
+      role: 'user',
+      content: `User follow-up while task was running:\n${trimmed}`,
+    })
   }
 
   /**
@@ -359,6 +375,7 @@ export class AgentLoop extends EventEmitter {
           return this.buildBudgetHaltMessage()
         }
 
+        const followUpSeqAtRequestStart = this.followUpSeq
         const stream = this.api.streamChat(this.messages, openAITools)
         let responseContent = ''
         let toolCalls: Array<{
@@ -608,6 +625,11 @@ export class AgentLoop extends EventEmitter {
           const fallback = 'I have completed the requested actions. What else would you like me to do?'
           this.messages.push({ role: 'assistant', content: fallback })
           this.options.onResponse(fallback)
+          // Check if a follow-up arrived while the API request was streaming
+          if (this.followUpSeq > followUpSeqAtRequestStart) {
+            // Follow-up received during this request — continue loop instead of finishing
+            continue
+          }
           this.finalizeSession()
           const summary = this.metrics.getSummary(this.model)
           this.options.onStreamChunk(summary)
@@ -615,6 +637,12 @@ export class AgentLoop extends EventEmitter {
         }
         this.messages.push({ role: 'assistant', content: responseContent })
         this.options.onResponse(responseContent)
+
+        // Check if a follow-up arrived while this API request was streaming
+        if (this.followUpSeq > followUpSeqAtRequestStart) {
+          // Follow-up received during the stream — continue loop, skip finalization
+          continue
+        }
 
         // Output execution summary
         this.finalizeSession()

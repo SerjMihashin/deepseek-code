@@ -119,6 +119,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [suggestionIndex, setSuggestionIndex] = useState(-1)
   const [suggestionsScrollOffset, setSuggestionsScrollOffset] = useState(0)
+  const [suggestionsHidden, setSuggestionsHidden] = useState(false)
   const [cursorVisible, setCursorVisible] = useState(true)
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
   const [inputScrollOffset, setInputScrollOffset] = useState(0)
@@ -153,6 +154,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   // Reset suggestions scroll when input changes (suggestions list rebuilt)
   useEffect(() => {
     setSuggestionsScrollOffset(0)
+    setSuggestionsHidden(false)
   }, [input])
 
   const handleImagePaste = async () => {
@@ -273,9 +275,10 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     const currentCursor = cursorIndexRef.current
     const currentSuggestions = getSuggestions(currentInput)
     const hasSuggestions = currentSuggestions.length > 0
+    const showSuggestions = hasSuggestions && !suggestionsHidden
 
     // ── Suggestion navigation ─────────────────────────────────────────────
-    if (hasSuggestions) {
+    if (showSuggestions) {
       // Arrows cycle through suggestions — only change index, NOT input
       if (key.downArrow) {
         const newIdx = (suggestionIndex + 1) % currentSuggestions.length
@@ -310,6 +313,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       // Escape closes suggestions
       if (key.escape) {
         setSuggestionIndex(-1)
+        setSuggestionsHidden(true)
         return
       }
       // Enter submits the selected command (or current input if no selection)
@@ -482,9 +486,14 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       return
     }
 
-    // ── Ctrl+L clear, Ctrl+C exit ─────────────────────────────────────────
+    // ── Ctrl+L clear, Ctrl+U delete line, Ctrl+C exit ────────────────────
     if (key.ctrl && _input === 'l') {
       onClear()
+    } else if (key.ctrl && _input === 'u') {
+      setInput('')
+      setCursorIndex(0)
+      setSuggestionIndex(-1)
+      setSuggestionsHidden(false)
     } else if (key.ctrl && _input === 'c') {
       onExit()
     }
@@ -504,7 +513,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   return (
     <Box flexDirection='column'>
       {/* Command suggestions */}
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 && !suggestionsHidden && (
         <Box flexDirection='column' marginLeft={1} marginBottom={0}>
           {suggestions.slice(suggestionsScrollOffset, suggestionsScrollOffset + SUGGESTIONS_MAX_VISIBLE).map((cmd, i) => {
             const actualIndex = suggestionsScrollOffset + i

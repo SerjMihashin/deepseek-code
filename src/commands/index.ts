@@ -49,6 +49,8 @@ export interface SlashCommandContext {
   getBudget?: () => TaskBudget | undefined
   /** Sets the budget for the next agent run */
   setBudget?: (budget: TaskBudget | undefined) => void
+  /** Returns whether the current budget is the default interactive preset */
+  getBudgetIsDefault?: () => boolean
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1092,11 +1094,13 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
     if (!budget) {
       notice('Budget: off')
     } else {
-      const prefix = 'Budget: active'
+      const isDefault = ctx.getBudgetIsDefault?.() ?? false
+      const prefix = isDefault ? 'Budget: active (default)' : 'Budget: active'
       const lines = [
         prefix,
         `maxToolCalls: ${budget.maxToolCalls}`,
         `maxApiCalls: ${budget.maxApiCalls}`,
+        ...(budget.maxIterations != null ? [`maxIterations: ${budget.maxIterations}`] : []),
         `maxReadFiles: ${budget.maxReadFiles}`,
         `maxShellCommands: ${budget.maxShellCommands}`,
       ]

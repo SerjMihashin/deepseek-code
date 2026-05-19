@@ -22,7 +22,7 @@ import { i18n, type Locale } from '../core/i18n.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 import { executeSlashCommand, type SlashCommandContext } from '../commands/index.js'
 import { checkLatestVersion } from '../commands/update-checker.js'
-import type { TaskBudget } from '../tools/types.js'
+import { type TaskBudget, INTERACTIVE_DEFAULT_BUDGET_PRESET } from '../tools/types.js'
 
 /** Empty input hint timeout in ms before showing the guide text */
 const EMPTY_INPUT_HINT_DELAY = 2000
@@ -100,7 +100,8 @@ export function App ({ config, options }: AppProps) {
   const [langPicker, setLangPicker] = useState<{ selectedIndex: number } | null>(null)
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const budgetRef = useRef<TaskBudget | undefined>(undefined)
+  const budgetRef = useRef<TaskBudget | undefined>({ ...INTERACTIVE_DEFAULT_BUDGET_PRESET })
+  const budgetIsDefaultRef = useRef(true)
 
   // ── Stream chunk batching ──────────────────────────────────────────────
   const pendingChunksRef = useRef('')
@@ -311,7 +312,11 @@ export function App ({ config, options }: AppProps) {
       addServiceNotice,
       getMetrics: () => agentLoopRef.current?.getMetrics(),
       getBudget: () => budgetRef.current,
-      setBudget: (budget) => { budgetRef.current = budget },
+      setBudget: (budget) => {
+        budgetRef.current = budget
+        budgetIsDefaultRef.current = false
+      },
+      getBudgetIsDefault: () => budgetIsDefaultRef.current,
       onThemePicker: () => {
         const themes = themeManager.listThemes()
         const currentName = themeManager.theme.name

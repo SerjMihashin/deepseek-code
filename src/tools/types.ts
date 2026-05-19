@@ -61,6 +61,19 @@ export const AUDIT_BUDGET_PRESET: TaskBudget = {
 }
 
 /**
+ * Soft preset for interactive default budget (not yet connected as default).
+ * Intentionally looser than AUDIT_BUDGET_PRESET to avoid early termination
+ * during interactive sessions.
+ */
+export const INTERACTIVE_DEFAULT_BUDGET_PRESET: TaskBudget = {
+  maxToolCalls: 30,
+  maxApiCalls: 12,
+  maxIterations: 16,
+  maxReadFiles: 20,
+  maxShellCommands: 12,
+}
+
+/**
  * OpenAI-compatible tool format for DeepSeek API function calling.
  */
 export interface OpenAITool {

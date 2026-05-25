@@ -58,6 +58,19 @@ describe('AgentLoop', () => {
     expect(prompt).toContain('Before the final report, check the working tree')
   })
 
+  it('should include adaptive runtime and git hygiene rules in the system prompt', () => {
+    const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
+
+    expect(prompt).toContain('Runtime/container verification is adaptive')
+    expect(prompt).toContain('not Podman-only')
+    expect(prompt).toContain('Docker Compose')
+    expect(prompt).toContain('Podman/Podman Compose')
+    expect(prompt).toContain('After two similar runtime failures')
+    expect(prompt).toContain('appropriate .gitignore')
+    expect(prompt).toContain('git status has no junk files')
+    expect(prompt).toContain('compose references it correctly')
+  })
+
   it('should create an instance with default options', () => {
     const agent = new AgentLoop(TEST_CONFIG)
     expect(agent).toBeInstanceOf(AgentLoop)

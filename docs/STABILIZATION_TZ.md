@@ -19,6 +19,7 @@ CLI: `dsc`
 - Явные budget modes: `audit`, `normal`, `large`, `off` без жесткого default.
 - Честное abort/error reporting для неожиданных stream abort/timeout.
 - Правило session log: после каждой успешной итерации обновлять `docs/SESSION_LOG.md`.
+- Future feature backlog: desktop-app connectors по модели browser tool, чтобы агент мог безопасно работать с установленными приложениями через явные адаптеры и разрешения.
 
 ## Что обновляем
 
@@ -35,6 +36,7 @@ CLI: `dsc`
 - AgentLoop: различать user cancel и неожиданный abort.
 - Cleanup: временные файлы не должны оставаться в `git status`.
 - Budget: расширить `/budget` без включения жесткого лимита по умолчанию.
+- Acceptance policy: агент должен выбирать доступный runtime адаптивно (`docker compose`, Podman, native dev server), не зацикливаться на одном инструменте и не считать контейнерную проверку обязательной, если runtime отсутствует.
 
 ## Что не делаем сейчас
 
@@ -199,3 +201,37 @@ Acceptance:
 - Есть честный итог: passed, failed, not checked.
 - Нет публикации/коммита без подтверждения.
 - Решено, готов ли следующий релиз.
+
+### Iteration 7.1: Adaptive Runtime and Hygiene Policy
+
+Статус: `DONE`
+
+Цель: исправить проблемы, найденные в AgentOS exam: красивый UI был создан, но git hygiene и runtime/container strategy были недостаточно чистыми.
+
+Работы:
+- Усилить system prompt: контейнерная проверка не должна быть Podman-only.
+- Требовать сначала определить доступные инструменты и файлы (`Dockerfile`, `Containerfile`, compose), затем выбирать путь проверки.
+- Ограничить повторение одинаковых container/runtime попыток: после двух похожих failures переключиться на другой путь или честно отметить blocker.
+- Требовать `.gitignore` и финальный `git status` без `node_modules`, `.nuxt`, `.output`, `dist`, логов, скриншотов и временных файлов.
+- Финальный отчет должен отделять verified checks, not checked и known issues.
+
+Acceptance:
+- System prompt содержит adaptive runtime policy.
+- Regression tests подтверждают наличие runtime/hygiene правил.
+- Lint, typecheck, build и tests проходят.
+- Документы и session log обновлены.
+
+### Future: Desktop Application Connectors
+
+Статус: `BACKLOG`
+
+Идея: расширить модель `chrome` tool до безопасных desktop-app connectors. Пользователь сможет дать задачу вроде: "открой Photoshop, разбери макет, сними размеры, шрифты и иконки". Агент должен обнаружить доступные приложения, запросить разрешение, открыть нужный адаптер и работать через управляемые действия, а не через произвольное управление всем компьютером.
+
+Как это видится:
+- `desktop_app` registry с allowlist приложений: Photoshop, Figma/Desktop, Illustrator, VS Code/WebStorm, браузеры, файловый менеджер.
+- Каждый коннектор описывает capabilities: открыть файл, сделать screenshot, прочитать UI tree/OCR, выполнить safe hotkeys, экспортировать данные.
+- Отдельные permission prompts: просмотр экрана, управление приложением, чтение файла, экспорт.
+- Session log всех действий: какое приложение открыто, какие файлы читались, какие размеры/стили извлечены.
+- Sandbox/debug режим перед включением в боевой TUI.
+
+Не делаем в `0.4.4`: реализацию desktop automation, глобальный контроль мыши/клавиатуры, работу с приложениями без явного разрешения пользователя.

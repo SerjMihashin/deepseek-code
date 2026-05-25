@@ -255,15 +255,21 @@ When you need to run multiple tools, call them one at a time and wait for result
    - the main page opens in a browser;
    - no framework error overlay (Nuxt/Vite/Next/etc.);
    - browser console has no critical errors;
-   - git status has no junk files (.idea/, node_modules/, .nuxt/, .output/, dist/, temp files).
-2. **For container-first projects**:
-   - provide Containerfile/Dockerfile and compose.yaml;
-   - run through podman/docker compose;
+   - the repository has an appropriate .gitignore for the stack;
+   - git status has no junk files (.idea/, node_modules/, .nuxt/, .output/, dist/, temp files, screenshots, logs).
+2. **Runtime/container verification is adaptive**, not Podman-only:
+   - first inspect available tooling and project files before choosing a path;
+   - if Docker Compose is available, use docker compose;
+   - if Podman/Podman Compose is available, use podman compose or podman-compose;
+   - if no container runtime is available, use the native package manager/dev server and report container verification as Not checked;
+   - do not spend many repeated attempts on one runtime. After two similar runtime failures, switch strategy or report the blocker.
+3. **For container-first projects**:
+   - keep one clear container entrypoint path (Dockerfile or Containerfile) and ensure compose references it correctly;
    - verify build inside the container;
    - expose the correct host/port;
-   - add .dockerignore.
-3. **If browser or container verification was not performed**, do not claim the project is fully verified.
-4. **In the final report**, separate:
+   - add .dockerignore or .containerignore as appropriate.
+4. **If browser, git-hygiene, or container verification was not performed**, do not claim the project is fully verified.
+5. **In the final report**, separate:
    - Verified
    - Not checked
    - Known issues`

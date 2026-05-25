@@ -631,3 +631,67 @@ Cleanup required before release:
 Release impact:
 - No code release blocker was confirmed by this external report.
 - Publication should wait until the temporary file is removed and, preferably, a real interactive TUI smoke is completed.
+
+### 2026-05-25: AgentOS Exam Review 3
+
+Status: `NEEDS_AGENT_POLICY_FIX`
+
+Source:
+- User provided screenshots and final report from another AgentOS large-project exam in `D:\Projects\AgentOS`.
+- Codex inspected project state without modifying the external project.
+
+Positive signal:
+- The generated UI is visually stronger and more professional than earlier attempts.
+- The agent did not stop silently at 100 iterations.
+- The final report was produced after a long run.
+- Browser and HTTP checks were reported as passed.
+
+Critical findings:
+- Git hygiene failed: root `.gitignore` was missing and `git status --short --untracked-files=all` listed `.nuxt`, `.output`, `node_modules`, logs, IDE files, and many generated artifacts.
+- Runtime strategy was too Podman-specific. The agent should adapt to Docker Compose, Podman, or native dev-server verification depending on what is available.
+- Container files were inconsistent: `compose.yml` references `Dockerfile`, while the successful manual path used `frontend/Containerfile`.
+- The report was still too optimistic for a run with many failed tool calls.
+
+Release impact:
+- Do not publish yet.
+- Add an adaptive runtime and git-hygiene policy before the next exam.
+
+Next fix:
+- Strengthen system prompt acceptance policy.
+- Add regression coverage that the prompt contains adaptive runtime, anti-loop, and git hygiene requirements.
+
+### 2026-05-25: Adaptive Runtime and Hygiene Policy
+
+Status: `DONE`
+
+Issue:
+- AgentOS exam showed that the agent can build a visually strong app but still leave the repository in a poor delivery state.
+- The agent was too focused on Podman and repeated runtime/container attempts instead of adapting to available tools.
+- Full tests also exposed a flaky Windows glob test timeout.
+
+Fix:
+- Strengthened the project acceptance policy in the system prompt.
+- Added adaptive runtime guidance: inspect available tooling, prefer Docker Compose when available, use Podman when available, otherwise fall back to native dev-server verification and report container checks as Not checked.
+- Added anti-loop guidance: after two similar runtime failures, switch strategy or report the blocker.
+- Added git-hygiene requirements: appropriate `.gitignore` and final `git status` without `node_modules`, `.nuxt`, `.output`, `dist`, logs, screenshots, or temp files.
+- Optimized `glob` for absolute patterns by narrowing `cwd` to the static base path before calling `globby`, avoiding broad repo scans on Windows.
+- Added regression coverage for the new system prompt requirements.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`
+- `npm test -- src/core/agent-loop.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 149 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Package size: 211.2 kB
+- Unpacked size: 989.7 kB
+- Total files: 221

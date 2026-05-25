@@ -481,6 +481,42 @@ Checks:
 Next:
 - Commit the auto-compact iteration.
 
+### 2026-05-25: Adaptive Runtime and Hygiene Policy
+
+Status: `DONE`
+
+Reason:
+- Latest AgentOS exam produced a much better UI, but repository delivery quality was still not release-grade.
+- `D:\Projects\AgentOS` had no root `.gitignore`, and git status exposed `.nuxt`, `.output`, `node_modules`, logs, IDE files, and generated artifacts.
+- The agent over-focused on Podman/container attempts instead of adapting to Docker Compose, Podman, or native dev-server verification.
+- Full `npm test` also exposed the Windows glob test timeout again.
+
+Done:
+- Added future desktop-app connector backlog to the stabilization TZ.
+- Strengthened system prompt project acceptance policy:
+  - runtime/container verification is adaptive and not Podman-only;
+  - inspect available tools and project files before choosing Docker/Podman/native;
+  - after two similar runtime failures, switch strategy or report the blocker;
+  - require appropriate `.gitignore`;
+  - require final git status without `node_modules`, `.nuxt`, `.output`, `dist`, logs, screenshots, or temp files;
+  - require compose files to reference the correct Dockerfile/Containerfile.
+- Added regression coverage for the new prompt requirements.
+- Optimized `glob` absolute-pattern handling by narrowing `cwd` to the static base before calling `globby`.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`: passed, 32 tests.
+- `npm test -- src/core/agent-loop.test.ts`: passed, 20 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 149 tests.
+- `npm pack --dry-run`: passed, package size 211.2 kB, unpacked size 989.7 kB, 221 files.
+- Temp-file check: no known smoke/test junk files found.
+
+Next:
+- Commit this iteration.
+- Run the next AgentOS exam with a clean project folder and local 0.4.4 candidate.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

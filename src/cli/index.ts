@@ -3,7 +3,7 @@
 import { Command } from 'commander'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import type { CliOptions } from './interactive.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -90,11 +90,20 @@ export async function run (args: string[]): Promise<void> {
   }
   // Handle --help passed via commander's parse
   // Commander may intercept --help before action, but we also handle it here
-  await program.parseAsync(args, { from: 'user' })
+  await program.parseAsync(args, { from: getCommanderParseSource(args) })
 }
 
-// Always run when this module is loaded
-run(process.argv).catch((err) => {
-  console.error('Fatal error:', err)
-  process.exit(1)
-})
+export function getCommanderParseSource (args: string[]): 'node' | 'user' {
+  return args.length >= 2 ? 'node' : 'user'
+}
+
+const isEntrypoint = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false
+
+if (isEntrypoint) {
+  run(process.argv).catch((err) => {
+    console.error('Fatal error:', err)
+    process.exit(1)
+  })
+}

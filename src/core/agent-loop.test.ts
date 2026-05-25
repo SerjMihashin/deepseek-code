@@ -95,6 +95,27 @@ describe('AgentLoop', () => {
     expect(result).toContain('cancelled')
   })
 
+  it('should surface unexpected stream errors through onError', async () => {
+    const errors: Error[] = []
+    const agent = new AgentLoop(TEST_CONFIG, {
+      approvalMode: 'turbo',
+      onResponse: () => {},
+      onStreamChunk: () => {},
+      onReasoningChunk: () => {},
+      onToolCall: () => {},
+      onToolResult: () => {},
+      onError: (error) => { errors.push(error) },
+    })
+
+    ;(agent as any).api.streamChat = async function * () {
+      throw new Error('Stream timeout: no data received for 60s')
+    }
+
+    await expect(agent.run('test prompt')).rejects.toThrow('Stream timeout')
+    expect(errors).toHaveLength(1)
+    expect(errors[0].message).toContain('Stream timeout')
+  })
+
   it('should handle max iterations', async () => {
     const agent = new AgentLoop(TEST_CONFIG, {
       maxIterations: 1,

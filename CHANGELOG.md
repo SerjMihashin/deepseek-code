@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.4 — TUI Stability & Release Candidate
+
+### Fixed
+- Execution Summary now includes details for failed tool calls: tool name, label, and error.
+- Increased Windows glob test timeout to reduce flaky failures on slower Windows runs.
+- Fixed CLI argument parsing so `--json` or `--headless` without a prompt no longer treats `node` and the script path as an agent prompt.
+- Added a Node fallback for `grep_search` when `rg` is not installed.
+- Stream timeouts now surface as explicit errors instead of being hidden as user cancellations.
+- Stabilized streaming output by batching assistant chunks to reduce TUI rerenders.
+- Stabilized slash-command editing, including `/model`, Backspace/Delete, Esc, and Ctrl+U behavior.
+- Preserved live follow-up input while the agent is running, so user messages are queued into the active loop instead of being lost.
+
+### Changed
+- Added an interactive budget preset for future use, but it is not enabled by default.
+- Reverted the restrictive default interactive budget because it stopped real large-project work too early.
+
+### Known Issues
+- Mouse wheel support is not enabled in the production TUI.
+- History scrolling remains keyboard-first with PageUp, PageDown, and End.
+- Large project acceptance testing is still required before publication.
+
 ## 0.4.3 — Project Mode & Browser Control
 
 ### Improvements

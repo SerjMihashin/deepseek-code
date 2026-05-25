@@ -1,5 +1,13 @@
 import { execSync } from 'node:child_process'
+import { readFile, readdir } from 'node:fs/promises'
+import { join, relative } from 'node:path'
+import { minimatch } from 'minimatch'
 import { type Tool, type ToolResult } from './types.js'
+import { assertPathInWorkspace } from './path-safety.js'
+
+const MAX_MATCHES = 200
+const MAX_FILE_BYTES = 1024 * 1024
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.nuxt', '.output', 'coverage'])
 
 export const grepTool: Tool = {
   name: 'grep_search',
@@ -48,17 +56,9 @@ export const grepTool: Tool = {
         }
       }
 
-      // Limit output to avoid huge responses
-      const lines = output.split('\n')
-      const limited = lines.slice(0, 200)
-      let result = limited.join('\n')
-      if (lines.length > 200) {
-        result += `\n... and ${lines.length - 200} more matches`
-      }
-
       return {
         success: true,
-        output: result,
+        output: limitMatches(output.split('\n').filter(Boolean)),
       }
     } catch (err) {
       const error = err as Error & { status?: number }
@@ -69,11 +69,70 @@ export const grepTool: Tool = {
           output: 'No matches found',
         }
       }
-      return {
-        success: false,
-        output: '',
-        error: `Failed to search: ${error.message}`,
-      }
+
+      return nodeGrep(pattern, searchPath, glob)
     }
   },
+}
+
+async function nodeGrep (pattern: string, searchPath: string, glob?: string): Promise<ToolResult> {
+  try {
+    assertPathInWorkspace(searchPath)
+    const regex = new RegExp(pattern)
+    const matches: string[] = []
+
+    for await (const filePath of walkFiles(searchPath)) {
+      if (glob) {
+        const rel = relative(searchPath, filePath).replace(/\\/g, '/')
+        if (!minimatch(rel, glob, { matchBase: true })) continue
+      }
+
+      const content = await readFile(filePath)
+      if (content.length > MAX_FILE_BYTES || content.includes(0)) continue
+
+      const text = content.toString('utf8')
+      const lines = text.split(/\r?\n/)
+      for (let index = 0; index < lines.length; index++) {
+        if (regex.test(lines[index])) {
+          matches.push(`${filePath}:${index + 1}:${lines[index]}`)
+          if (matches.length >= MAX_MATCHES) {
+            return { success: true, output: limitMatches(matches, true) }
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      output: matches.length > 0 ? matches.join('\n') : 'No matches found',
+    }
+  } catch (err) {
+    return {
+      success: false,
+      output: '',
+      error: `Failed to search: ${(err as Error).message}`,
+    }
+  }
+}
+
+async function * walkFiles (dir: string): AsyncGenerator<string> {
+  const entries = await readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue
+      yield * walkFiles(join(dir, entry.name))
+    } else if (entry.isFile()) {
+      yield join(dir, entry.name)
+    }
+  }
+}
+
+function limitMatches (lines: string[], alreadyLimited = false): string {
+  const limited = lines.slice(0, MAX_MATCHES)
+  let result = limited.join('\n')
+  if (alreadyLimited || lines.length > MAX_MATCHES) {
+    const remaining = alreadyLimited ? 'more' : String(lines.length - MAX_MATCHES)
+    result += `\n... and ${remaining} more matches`
+  }
+  return result || 'No matches found'
 }

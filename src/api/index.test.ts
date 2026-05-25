@@ -1,0 +1,41 @@
+import { describe, expect, it, vi } from 'vitest'
+import { DeepSeekAPI, StreamTimeoutError } from './index.js'
+import type { DeepSeekConfig } from '../config/defaults.js'
+
+const TEST_CONFIG: DeepSeekConfig = {
+  apiKey: 'test-key',
+  baseUrl: 'https://api.deepseek.com',
+  model: 'deepseek-chat',
+  approvalMode: 'turbo',
+  theme: 'default-dark',
+  language: 'en',
+  maxTokens: 128_000,
+  temperature: 0.7,
+}
+
+describe('DeepSeekAPI streaming', () => {
+  it('throws StreamTimeoutError when chunk timeout aborts the stream', async () => {
+    vi.useFakeTimers()
+
+    const api = new DeepSeekAPI(TEST_CONFIG)
+    ;(api as any).client.chat.completions.create = async (_args: unknown, options: { signal: AbortSignal }) => ({
+      async * [Symbol.asyncIterator] () {
+        await new Promise((_resolve, reject) => {
+          options.signal.addEventListener('abort', () => {
+            const err = new Error('The operation was aborted')
+            err.name = 'AbortError'
+            reject(err)
+          })
+        })
+      },
+    })
+
+    const iterator = api.streamChat([{ role: 'user', content: 'hello' }])
+    const next = iterator.next()
+    const assertion = expect(next).rejects.toBeInstanceOf(StreamTimeoutError)
+    await vi.advanceTimersByTimeAsync(60_001)
+
+    await assertion
+    vi.useRealTimers()
+  })
+})

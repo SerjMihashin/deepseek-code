@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { execSync } from 'node:child_process'
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
 import { editTool } from './edit.js'
@@ -9,7 +8,8 @@ import { bashTool } from './bash.js'
 import { globTool } from './glob.js'
 import { grepTool } from './grep.js'
 
-const hasRg = (() => { try { execSync('rg --version', { stdio: 'ignore' }); return true } catch { return false } })()
+// Keep a direct child-process smoke in this file; grep_search itself must also
+// work without rg via its Node fallback.
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
@@ -254,7 +254,7 @@ describe('glob tool', () => {
   })
 })
 
-describe.skipIf(!hasRg)('grep_search tool', () => {
+describe('grep_search tool', () => {
   beforeAll(() => {
     tmpDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-'))
     createTempFile('search.txt', 'hello world\nfoo bar\nHELLO')

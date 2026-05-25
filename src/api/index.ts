@@ -57,6 +57,13 @@ export interface ToolCallMessage {
 const MAX_RETRY_ATTEMPTS = 3
 const STREAM_CHUNK_TIMEOUT_MS = 60_000
 
+export class StreamTimeoutError extends Error {
+  constructor (timeoutMs: number) {
+    super(`Stream timeout: no data received for ${timeoutMs / 1000}s`)
+    this.name = 'StreamTimeoutError'
+  }
+}
+
 function sleep (ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -108,12 +115,14 @@ export class DeepSeekAPI {
         ]
 
     const timeoutController = new AbortController()
+    let timeoutError: StreamTimeoutError | undefined
     let chunkTimer: ReturnType<typeof setTimeout>
 
     const resetChunkTimer = () => {
       clearTimeout(chunkTimer)
       chunkTimer = setTimeout(() => {
-        timeoutController.abort(new Error(`Stream timeout: no data received for ${STREAM_CHUNK_TIMEOUT_MS / 1000}s`))
+        timeoutError = new StreamTimeoutError(STREAM_CHUNK_TIMEOUT_MS)
+        timeoutController.abort(timeoutError)
       }, STREAM_CHUNK_TIMEOUT_MS)
     }
 
@@ -231,6 +240,11 @@ export class DeepSeekAPI {
           toolCallId: currentToolCallId,
         }
       }
+    } catch (err) {
+      if (timeoutError && isAbortLikeError(err)) {
+        throw timeoutError
+      }
+      throw err
     } finally {
       clearTimeout(chunkTimer!)
     }
@@ -369,4 +383,11 @@ function safeParseJSON (str: string): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function isAbortLikeError (err: unknown): boolean {
+  const error = err as { name?: unknown; message?: unknown }
+  const name = String(error?.name ?? '')
+  const message = String(error?.message ?? err)
+  return name === 'AbortError' || /abort/i.test(message)
 }

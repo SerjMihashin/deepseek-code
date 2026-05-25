@@ -55,6 +55,33 @@ function historyForModel (messages: ChatMessage[]): ChatMessage[] {
   })
 }
 
+function isUserCancellationError (error: Error, signal: AbortSignal): boolean {
+  if (!signal.aborted) return false
+  if (error.name === 'StreamTimeoutError') return false
+  const msg = error.message || ''
+  return error.name === 'AbortError' || /abort|cancel/i.test(msg)
+}
+
+function formatAgentError (error: Error): string {
+  const msg = error.message || ''
+  if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized')) {
+    return i18n.t('apiErrorAuth')
+  }
+  if (msg.includes('429') || msg.includes('rate limit')) {
+    return i18n.t('apiErrorRateLimit')
+  }
+  if (/5\d{2}|server error|Service Unavailable/i.test(msg)) {
+    return i18n.t('apiErrorServer')
+  }
+  if (/ECONNRESET|ECONNREFUSED|ENOTFOUND/i.test(msg)) {
+    return i18n.t('apiErrorNetwork')
+  }
+  if (error.name === 'StreamTimeoutError' || /ETIMEDOUT|timed out|Stream timeout/i.test(msg)) {
+    return i18n.t('apiErrorTimeout')
+  }
+  return `${i18n.t('error')}: ${msg}`
+}
+
 // Setup wizard step components are now in ./setup-wizard.tsx
 // Logo, SetupWizard, useSetupWizard imported from there
 
@@ -547,25 +574,12 @@ export function App ({ config, options }: AppProps) {
       liveToolMessageIndexRef.current = -1
     } catch (err) {
       const error = err as Error
-      // Don't show error on cancellation
-      if (error.name === 'AbortError' || error.message.includes('abort') || error.message.includes('cancel')) {
+      // User-triggered cancellation is expected and should not become an error message.
+      if (isUserCancellationError(error, abortController.signal)) {
         return
       }
-      const msg = error.message || ''
-      let friendlyMsg: string
-      if (msg.includes('401') || msg.includes('403') || msg.includes('Unauthorized')) {
-        friendlyMsg = i18n.t('apiErrorAuth')
-      } else if (msg.includes('429') || msg.includes('rate limit')) {
-        friendlyMsg = i18n.t('apiErrorRateLimit')
-      } else if (/5\d{2}|server error|Service Unavailable/i.test(msg)) {
-        friendlyMsg = i18n.t('apiErrorServer')
-      } else if (/ECONNRESET|ECONNREFUSED|ENOTFOUND/i.test(msg)) {
-        friendlyMsg = i18n.t('apiErrorNetwork')
-      } else if (/ETIMEDOUT|timed out/i.test(msg)) {
-        friendlyMsg = i18n.t('apiErrorTimeout')
-      } else {
-        friendlyMsg = `${i18n.t('error')}: ${msg}`
-      }
+      const friendlyMsg = formatAgentError(error)
+      const toolHistory = agentLoopRef.current?.getToolCallHistory() ?? []
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: friendlyMsg,
@@ -575,16 +589,31 @@ export function App ({ config, options }: AppProps) {
         prompt: input,
         error: friendlyMsg,
         approvalMode,
+        toolCalls: toolHistory.map(toolCall => ({
+          name: toolCall.name,
+          status: toolCall.status,
+          durationMs: toolCall.durationMs,
+          error: toolCall.error,
+        })),
       })
       const bundleFile = await writeExecutionBundle({
         sessionId: sessionIdRef.current,
         prompt: input,
         error: friendlyMsg,
         approvalMode,
+        toolCalls: toolHistory.map(toolCall => ({
+          id: toolCall.id,
+          name: toolCall.name,
+          status: toolCall.status,
+          durationMs: toolCall.durationMs,
+          error: toolCall.error,
+          result: toolCall.result,
+        })),
       })
       await saveSession({
         id: sessionIdRef.current,
         messageCount: messages.length + 2,
+        toolCallCount: toolHistory.length,
         approvalMode,
         lastPrompt: input,
         lastError: friendlyMsg,

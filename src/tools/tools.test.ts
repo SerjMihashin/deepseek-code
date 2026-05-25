@@ -249,6 +249,14 @@ describe('bash tool', () => {
     expect(result.error).toContain('Get-Content')
   })
 
+  it('should execute PowerShell commands through PowerShell on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'Write-Output "powershell-ok"' })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('powershell-ok')
+  })
+
   it('should handle command failure', async () => {
     const result = await bashTool.execute({ command: 'nonexistent_command_xyz' })
     expect(result.success).toBe(false)

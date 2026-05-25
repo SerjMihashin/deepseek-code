@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { platform } from 'node:os'
 import { type Tool, type ToolResult } from './types.js'
 
@@ -40,6 +40,21 @@ const WINDOWS_UNIX_COMMAND_REPLACEMENTS: Record<string, string> = {
   touch: 'Use New-Item -ItemType File or Set-Content.',
   rm: 'Use Remove-Item with an explicit safe path.',
 }
+
+const POWERSHELL_COMMANDS = new Set([
+  'add-content',
+  'copy-item',
+  'get-childitem',
+  'get-content',
+  'move-item',
+  'new-item',
+  'remove-item',
+  'select-string',
+  'set-content',
+  'test-path',
+  'where-object',
+  'write-output',
+])
 
 function findBareCommandAtSegmentStart (command: string, names: Set<string>): string | null {
   let atSegmentStart = true
@@ -100,6 +115,32 @@ function getWindowsShellPolicyError (command: string): string | null {
   return `Windows shell policy: '${commandName}' is usually a Unix command and may fail in cmd/PowerShell. ${WINDOWS_UNIX_COMMAND_REPLACEMENTS[commandName]}`
 }
 
+function shouldRunWithPowerShell (command: string): boolean {
+  if (platform() !== 'win32') return false
+  return findBareCommandAtSegmentStart(command, POWERSHELL_COMMANDS) !== null
+}
+
+function executeCommand (command: string, timeout: number): string {
+  const options = {
+    timeout,
+    encoding: 'utf-8' as const,
+    maxBuffer: 10 * 1024 * 1024,
+    windowsHide: true,
+  }
+
+  if (shouldRunWithPowerShell(command)) {
+    return execFileSync('powershell.exe', [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      command,
+    ], options)
+  }
+
+  return execSync(command, options)
+}
+
 export const bashTool: Tool = {
   name: 'run_shell_command',
   description: 'Execute an OS-compatible shell command. Use for build/test/git commands; prefer read_file, grep_search, and glob for repository inspection. On Windows, use PowerShell/cmd-compatible commands unless Unix tools were verified.',
@@ -147,12 +188,7 @@ export const bashTool: Tool = {
     }
 
     try {
-      const output = execSync(command, {
-        timeout,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024, // 10MB
-        windowsHide: true,
-      })
+      const output = executeCommand(command, timeout)
 
       return {
         success: true,

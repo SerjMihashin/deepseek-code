@@ -376,3 +376,30 @@ Checks:
 
 Next:
 - Commit the hotfix.
+
+### 2026-05-25: Hotfix PowerShell Cmdlet Execution
+
+Status: `DONE`
+
+Reason:
+- Second large-project exam still showed failed `Remove-Item` calls.
+- Root cause: the agent was instructed to use PowerShell cmdlets, but `run_shell_command` executed commands through the default Windows shell, so cmdlets fell through to `cmd.exe`.
+
+Done:
+- Added detection for common PowerShell cmdlets in `run_shell_command`.
+- On Windows, recognized cmdlets now execute via `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command`.
+- Plain commands such as `npm`, `node`, `git`, and `npx` still run normally.
+- Updated the system prompt to describe this behavior.
+- Added regression coverage for `Write-Output`.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 145 tests.
+- `npm pack --dry-run`: passed, package size 206.9 kB, unpacked size 970.6 kB, 221 files.
+- Temp-file check: no known smoke/test junk files found.
+
+Next:
+- Commit the hotfix.

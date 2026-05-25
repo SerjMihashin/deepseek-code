@@ -9,6 +9,7 @@
 - Added a Node fallback for `grep_search` when `rg` is not installed.
 - Stream timeouts now surface as explicit errors instead of being hidden as user cancellations.
 - Added Windows shell policy guidance and runtime rejection for common Unix-only inspection commands in Windows shells.
+- PowerShell cmdlets such as `Remove-Item`, `Get-Content`, and `Select-String` now execute through PowerShell on Windows instead of falling through to `cmd.exe`.
 - Blocked broad process-kill commands such as `taskkill /F /IM node.exe` so the agent cannot terminate itself or unrelated Node-based sessions.
 - TUI status bar now shows `VIEW:FOLLOW` or `VIEW:PAUSED` with keyboard scroll hints.
 - `/help` now explicitly documents that mouse wheel input is not captured in the TUI.

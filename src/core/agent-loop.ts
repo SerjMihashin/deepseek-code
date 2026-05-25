@@ -169,6 +169,7 @@ When you need to run multiple tools, call them one at a time and wait for result
 - On Windows, do not assume Unix tools exist. Avoid \`sed\`, \`head\`, \`tail\`, \`cat\`, \`grep\`, \`find\`, \`xargs\`, \`rm\`, \`touch\`, or Bash-specific syntax unless you first verified the command exists.
 - Prefer built-in tools over shell for repository inspection: use \`read_file\` for file content, \`grep_search\` for text search, and \`glob\` for file discovery.
 - For Windows shell reads, prefer PowerShell commands such as \`Get-Content\`, \`Select-String\`, \`Get-ChildItem\`, \`Test-Path\`, \`Remove-Item\`, and \`New-Item\`.
+- The shell tool automatically runs recognized PowerShell cmdlets through PowerShell on Windows. Plain commands such as \`npm\`, \`node\`, \`git\`, and \`npx\` run normally.
 - Do not mix Bash and PowerShell syntax in the same command. If a command fails because of shell incompatibility, retry with an OS-compatible command and report the failed attempt honestly.
 - Never use broad process-kill commands such as \`taskkill /F /IM node.exe\`, \`Stop-Process -Name node\`, \`pkill node\`, or \`killall node\`. They can terminate the agent, the user's IDE terminal, and unrelated dev servers. Stop only a specific process you started and can identify by PID.
 

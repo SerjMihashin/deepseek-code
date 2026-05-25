@@ -435,6 +435,42 @@ Final pack dry-run:
 - Unpacked size: 968.9 kB
 - Total files: 221
 
+### 2026-05-25: Hotfix PowerShell Cmdlet Execution
+
+Status: `DONE`
+
+Issue:
+- Second large-project exam still had failed `Remove-Item` calls.
+- The prompt told the agent to use PowerShell commands, but `run_shell_command` executed them through the default Windows shell.
+
+Fix:
+- Detect common PowerShell cmdlets on Windows.
+- Execute recognized cmdlets through `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command`.
+- Keep plain commands such as `npm`, `node`, `git`, and `npx` on the normal shell path.
+- Update system prompt and regression tests.
+
+Checks passed so far:
+- `npm test -- src/tools/tools.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 145 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 206.9 kB
+- Unpacked size: 970.6 kB
+- Total files: 221
+
+Temp-file check:
+- No known smoke/test junk files found in repository file list.
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

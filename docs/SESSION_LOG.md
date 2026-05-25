@@ -377,6 +377,21 @@ Checks:
 Next:
 - Commit the hotfix.
 
+### 2026-05-26: Session Handoff Prepared
+
+Status: `DONE`
+
+Reason:
+- User asked to finish the current work session and start the next session from a clear file/checkpoint.
+
+Done:
+- Added `docs/NEXT_SESSION.md` with the current release state, completed stabilization blocks, explicit "do not do yet" constraints, and the recommended first steps for the next session.
+- Updated stabilization memory so the next session starts with the quality-gate iteration already completed.
+
+Next:
+- Commit this handoff.
+- Next session should start by reading `docs/NEXT_SESSION.md`, checking `git status --short`, and running the next clean Large Project Exam.
+
 ### 2026-05-25: Final Report Quality Gate and Browser Proof Contract
 
 Status: `DONE`

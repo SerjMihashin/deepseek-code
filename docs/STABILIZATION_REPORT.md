@@ -795,3 +795,15 @@ Final pack dry-run:
 - Package size: 213.2 kB
 - Unpacked size: 996.9 kB
 - Total files: 221
+
+### 2026-05-26: Session Handoff
+
+Status: `READY_FOR_NEXT_SESSION`
+
+Summary:
+- The stabilization work is paused after the final-report quality gate iteration.
+- The next session should not publish yet.
+- The next useful step is a clean Large Project Exam using the local 0.4.4 candidate.
+
+Handoff file:
+- `docs/NEXT_SESSION.md`

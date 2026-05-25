@@ -1,15 +1,16 @@
 <div align="center">
   <br/>
   <h1>DeepSeek Code</h1>
-  <p><strong>Open-source AI-агент для разработки в терминале: дешевле подписок, ближе к вашему коду, без привязки к IDE.</strong></p>
+  <p><strong>AI coding agent в терминале для реальной работы с проектами, на базе DeepSeek API.</strong></p>
 
   <p>
     <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
-    <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek"/>
-    <img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status"/>
+    <img src="https://img.shields.io/badge/Node-%3E%3D20-green" alt="Node >= 20"/>
+    <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek API"/>
+    <img src="https://img.shields.io/badge/status-active_development-yellow" alt="Status"/>
   </p>
 
   <p>
@@ -18,36 +19,20 @@
   <br/>
 </div>
 
----
+DeepSeek Code (`dsc`) — это open-source CLI/TUI агент для разработки. Он запускается прямо в вашем репозитории, читает код, планирует изменения, правит файлы, запускает проверки, умеет работать с Chrome для web-проектов и честно показывает итог выполнения.
 
-## Что нового в 0.4.x
+Проект активно развивается в сторону стабильного coding agent для больших кодовых баз: прозрачный live status, надежный ввод, понятные отчеты, Windows-first ergonomics и безопасная подготовка релизов.
 
-- Улучшенные правила project mode и наглядное управление режимом браузера.
-- Уведомление об обновлениях при запуске и улучшенные режимы `/changelog`.
-- `/changelog` показывает список изменений прямо в CLI.
-- `/update-check` проверяет последнюю версию в npm.
-- Улучшена стабильность и честность отчётов.
-- `/budget` команды ограничивают runaway tool/API calls.
-- Execution Summary показывает Files: changed/untracked/dirty before run.
-- `/lang` picker и ответы на выбранном языке.
-- InputBar: Home/End и Alt+Enter для новой строки.
+## Зачем он нужен
 
-Подробнее в [CHANGELOG.md](./CHANGELOG.md).
-
----
-
-## Коротко
-
-DeepSeek Code — это AI-агент для разработки прямо в терминале. Он читает проект, редактирует файлы, запускает команды, делает code review, запоминает контекст и умеет управлять Chrome, когда задача выходит за пределы кода.
-
-Он подходит, если нужен практичный локальный workflow:
-
-- **Ниже стоимость**: используется ваш DeepSeek API key, без дорогой фиксированной подписки.
-- **Реальная работа с проектом**: поиск по коду, патчи, тесты, продолжение прошлых сессий.
-- **Терминальный подход**: без привязки к конкретной IDE и без отдельного облачного workspace.
-- **Контроль над автоматизацией**: режимы от read-only анализа до полного turbo.
-
----
+| Задача | Что дает DeepSeek Code |
+|---|---|
+| Работать из терминала | TUI со streaming output, tool activity, статусом, токенами/стоимостью и навигацией |
+| Не отдавать все на автопилот | Режимы Plan, Default, Auto-Edit и Turbo |
+| Разбираться в реальном проекте | Поиск по репозиторию, чтение файлов, точечные правки, запуск build/test |
+| Проверять web-флоу | Chrome automation: страницы, формы, console, network, screenshots |
+| Видеть правду в отчете | Execution Summary показывает tool calls, измененные файлы, failed commands и gaps |
+| Контролировать стоимость | Используется ваш DeepSeek API key, без фиксированной подписки на coding IDE |
 
 ## Установка
 
@@ -55,88 +40,84 @@ DeepSeek Code — это AI-агент для разработки прямо в
 npm install -g @serjm/deepseek-code
 ```
 
-Запуск:
-
-```bash
-deepseek-code
-```
-
-Запуск без установки:
-
-```bash
-npx @serjm/deepseek-code
-```
-
-Короткий алиас:
+Запуск в проекте:
 
 ```bash
 dsc
-dsc -p "Найди баг в auth.ts и исправь"
-dsc --headless --json -p "Сделай review репозитория"
 ```
 
----
+Разовые и headless-запуски:
 
-## Зачем он нужен
+```bash
+dsc -p "Найди, почему падают тесты, и предложи фикс"
+dsc --headless --json -p "Проведи ревью этого репозитория"
+npx @serjm/deepseek-code
+```
 
-| Задача | Что делает DeepSeek Code |
-|---|---|
-| Исправить код из терминала | Читает файлы, предлагает патчи и запускает проверочные команды |
-| Держать расходы под контролем | Работает напрямую через ваш DeepSeek API key |
-| Работать в существующих репозиториях | Запускается там, где уже лежит код |
-| Не отдавать все на автопилот | Режимы подтверждений контролируют правки и shell-команды |
-| Отлаживать browser flow | Встроенный Chrome: страницы, формы, консоль, network, скриншоты |
-| Не терять контекст | Память проекта и продолжение сессий помогают на длинных задачах |
+Требуется Node.js 20+ и DeepSeek API key.
 
----
+## Что нового в 0.4.4
 
-## Что он умеет
+- Более стабильный streaming в TUI: chunks батчатся, меньше лишних rerender.
+- Live follow-up: можно писать агенту во время выполнения задачи.
+- Исправлено редактирование slash-команд: `/model`, Backspace/Delete, Esc, Ctrl+U.
+- Явный статус чтения истории: `VIEW:FOLLOW` и `VIEW:PAUSED`.
+- Execution Summary показывает детали failed tool calls.
+- Stream timeout теперь виден как ошибка, а не выглядит как молчаливый обрыв.
+- `grep_search` работает на Windows даже без установленного `rg`.
+- Windows shell policy: меньше падений из-за `head`, `sed`, `cat` и Unix-only команд.
+- Добавлены `/budget normal` и `/budget large`; по умолчанию interactive budget остается выключенным.
+
+Полная история изменений: [CHANGELOG.md](./CHANGELOG.md).
+
+## Как выглядит рабочий сценарий
 
 ```text
 Вы: "Найди, почему checkout падает после логина, и исправь"
 
 DeepSeek Code:
-  1. Ищет релевантные файлы
+  1. Находит релевантные файлы
   2. Читает auth и checkout код
   3. Вносит точечный патч
-  4. Запускает тесты или команду после подтверждения
-  5. Кратко объясняет результат
+  4. Запускает подтвержденные проверки
+  5. Честно пишет, что изменено, что прошло, что упало и что не проверялось
 ```
 
-Основные возможности:
+## Возможности
 
-- **Автономный coding agent**: планирует, читает, редактирует, ищет и запускает команды.
-- **Полноценный terminal UI**: streaming output, цепочка инструментов, статус, стоимость и контекст.
-- **Режимы подтверждений**: Plan, Default, Auto-Edit и Turbo.
-- **Автоматизация браузера**: открыть страницу, кликнуть, заполнить форму, проверить console/network, сделать screenshot.
-- **MCP support**: подключение внешних tool-серверов для своих workflows.
-- **Постоянная память**: сохраняйте факты проекта через `/remember`.
-- **AI code review**: команда `/review` ищет баги, риски и проблемы безопасности.
-- **Headless mode**: JSON-вывод для CI и скриптов через `--headless --json`.
+- **Agent loop**: планирование, чтение, правки, проверки и продолжение диалога.
+- **TUI**: live status, streaming, tool activity, scroll/follow indicators и keyboard controls.
+- **Режимы контроля**: read-only plan, ручные подтверждения, auto-edit или turbo для доверенной локальной работы.
+- **Browser tools**: Chrome-проверки для UI, console errors, forms, screenshots и network behavior.
+- **Память и сессии**: продолжение работы и сохранение фактов проекта через `/remember`.
+- **Code review**: `/review` для поиска багов, регрессий, рисков и security-проблем.
+- **Headless mode**: JSON-вывод для скриптов и CI через `--headless --json`.
+- **Budget modes**: `/budget audit`, `/budget normal`, `/budget large`, `/budget off`.
 
----
-
-## Команды
+## Основные команды
 
 | Команда | Описание |
 |---|---|
-| `/help` | Показать команды |
-| `/setup` | Настроить API key, язык и режим подтверждений |
-| `/remember <text>` | Сохранить контекст проекта |
+| `/help` | Показать команды и горячие клавиши |
+| `/setup` | Настроить API key, язык, модель и режим подтверждений |
+| `/model` | Сменить модель или открыть выбор модели |
+| `/lang` | Сменить язык ответов |
+| `/remember <text>` | Сохранить факт о проекте |
 | `/memory` | Показать сохраненную память |
 | `/review` | Запустить AI code review |
-| `/checkpoint` | Сохранить git checkpoint |
-| `/restore` | Восстановить checkpoint |
-| `/theme` | Сменить тему |
-| `/lang` | Сменить язык |
-| `/git <cmd>` | Git-операции |
-| `/loop <interval> <task>` | Запланировать повторяющуюся задачу |
-| `/sandbox` | Запуск через Docker isolation |
-| `/mcp` | Управление MCP-серверами |
-| `/stats` | Статистика сессии |
-| `/clear` | Очистить чат |
+| `/checkpoint` / `/restore` | Сохранить или восстановить git checkpoint |
+| `/budget status\|off\|audit\|normal\|large` | Явно управлять лимитами agent loop |
+| `/chrome` | Управление Chrome mode |
+| `/browser-test` | Запустить browser checks |
+| `/stats` | Показать токены, стоимость и статистику сессии |
+| `/changelog` | Читать release notes внутри CLI |
 
----
+Горячие клавиши:
+
+- `PageUp` / `PageDown`: читать историю.
+- `End`: вернуться к последнему сообщению.
+- `Shift+Enter` / `Alt+Enter`: новая строка во вводе.
+- Mouse wheel пока не захватывается в TUI намеренно: поддержка мыши будет включаться только после отдельного безопасного исследования.
 
 ## Конфигурация
 
@@ -158,20 +139,22 @@ export DEEPSEEK_MODEL="deepseek-chat"
 }
 ```
 
----
-
 ## Контроль и безопасность
 
 DeepSeek Code построен вокруг явного контроля:
 
 - **Plan**: только read-only анализ.
-- **Default**: спрашивает перед правками и командами.
+- **Default**: спрашивает перед правками и shell-командами.
 - **Auto-Edit**: правки файлов автоматические, shell-команды требуют подтверждения.
 - **Turbo**: полная автоматизация для доверенной локальной работы.
 
-Также есть санитизация команд, лимиты размера файлов, `.deepseekignore`, checkpoints и опциональный Docker sandbox.
+Дополнительно есть path checks, блокировка опасных команд, лимиты размера файлов, `.deepseekignore`, checkpoints, опциональный sandbox, Windows shell guidance и честный финальный отчет.
 
----
+## Статус проекта
+
+Проект находится в активной разработке. Основной фокус сейчас — довести CLI до состояния, где им реально удобно работать над большими проектами: прозрачный activity/status, стабильный TUI, надежный ввод, честные отчеты, отсутствие мусорных файлов и предсказуемый release workflow.
+
+В планах: дальнейшая стабилизация TUI, безопасное исследование mouse wheel, large-project exams и более строгие acceptance-проверки для web-проектов.
 
 ## Разработка
 
@@ -179,31 +162,12 @@ DeepSeek Code построен вокруг явного контроля:
 git clone https://github.com/SerjMihashin/deepseek-code.git
 cd deepseek-code
 npm install
+npm run lint
+npm run typecheck
 npm run build
 npm test
-```
-
-Проверить пакет:
-
-```bash
 npm pack --dry-run
-npm publish --dry-run --access public
 ```
-
-Опубликовать в npm:
-
-```bash
-npm login
-npm publish --access public
-```
-
-Если npm просит двухфакторный код:
-
-```bash
-npm publish --access public --otp=123456
-```
-
----
 
 ## Лицензия
 

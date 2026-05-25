@@ -1,15 +1,16 @@
 <div align="center">
   <br/>
   <h1>DeepSeek Code</h1>
-  <p><strong>Open-source AI coding agent for developers who want a fast terminal workflow without Copilot pricing.</strong></p>
+  <p><strong>A terminal AI coding agent for real repository work, powered by the DeepSeek API.</strong></p>
 
   <p>
     <a href="https://github.com/SerjMihashin/deepseek-code/blob/master/LICENSE">
       <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License"/>
     </a>
     <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"/>
-    <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek"/>
-    <img src="https://img.shields.io/badge/status-alpha-yellow" alt="Status"/>
+    <img src="https://img.shields.io/badge/Node-%3E%3D20-green" alt="Node >= 20"/>
+    <img src="https://img.shields.io/badge/DeepSeek-API-orange" alt="DeepSeek API"/>
+    <img src="https://img.shields.io/badge/status-active_development-yellow" alt="Status"/>
   </p>
 
   <p>
@@ -18,36 +19,20 @@
   <br/>
 </div>
 
----
+DeepSeek Code (`dsc`) is an open-source CLI/TUI agent that helps you work inside an existing codebase: inspect files, plan changes, edit code, run checks, use Chrome for web flows, and produce an honest execution summary.
 
-## What's new in 0.4.x
+It is designed for developers who want an agent in the terminal, not a black-box cloud workspace. The project is actively evolving toward a stable, practical coding assistant for large repositories.
 
-- Better project-mode guardrails and visible browser-mode control.
-- Startup update notice and improved `/changelog` modes.
-- `/changelog` command to view release notes inside the CLI.
-- `/update-check` command to check the latest npm version.
-- Stability and honest reporting improvements.
-- `/budget` commands to limit runaway agent loops.
-- Git Files section in Execution Summary.
-- Interactive `/lang` picker and runtime response language.
-- InputBar Home/End and Alt+Enter newline fallback.
+## Why Developers Use It
 
-See [CHANGELOG.md](./CHANGELOG.md) for details.
-
----
-
-## The Short Version
-
-DeepSeek Code is a terminal-first AI coding agent. It reads your project, edits files, runs commands, reviews code, remembers context, and can automate Chrome when a task needs a browser.
-
-It is built for developers who want a practical local workflow:
-
-- **Lower cost**: use DeepSeek API directly instead of a fixed monthly coding subscription.
-- **Real project work**: inspect files, patch code, run tests, and continue from previous sessions.
-- **Terminal-native**: no IDE lock-in, no heavy desktop app, no cloud workspace requirement.
-- **User-controlled automation**: choose read-only planning, manual approvals, auto-edit, or full turbo mode.
-
----
+| Need | What DeepSeek Code provides |
+|---|---|
+| Work from the terminal | TUI with streaming output, tool activity, status, token/cost info, and keyboard navigation |
+| Keep control | Plan, Default, Auto-Edit, and Turbo approval modes |
+| Use real project context | Reads/searches repository files, edits focused ranges, runs build/test commands |
+| Debug web projects | Chrome automation for pages, forms, console, network state, and screenshots |
+| Avoid hidden failures | Execution Summary reports tool calls, changed files, failed commands, and verification gaps |
+| Keep costs flexible | Uses your own DeepSeek API key instead of a fixed coding subscription |
 
 ## Install
 
@@ -55,42 +40,36 @@ It is built for developers who want a practical local workflow:
 npm install -g @serjm/deepseek-code
 ```
 
-Run it:
-
-```bash
-deepseek-code
-```
-
-Or run without installing:
-
-```bash
-npx @serjm/deepseek-code
-```
-
-Short alias:
+Run in a project:
 
 ```bash
 dsc
-dsc -p "Find the bug in auth.ts and patch it"
-dsc --headless --json -p "Review this repository"
 ```
 
----
+One-shot and headless runs:
 
-## Why Use It
+```bash
+dsc -p "Find why tests are failing and propose a fix"
+dsc --headless --json -p "Review this repository for risky changes"
+npx @serjm/deepseek-code
+```
 
-| Need | DeepSeek Code |
-|---|---|
-| Fix code from the terminal | Reads files, proposes patches, and runs verification commands |
-| Keep costs predictable | Uses your DeepSeek API key directly |
-| Work inside existing repos | Runs where your code already lives |
-| Avoid blind automation | Approval modes keep edits and shell commands under your control |
-| Debug browser flows | Built-in Chrome automation for pages, forms, console, screenshots, and network state |
-| Keep context over time | Project memory and resumable sessions help with longer work |
+Requires Node.js 20+ and a DeepSeek API key.
 
----
+## What Is New In 0.4.4
 
-## What It Can Do
+- More stable TUI streaming with batched output and live follow-up input.
+- Slash-command editing fixes for `/model`, Backspace/Delete, Esc, and Ctrl+U.
+- Clear `VIEW:FOLLOW` / `VIEW:PAUSED` status for reading long sessions.
+- Failed tool call details in Execution Summary.
+- Explicit stream timeout errors instead of silent aborts.
+- Windows-friendly `grep_search` fallback when `rg` is unavailable.
+- Windows shell policy and guardrails for Unix-only commands such as `head`.
+- Explicit `/budget normal` and `/budget large` modes; default interactive budget remains off.
+
+See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
+
+## Typical Workflow
 
 ```text
 You: "Find why checkout fails after login and fix it"
@@ -99,44 +78,45 @@ DeepSeek Code:
   1. Searches the relevant files
   2. Reads the auth and checkout code
   3. Applies a focused patch
-  4. Runs tests or the command you approve
-  5. Summarizes the change
+  4. Runs approved checks
+  5. Reports what changed, what passed, what failed, and what was not checked
 ```
 
-Core features:
+## Core Features
 
-- **Autonomous coding agent**: plans, reads, edits, searches, and runs commands.
-- **Full terminal UI**: streaming output, tool activity, status, costs, and context usage.
-- **Approval modes**: Plan, Default, Auto-Edit, and Turbo.
-- **Browser automation**: open pages, click, fill forms, inspect console/network, take screenshots.
-- **MCP support**: connect external tool servers for custom workflows.
-- **Persistent memory**: save project facts with `/remember`.
-- **AI code review**: use `/review` to inspect bugs, risks, and security issues.
-- **Headless mode**: CI-friendly JSON output with `--headless --json`.
+- **Agent loop**: plan, inspect, edit, verify, and continue.
+- **TUI**: live status, streaming response, tool activity, scroll/follow indicators, and keyboard controls.
+- **Approval modes**: read-only planning, manual confirmation, auto-edit, or trusted full automation.
+- **Browser tools**: Chrome-based checks for rendered UI, console errors, forms, screenshots, and network behavior.
+- **Session continuity**: continue previous work and save project facts with `/remember`.
+- **Review mode**: use `/review` for bug, regression, and security-oriented code review.
+- **Headless mode**: scriptable output via `--headless --json`.
+- **Budget modes**: `/budget audit`, `/budget normal`, `/budget large`, `/budget off`.
 
----
-
-## Commands
+## Useful Commands
 
 | Command | Description |
 |---|---|
-| `/help` | Show available commands |
-| `/setup` | Configure API key, language, and approval mode |
+| `/help` | Show commands and keyboard controls |
+| `/setup` | Configure API key, language, model, and approval mode |
+| `/model` | Switch model or open the model picker |
+| `/lang` | Switch response language |
 | `/remember <text>` | Save project context |
 | `/memory` | Show saved memories |
 | `/review` | Run AI code review |
-| `/checkpoint` | Save a git checkpoint |
-| `/restore` | Restore a checkpoint |
-| `/theme` | Switch terminal theme |
-| `/lang` | Switch language |
-| `/git <cmd>` | Run git operations |
-| `/loop <interval> <task>` | Schedule recurring work |
-| `/sandbox` | Run commands in Docker isolation |
-| `/mcp` | Manage MCP servers |
-| `/stats` | Show session statistics |
-| `/clear` | Clear chat |
+| `/checkpoint` / `/restore` | Save or restore git checkpoints |
+| `/budget status\|off\|audit\|normal\|large` | Control loop limits explicitly |
+| `/chrome` | Manage Chrome mode |
+| `/browser-test` | Run browser checks |
+| `/stats` | Show tokens, cost, and session statistics |
+| `/changelog` | Read release notes inside the CLI |
 
----
+Keyboard highlights:
+
+- `PageUp` / `PageDown`: read chat history.
+- `End`: jump back to the latest message.
+- `Shift+Enter` / `Alt+Enter`: insert a newline.
+- Mouse wheel is not captured in the TUI yet; this is intentional while terminal mouse support is being hardened.
 
 ## Configuration
 
@@ -158,20 +138,22 @@ Or create `.deepseek-code/settings.json` in your project:
 }
 ```
 
----
-
 ## Safety Model
 
-DeepSeek Code is designed around explicit control:
+DeepSeek Code is built around explicit control:
 
 - **Plan**: read-only analysis.
-- **Default**: asks before edits and commands.
-- **Auto-Edit**: file edits are automatic, shell commands still need approval.
+- **Default**: asks before edits and shell commands.
+- **Auto-Edit**: edits files automatically; shell commands still need confirmation.
 - **Turbo**: full automation for trusted local work.
 
-It also supports command sanitization, file size limits, `.deepseekignore`, checkpoints, and optional Docker sandboxing.
+The agent also uses path checks, dangerous command blocking, file size limits, `.deepseekignore`, checkpoints, optional sandboxing, Windows shell guidance, and honest final reporting.
 
----
+## Project Status
+
+DeepSeek Code is in active development. The current focus is stability for real development work: large repositories, transparent tool activity, reliable input, honest summaries, Windows-first ergonomics, and release-quality packaging.
+
+Planned work includes deeper TUI hardening, safer mouse-wheel research, larger project exams, and stronger acceptance workflows for browser-based projects.
 
 ## Development
 
@@ -179,31 +161,12 @@ It also supports command sanitization, file size limits, `.deepseekignore`, chec
 git clone https://github.com/SerjMihashin/deepseek-code.git
 cd deepseek-code
 npm install
+npm run lint
+npm run typecheck
 npm run build
 npm test
-```
-
-Package check:
-
-```bash
 npm pack --dry-run
-npm publish --dry-run --access public
 ```
-
-Publish to npm:
-
-```bash
-npm login
-npm publish --access public
-```
-
-If npm asks for two-factor authentication:
-
-```bash
-npm publish --access public --otp=123456
-```
-
----
 
 ## License
 

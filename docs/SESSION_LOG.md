@@ -403,6 +403,31 @@ Checks:
 Next:
 - Commit the pre-exam guard if approved, then run the next large-project exam.
 
+### 2026-05-25: Pre-Exam Windows mkdir -p Guard
+
+Status: `DONE`
+
+Reason:
+- The latest AgentOS exam left a root directory named `-p`.
+- This is consistent with running Unix syntax `mkdir -p ...` in a Windows shell.
+
+Done:
+- Added a Windows shell policy guard that rejects `mkdir -p` before execution.
+- Error message explains that Windows can create a literal `-p` directory and suggests `New-Item -ItemType Directory -Force <path>` or `mkdir <path>` without `-p`.
+- Updated the system prompt and changelog.
+- Added regression coverage.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`: passed, 2 files / 50 tests.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 147 tests.
+- `npm pack --dry-run`: passed after build, package size 207.7 kB, unpacked size 974.4 kB, 221 files.
+
+Next:
+- Commit the guard.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

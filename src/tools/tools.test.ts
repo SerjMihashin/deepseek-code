@@ -249,6 +249,15 @@ describe('bash tool', () => {
     expect(result.error).toContain('Get-Content')
   })
 
+  it('should reject mkdir -p on Windows to avoid literal dash-p directories', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'mkdir -p frontend/app/components' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('mkdir -p')
+    expect(result.error).toContain('"-p" directory')
+  })
+
   it('should execute PowerShell commands through PowerShell on Windows', async () => {
     if (process.platform !== 'win32') return
 

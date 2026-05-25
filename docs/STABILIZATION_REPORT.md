@@ -503,6 +503,38 @@ Final pack dry-run:
 - Unpacked size: 973.1 kB
 - Total files: 221
 
+### 2026-05-25: Pre-Exam Windows mkdir -p Guard
+
+Status: `DONE`
+
+Issue:
+- The latest AgentOS exam left a root directory named `-p`.
+- Likely cause: Unix `mkdir -p` syntax executed in a Windows shell.
+
+Fix:
+- Reject `mkdir -p` on Windows before execution.
+- Provide a clear replacement: `New-Item -ItemType Directory -Force <path>` or `mkdir <path>` without `-p`.
+- Update system prompt and regression tests.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 147 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 207.7 kB
+- Unpacked size: 974.4 kB
+- Total files: 221
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

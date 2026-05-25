@@ -115,6 +115,17 @@ function getWindowsShellPolicyError (command: string): string | null {
   return `Windows shell policy: '${commandName}' is usually a Unix command and may fail in cmd/PowerShell. ${WINDOWS_UNIX_COMMAND_REPLACEMENTS[commandName]}`
 }
 
+function getWindowsUnixFlagPolicyError (command: string): string | null {
+  if (platform() !== 'win32') return null
+
+  const mkdirP = /(?:^|[;&|()])\s*mkdir\s+-p(?:\s|$)/im
+  if (mkdirP.test(command)) {
+    return 'Windows shell policy: mkdir -p is Unix syntax and can create a literal "-p" directory in Windows shells. Use New-Item -ItemType Directory -Force <path> or mkdir <path> without -p.'
+  }
+
+  return null
+}
+
 function shouldRunWithPowerShell (command: string): boolean {
   if (platform() !== 'win32') return false
   return findBareCommandAtSegmentStart(command, POWERSHELL_COMMANDS) !== null
@@ -214,6 +225,15 @@ export const bashTool: Tool = {
         success: false,
         output: '',
         error: windowsPolicyError,
+      }
+    }
+
+    const windowsUnixFlagPolicyError = getWindowsUnixFlagPolicyError(command)
+    if (windowsUnixFlagPolicyError) {
+      return {
+        success: false,
+        output: '',
+        error: windowsUnixFlagPolicyError,
       }
     }
 

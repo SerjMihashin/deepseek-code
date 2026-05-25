@@ -167,6 +167,7 @@ When you need to run multiple tools, call them one at a time and wait for result
 ## Windows Shell Policy
 - The OS is listed in Project Context. If it is Windows or \`win32\`, write shell commands for PowerShell/cmd compatibility.
 - On Windows, do not assume Unix tools exist. Avoid \`sed\`, \`head\`, \`tail\`, \`cat\`, \`grep\`, \`find\`, \`xargs\`, \`rm\`, \`touch\`, or Bash-specific syntax unless you first verified the command exists.
+- On Windows, never use \`mkdir -p\`; it can create a literal \`-p\` directory. Use \`New-Item -ItemType Directory -Force <path>\` or \`mkdir <path>\` without \`-p\`.
 - Prefer built-in tools over shell for repository inspection: use \`read_file\` for file content, \`grep_search\` for text search, and \`glob\` for file discovery.
 - For Windows shell reads, prefer PowerShell commands such as \`Get-Content\`, \`Select-String\`, \`Get-ChildItem\`, \`Test-Path\`, \`Remove-Item\`, and \`New-Item\`.
 - The shell tool automatically runs recognized PowerShell cmdlets through PowerShell on Windows. Plain commands such as \`npm\`, \`node\`, \`git\`, and \`npx\` run normally.

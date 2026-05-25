@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { AgentLoop } from './agent-loop.js'
+import { AgentLoop, buildSystemPrompt } from './agent-loop.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
 import type { ChatMessage, StreamChunk } from '../api/index.js'
 
@@ -45,6 +45,19 @@ function reasoningChunk (content: string): StreamChunk {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('AgentLoop', () => {
+  it('should include Windows shell and temp cleanup policy in the system prompt', () => {
+    const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
+
+    expect(prompt).toContain('## Windows Shell Policy')
+    expect(prompt).toContain('PowerShell/cmd compatibility')
+    expect(prompt).toContain('do not assume Unix tools exist')
+    expect(prompt).toContain('read_file')
+    expect(prompt).toContain('grep_search')
+    expect(prompt).toContain('glob')
+    expect(prompt).toContain('err.txt')
+    expect(prompt).toContain('Before the final report, check the working tree')
+  })
+
   it('should create an instance with default options', () => {
     const agent = new AgentLoop(TEST_CONFIG)
     expect(agent).toBeInstanceOf(AgentLoop)

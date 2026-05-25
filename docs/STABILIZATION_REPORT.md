@@ -47,21 +47,19 @@ d0634f8 fix: enable interactive default budget
 ## Current Risks
 
 - TUI history still depends on terminal scroll behavior and React/Ink rerenders.
-- Unexpected stream abort may still look like silent disappearance in some paths.
-- System prompt needs stronger Windows shell policy.
 - Budget modes are incomplete: only `audit|small|status|off`.
-- Temp cleanup is policy-only and not yet strongly enforced.
+- Temp cleanup is now enforced by prompt policy, but there is still no automatic final cleanup scanner.
 - Large project exam has not been run for `0.4.4`.
 
 ## Proposed Next Work Block
 
-Start with Iteration 4: `Windows Shell and Temp Cleanup Policy`.
+Start with Iteration 5: `TUI Stability Stage 1`.
 
 Order:
-1. Strengthen system prompt rules for PowerShell-compatible Windows commands.
-2. Prefer tools over shell for reads/searches.
-3. Add temp-file cleanup/reporting guidance before final reports.
-4. Add focused tests where possible.
+1. Improve status/help for PageUp/PageDown/End.
+2. Make paused/follow state explicit.
+3. Stabilize live activity status without mouse mode.
+4. Confirm no terminal mouse escape sequences are enabled.
 5. Re-run lint, typecheck, build, tests, and pack dry-run.
 
 ## Verification Log
@@ -291,6 +289,44 @@ Final pack dry-run:
 - Package size: 202.7 kB
 - Unpacked size: 955.9 kB
 - Total files: 221
+
+### 2026-05-25: Iteration 4 Windows Shell and Temp Cleanup Policy
+
+Status: `DONE`
+
+Fix:
+- Added explicit Windows shell policy to the dynamic system prompt.
+- Instructed the agent to prefer `read_file`, `grep_search`, and `glob` over shell reads/searches.
+- Expanded temporary-file cleanup rules before final reports.
+- Updated `run_shell_command` description with OS-compatible command guidance.
+- Added a Windows runtime guard that rejects common Unix-only inspection commands such as `head` with a PowerShell replacement hint.
+
+Tests added/updated:
+- `src/core/agent-loop.test.ts`
+- `src/tools/tools.test.ts`
+
+Checks passed:
+- `npm test -- src/core/agent-loop.test.ts src/tools/types.test.ts`
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 23 test files passed.
+- 137 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 204.2 kB
+- Unpacked size: 961.5 kB
+- Total files: 221
+
+Temp-file check:
+- No `fibonacci.py`, `.tmp-grep-fallback-*`, `.tmp-dsc-test-*`, `err.txt`, `lint_err.txt`, `temp_patch*`, `temp_fix*`, or stray file `1` found in repository files.
 
 ### 2026-05-25: External DeepSeek Smoke Report Review
 

@@ -27,7 +27,7 @@ Target version: `0.4.4`
 | 2 | Release Notes and Version | DONE | Updated changelog/package files and pack dry-run passed. |
 | 2.5 | Pre-release Smoke Verification | DONE | Fixed CLI argv parsing blocker found by smoke checks. |
 | 3 | Abort and Error Reporting Hardening | DONE | Stream timeouts now surface as explicit errors and full verification passed. |
-| 4 | Windows Shell and Temp Cleanup Policy | TODO | Strengthen Windows commands and temp cleanup policy. |
+| 4 | Windows Shell and Temp Cleanup Policy | DONE | Added Windows shell policy, runtime Unix-command guard, and temp cleanup reporting rules. |
 | 5 | TUI Stability Stage 1 | TODO | Improve status/help and paused/follow behavior without mouse mode. |
 | 6 | Budget Modes | TODO | Add normal/large modes, keep default off. |
 | 7 | Large Project Exam | TODO | Run real acceptance exam before publish decision. |
@@ -240,3 +240,40 @@ Pack dry-run:
 
 Next:
 - Start Iteration 4: `Windows Shell and Temp Cleanup Policy`.
+
+### 2026-05-25: Iteration 4 Windows Shell and Temp Cleanup Policy
+
+Status: `DONE`
+
+Done:
+- Committed previous stable block as `1138e17 chore: prepare 0.4.4 stability candidate`.
+- Exported `buildSystemPrompt` for regression coverage.
+- Added explicit Windows shell policy to the dynamic system prompt.
+- Strengthened temp-file cleanup/reporting rules in the prompt.
+- Updated `run_shell_command` tool description to prefer OS-compatible commands and repository tools for inspection.
+- Added Windows runtime guard for common Unix-only commands such as `head`.
+- Added/updated tests in `src/core/agent-loop.test.ts` and `src/tools/tools.test.ts`.
+
+Checks:
+- `npm test -- src/core/agent-loop.test.ts src/tools/types.test.ts`: passed.
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed.
+- `npm pack --dry-run`: passed.
+
+Final test result:
+- 23 test files passed.
+- 137 tests passed.
+
+Pack dry-run:
+- Package `@serjm/deepseek-code@0.4.4`.
+- Filename `serjm-deepseek-code-0.4.4.tgz`.
+- Package size 204.2 kB, unpacked size 961.5 kB, total files 221.
+
+Temp-file check:
+- No known smoke/test junk files found in repository file list.
+
+Next:
+- Start Iteration 5: `TUI Stability Stage 1`.

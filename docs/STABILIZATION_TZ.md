@@ -130,7 +130,7 @@ Acceptance:
 
 ### Iteration 4: Windows Shell and Temp Cleanup Policy
 
-Статус: `TODO`
+Статус: `DONE`
 
 Цель: снизить failed shell calls и мусорные файлы на Windows.
 
@@ -139,9 +139,11 @@ Acceptance:
 - Запретить `sed/head/cat` без проверки доступности.
 - Предпочитать `read_file`, `grep_search`, `glob`.
 - Добавить финальный cleanup/check policy для temp files.
+- Добавить runtime guard в `run_shell_command` для типичных Unix-only команд на Windows.
 
 Acceptance:
 - Prompt содержит явную Windows policy.
+- `run_shell_command` на Windows отклоняет типичные Unix-only команды с понятной подсказкой.
 - Agent reports mention temp files if cleanup failed.
 - `git status` не содержит мусор после successful run.
 

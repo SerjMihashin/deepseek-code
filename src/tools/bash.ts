@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process'
+import { platform } from 'node:os'
 import { type Tool, type ToolResult } from './types.js'
 
 /**
@@ -25,6 +26,58 @@ const DANGEROUS_PATTERNS = [
   /^\s*>+\s+\/dev\//m, // destructive redirects
 ]
 
+const WINDOWS_UNIX_COMMAND_REPLACEMENTS: Record<string, string> = {
+  sed: 'Use PowerShell string replacement, Select-String, or read_file/edit instead.',
+  head: 'Use Get-Content <path> -TotalCount <n>.',
+  tail: 'Use Get-Content <path> -Tail <n>.',
+  cat: 'Use Get-Content <path>.',
+  grep: 'Use grep_search, Select-String, or rg if available.',
+  xargs: 'Use PowerShell pipelines with ForEach-Object.',
+  touch: 'Use New-Item -ItemType File or Set-Content.',
+  rm: 'Use Remove-Item with an explicit safe path.',
+}
+
+function findBareCommandAtSegmentStart (command: string, names: Set<string>): string | null {
+  let atSegmentStart = true
+  let quote: '"' | "'" | null = null
+
+  for (let i = 0; i < command.length; i++) {
+    const char = command[i]
+
+    if (quote) {
+      if (char === quote) quote = null
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+
+    if (/[|&;()]/.test(char)) {
+      atSegmentStart = true
+      continue
+    }
+
+    if (/\s/.test(char)) continue
+
+    if (!atSegmentStart) continue
+
+    const rest = command.slice(i)
+    const match = rest.match(/^([A-Za-z][\w.-]*)\b/)
+    if (!match) {
+      atSegmentStart = false
+      continue
+    }
+
+    const name = match[1].toLowerCase()
+    if (names.has(name)) return name
+    atSegmentStart = false
+  }
+
+  return null
+}
+
 function isDangerousCommand (command: string): string | null {
   for (const pattern of DANGEROUS_PATTERNS) {
     if (pattern.test(command)) {
@@ -34,9 +87,18 @@ function isDangerousCommand (command: string): string | null {
   return null
 }
 
+function getWindowsShellPolicyError (command: string): string | null {
+  if (platform() !== 'win32') return null
+
+  const commandName = findBareCommandAtSegmentStart(command, new Set(Object.keys(WINDOWS_UNIX_COMMAND_REPLACEMENTS)))
+  if (!commandName) return null
+
+  return `Windows shell policy: '${commandName}' is usually a Unix command and may fail in cmd/PowerShell. ${WINDOWS_UNIX_COMMAND_REPLACEMENTS[commandName]}`
+}
+
 export const bashTool: Tool = {
   name: 'run_shell_command',
-  description: 'Execute a shell command. Use for running build tools, tests, git operations, etc.',
+  description: 'Execute an OS-compatible shell command. Use for build/test/git commands; prefer read_file, grep_search, and glob for repository inspection. On Windows, use PowerShell/cmd-compatible commands unless Unix tools were verified.',
   parameters: [
     {
       name: 'command',
@@ -68,6 +130,15 @@ export const bashTool: Tool = {
         success: false,
         output: '',
         error: `Blocked for security: ${danger}`,
+      }
+    }
+
+    const windowsPolicyError = getWindowsShellPolicyError(command)
+    if (windowsPolicyError) {
+      return {
+        success: false,
+        output: '',
+        error: windowsPolicyError,
       }
     }
 

@@ -70,7 +70,7 @@ export interface ToolResultEvent {
 /**
  * Build a dynamic system prompt with project context.
  */
-function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
+export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
   const osInfo = `${type()} ${release()} (${platform()})`
   let projectInfo = ''
 
@@ -164,6 +164,13 @@ You have access to a set of tools that allow you to read, write, and edit files,
 
 When you need to run multiple tools, call them one at a time and wait for results before deciding the next step.
 
+## Windows Shell Policy
+- The OS is listed in Project Context. If it is Windows or \`win32\`, write shell commands for PowerShell/cmd compatibility.
+- On Windows, do not assume Unix tools exist. Avoid \`sed\`, \`head\`, \`tail\`, \`cat\`, \`grep\`, \`find\`, \`xargs\`, \`rm\`, \`touch\`, or Bash-specific syntax unless you first verified the command exists.
+- Prefer built-in tools over shell for repository inspection: use \`read_file\` for file content, \`grep_search\` for text search, and \`glob\` for file discovery.
+- For Windows shell reads, prefer PowerShell commands such as \`Get-Content\`, \`Select-String\`, \`Get-ChildItem\`, \`Test-Path\`, \`Remove-Item\`, and \`New-Item\`.
+- Do not mix Bash and PowerShell syntax in the same command. If a command fails because of shell incompatibility, retry with an OS-compatible command and report the failed attempt honestly.
+
 ## Important
 - ALWAYS use absolute paths when referring to files. The project root is \`${cwd || 'the current working directory'}\`.
 - When asked to audit or explore the project, start with \`glob\`, \`grep_search\`, and targeted reads to discover structure.
@@ -192,7 +199,7 @@ When you need to run multiple tools, call them one at a time and wait for result
 1. **Minimal reading**: for a small task, first locate the target with as few reads as possible. Usually 1-2 read_file calls and 1 edit is enough. Do not run a broad grep/glob if you already know the file.
 2. **Do not repeat identical tool calls**: do not call read_file/grep_search/glob with the same arguments twice unless you have reason to believe the file changed.
 3. **Checks**: run lint/typecheck/build/test only after making changes. Do not run the same check multiple times without a new edit. If you did not run a check, do not claim it passed.
-4. **Temporary files**: do not create lint_out.txt, test_out.txt, temp/debug files unnecessarily. If you created a temporary file, remove it before the final report. Do not leave garbage in the working tree.
+4. **Temporary files**: do not create lint_out.txt, test_out.txt, err.txt, temp/debug scripts, one-off files like "1", or scratch files unnecessarily. Prefer command output in the tool result over redirected files. If you created a temporary file, remove it before the final report. Before the final report, check the working tree or otherwise verify no junk temp files remain. If cleanup failed or was not checked, say so explicitly.
 5. **Report**: the final report must match the real tool results. Only mention what you actually read, changed, or verified. If no files were changed, explicitly say "No files changed". If there were errors, report them — do not hide them.
 6. **Stop**: when the goal is achieved and checks are done — stop. Do not continue looking for extra issues without the user asking. Do not refactor beyond the task scope.
 

@@ -223,6 +223,15 @@ describe('bash tool', () => {
     }
   })
 
+  it('should reject common Unix inspection commands on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'head package.json' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Windows shell policy')
+    expect(result.error).toContain('Get-Content')
+  })
+
   it('should handle command failure', async () => {
     const result = await bashTool.execute({ command: 'nonexistent_command_xyz' })
     expect(result.success).toBe(false)

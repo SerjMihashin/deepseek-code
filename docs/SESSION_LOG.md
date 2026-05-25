@@ -351,3 +351,28 @@ Temp-file check:
 
 Next:
 - Start Iteration 7: `Large Project Exam`.
+
+### 2026-05-25: Hotfix Broad Process Kill Guard
+
+Status: `DONE`
+
+Reason:
+- Manual large-project trial showed the agent ran `taskkill /F /IM node.exe`.
+- That command can terminate the running `dsc` agent, other agent sessions, IDE terminals, and unrelated Node dev servers.
+
+Done:
+- Added dangerous-command patterns for broad `taskkill`, `Stop-Process -Name node`, `pkill node`, and `killall node` style commands.
+- Added a clearer blocked-command error explaining to stop only a known specific PID/process.
+- Added system prompt guidance forbidding broad process-kill commands.
+- Added regression tests in `src/tools/tools.test.ts`.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed.
+- `npm pack --dry-run`: passed.
+
+Next:
+- Commit the hotfix.

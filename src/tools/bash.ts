@@ -19,6 +19,10 @@ const DANGEROUS_PATTERNS = [
   /^\s*format-volume\b/im,
   /^\s*stop-computer\b/im,
   /^\s*restart-computer\b/im,
+  /^\s*taskkill\b(?=.*(?:\/f|-f)\b)(?=.*(?:\/im|-im)\s+(?:node(?:\.exe)?|npm(?:\.cmd)?|pnpm(?:\.cmd)?|yarn(?:\.cmd)?|tsx(?:\.cmd)?|vite(?:\.cmd)?|nuxt(?:\.cmd)?|next(?:\.cmd)?|react-scripts(?:\.cmd)?|powershell(?:\.exe)?|cmd(?:\.exe)?))\b/im,
+  /^\s*taskkill\b(?=.*(?:\/im|-im)\s+\*)/im,
+  /^\s*stop-process\b(?=.*-(?:name|processname)\s+(?:node|npm|pnpm|yarn|tsx|vite|nuxt|next|react-scripts|powershell|cmd)\b)/im,
+  /^\s*(?:kill|pkill|killall)\b.*\b(?:node|npm|pnpm|yarn|tsx|vite|nuxt|next|react-scripts)\b/im,
   /^\s*shutdown\s/m,
   /^\s*reboot\s/m,
   /^\s*init\s+0/m,
@@ -129,7 +133,7 @@ export const bashTool: Tool = {
       return {
         success: false,
         output: '',
-        error: `Blocked for security: ${danger}`,
+        error: `Blocked for security: ${danger}. Avoid broad process-kill commands. If you started a dev server, stop only that specific process by its known PID or use the child process handle managed by the tool.`,
       }
     }
 

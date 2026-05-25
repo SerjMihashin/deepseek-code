@@ -402,6 +402,39 @@ Final pack dry-run:
 Temp-file check:
 - No `fibonacci.py`, `.tmp-grep-fallback-*`, `.tmp-dsc-test-*`, `err.txt`, `lint_err.txt`, `temp_patch*`, `temp_fix*`, or stray file `1` found in repository files.
 
+### 2026-05-25: Hotfix Broad Process Kill Guard
+
+Status: `DONE`
+
+Issue:
+- A manual large-project trial showed the agent issuing `taskkill /F /IM node.exe`.
+- This is unsafe because it can kill the current agent process, other open agents, IDE terminals, and unrelated Node dev servers.
+
+Fix:
+- Block broad Windows process-kill commands targeting common development processes.
+- Block Unix-style broad process kills such as `pkill node` and `killall node`.
+- Add system prompt guidance to stop only a specific known process by PID.
+- Add regression tests.
+
+Checks passed so far:
+- `npm test -- src/tools/tools.test.ts src/core/agent-loop.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 144 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 206.4 kB
+- Unpacked size: 968.9 kB
+- Total files: 221
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

@@ -223,6 +223,23 @@ describe('bash tool', () => {
     }
   })
 
+  it('should reject broad process-kill commands that can terminate the agent', async () => {
+    const commands = [
+      'taskkill /F /IM node.exe',
+      'taskkill /IM node.exe /F',
+      'Stop-Process -Name node -Force',
+      'pkill node',
+      'killall node',
+    ]
+
+    for (const command of commands) {
+      const result = await bashTool.execute({ command })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('Blocked for security')
+      expect(result.error).toContain('broad process-kill')
+    }
+  })
+
   it('should reject common Unix inspection commands on Windows', async () => {
     if (process.platform !== 'win32') return
 

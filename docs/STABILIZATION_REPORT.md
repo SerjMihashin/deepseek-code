@@ -46,20 +46,20 @@ d0634f8 fix: enable interactive default budget
 
 ## Current Risks
 
-- TUI history still depends on terminal scroll behavior and React/Ink rerenders.
+- TUI history has clearer follow/paused indicators, but real interactive scroll behavior still needs manual terminal smoke.
 - Budget modes are incomplete: only `audit|small|status|off`.
 - Temp cleanup is now enforced by prompt policy, but there is still no automatic final cleanup scanner.
 - Large project exam has not been run for `0.4.4`.
 
 ## Proposed Next Work Block
 
-Start with Iteration 5: `TUI Stability Stage 1`.
+Start with Iteration 6: `Budget Modes`.
 
 Order:
-1. Improve status/help for PageUp/PageDown/End.
-2. Make paused/follow state explicit.
-3. Stabilize live activity status without mouse mode.
-4. Confirm no terminal mouse escape sequences are enabled.
+1. Add `/budget normal`.
+2. Add `/budget large`.
+3. Keep default interactive budget off.
+4. Update `/budget status` and help text.
 5. Re-run lint, typecheck, build, tests, and pack dry-run.
 
 ## Verification Log
@@ -323,6 +323,43 @@ Final pack dry-run:
 - Filename: `serjm-deepseek-code-0.4.4.tgz`
 - Package size: 204.2 kB
 - Unpacked size: 961.5 kB
+- Total files: 221
+
+Temp-file check:
+- No `fibonacci.py`, `.tmp-grep-fallback-*`, `.tmp-dsc-test-*`, `err.txt`, `lint_err.txt`, `temp_patch*`, `temp_fix*`, or stray file `1` found in repository files.
+
+### 2026-05-25: Iteration 5 TUI Stability Stage 1
+
+Status: `DONE`
+
+Fix:
+- Status bar now shows `VIEW:FOLLOW PageUp` in normal follow mode.
+- Status bar now shows `VIEW:PAUSED PageDown/End` when history is paused/scrolled.
+- Status bar now shows `VIEW:PAUSED +new End` when new messages arrive while paused.
+- `/help` now explicitly says mouse wheel is not captured in TUI and directs users to PageUp/PageDown/End.
+- Confirmed no raw mouse reporting escape sequences such as `1000h` or `1006h` are enabled in `src`.
+
+Tests added/updated:
+- `src/ui/status-bar.test.ts`
+- `src/commands/index.test.ts`
+
+Checks passed:
+- `npm test -- src/ui/status-bar.test.ts src/commands/index.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 141 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 204.7 kB
+- Unpacked size: 963.6 kB
 - Total files: 221
 
 Temp-file check:

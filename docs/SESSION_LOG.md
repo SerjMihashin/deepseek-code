@@ -28,7 +28,7 @@ Target version: `0.4.4`
 | 2.5 | Pre-release Smoke Verification | DONE | Fixed CLI argv parsing blocker found by smoke checks. |
 | 3 | Abort and Error Reporting Hardening | DONE | Stream timeouts now surface as explicit errors and full verification passed. |
 | 4 | Windows Shell and Temp Cleanup Policy | DONE | Added Windows shell policy, runtime Unix-command guard, and temp cleanup reporting rules. |
-| 5 | TUI Stability Stage 1 | TODO | Improve status/help and paused/follow behavior without mouse mode. |
+| 5 | TUI Stability Stage 1 | DONE | Added explicit follow/paused status and documented keyboard scroll without mouse capture. |
 | 6 | Budget Modes | TODO | Add normal/large modes, keep default off. |
 | 7 | Large Project Exam | TODO | Run real acceptance exam before publish decision. |
 
@@ -277,3 +277,40 @@ Temp-file check:
 
 Next:
 - Start Iteration 5: `TUI Stability Stage 1`.
+
+### 2026-05-25: Iteration 5 TUI Stability Stage 1
+
+Status: `DONE`
+
+Done:
+- Added status bar scroll mode labels:
+  - `VIEW:FOLLOW PageUp`
+  - `VIEW:PAUSED PageDown/End`
+  - `VIEW:PAUSED +new End`
+- Passed current scroll mode, scroll offset, and paused-new-message state into `StatusBar`.
+- Added `/help` text that mouse wheel is not captured in TUI and users should use PageUp/PageDown/End.
+- Confirmed no raw mouse reporting escape sequences are enabled in `src`.
+- Added tests for scroll status labels and help text.
+
+Checks:
+- `npm test -- src/ui/status-bar.test.ts src/commands/index.test.ts`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed.
+- `npm pack --dry-run`: passed.
+
+Final test result:
+- 24 test files passed.
+- 141 tests passed.
+
+Pack dry-run:
+- Package `@serjm/deepseek-code@0.4.4`.
+- Filename `serjm-deepseek-code-0.4.4.tgz`.
+- Package size 204.7 kB, unpacked size 963.6 kB, total files 221.
+
+Temp-file check:
+- No known smoke/test junk files found in repository file list.
+
+Next:
+- Start Iteration 6: `Budget Modes`.

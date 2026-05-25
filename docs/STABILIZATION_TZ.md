@@ -149,7 +149,7 @@ Acceptance:
 
 ### Iteration 5: TUI Stability Stage 1
 
-Статус: `TODO`
+Статус: `DONE`
 
 Цель: сделать интерфейс понятнее без mouse wheel.
 
@@ -158,6 +158,7 @@ Acceptance:
 - Явно показывать paused/follow state.
 - Стабилизировать live activity card.
 - Не включать terminal mouse mode.
+- Добавить regression tests для scroll status/help.
 
 Acceptance:
 - Пользователь понимает, как читать историю.

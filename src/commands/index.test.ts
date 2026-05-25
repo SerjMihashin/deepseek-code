@@ -39,6 +39,17 @@ describe('slash commands', () => {
     await expect(executeSlashCommand('/does-not-exist', ctx)).resolves.toBe(false)
   })
 
+  it('should document keyboard scroll controls without mouse capture', async () => {
+    const { ctx, messages } = createContext()
+
+    await expect(executeSlashCommand('/help', ctx)).resolves.toBe(true)
+    const content = String(messages.at(-1)?.content ?? '')
+    expect(content).toContain('PageUp / PageDown')
+    expect(content).toContain('End')
+    expect(content).toContain('Mouse wheel')
+    expect(content).toContain('Not captured')
+  })
+
   it('should smoke-test safe command handlers', async () => {
     const safeCommands = [
       '/help',

@@ -1158,6 +1158,9 @@ export function App ({ config, options }: AppProps) {
         status={statusText}
         messageCount={messages.length}
         isProcessing={isProcessing}
+        scrollMode={scrollMode}
+        scrollOffset={chatScrollOffset}
+        hasNewMessages={newMessagesWhilePaused}
         contextPercent={contextPercent}
         totalTokens={totalTokens}
         estimatedCost={estimatedCost}

@@ -9,6 +9,8 @@
 - Added a Node fallback for `grep_search` when `rg` is not installed.
 - Stream timeouts now surface as explicit errors instead of being hidden as user cancellations.
 - Added Windows shell policy guidance and runtime rejection for common Unix-only inspection commands in Windows shells.
+- TUI status bar now shows `VIEW:FOLLOW` or `VIEW:PAUSED` with keyboard scroll hints.
+- `/help` now explicitly documents that mouse wheel input is not captured in the TUI.
 - Stabilized streaming output by batching assistant chunks to reduce TUI rerenders.
 - Stabilized slash-command editing, including `/model`, Backspace/Delete, Esc, and Ctrl+U behavior.
 - Preserved live follow-up input while the agent is running, so user messages are queued into the active loop instead of being lost.

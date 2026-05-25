@@ -10,6 +10,9 @@ interface StatusBarProps {
   status: string;
   messageCount: number;
   isProcessing?: boolean;
+  scrollMode?: 'follow' | 'paused';
+  scrollOffset?: number;
+  hasNewMessages?: boolean;
   contextPercent?: number;
   totalTokens?: number;
   estimatedCost?: number;
@@ -31,7 +34,18 @@ const modeLabels: Record<ApprovalMode, string> = {
 
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, contextPercent, totalTokens, estimatedCost, model }: StatusBarProps) {
+export function getScrollStatusLabel (
+  scrollMode: 'follow' | 'paused' = 'follow',
+  scrollOffset = 0,
+  hasNewMessages = false
+): string {
+  if (scrollMode === 'paused' || scrollOffset > 0) {
+    return hasNewMessages ? 'VIEW:PAUSED +new End' : 'VIEW:PAUSED PageDown/End'
+  }
+  return 'VIEW:FOLLOW PageUp'
+}
+
+export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, totalTokens, estimatedCost, model }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -43,6 +57,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
   const [chromeState, setChromeState] = useState<ChromeRuntimeState>(chromeManager.getState())
   const [spinnerFrame, setSpinnerFrame] = useState(0)
   const [pulseIdx, setPulseIdx] = useState(0)
+  const scrollStatus = getScrollStatusLabel(scrollMode, scrollOffset, hasNewMessages)
 
   useEffect(() => {
     if (!isProcessing) return
@@ -89,6 +104,9 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, contextPe
           : <Text color={colors.textMuted}>{status}</Text>}
       </Box>
       <Box>
+        <Text color={scrollMode === 'paused' || scrollOffset > 0 ? colors.warning : colors.textMuted}>
+          {scrollStatus}{' '}
+        </Text>
         {chromeState.connected && (
           <Text color={colors.success}> Chrome{chromeState.headless ? ':H' : ''} </Text>
         )}

@@ -130,11 +130,12 @@ describe('AgentLoop', () => {
   })
 
   it('should handle max iterations', async () => {
+    const streamChunks: string[] = []
     const agent = new AgentLoop(TEST_CONFIG, {
       maxIterations: 1,
       approvalMode: 'turbo',
       onResponse: () => {},
-      onStreamChunk: () => {},
+      onStreamChunk: (chunk: string) => { streamChunks.push(chunk) },
       onReasoningChunk: () => {},
       onToolCall: () => {},
       onToolResult: () => {},
@@ -156,6 +157,7 @@ describe('AgentLoop', () => {
 
     const result = await agent.run('test')
     expect(result).toContain('итераций')
+    expect(streamChunks.join('')).toContain('Execution Summary')
   })
 
   it('should handle streaming text response', async () => {

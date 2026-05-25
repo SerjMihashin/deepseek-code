@@ -535,6 +535,40 @@ Final pack dry-run:
 - Unpacked size: 974.4 kB
 - Total files: 221
 
+### 2026-05-25: Max Iteration Stop Diagnosis and Fix
+
+Status: `DONE`
+
+Issue:
+- The latest AgentOS exam stopped without a normal final report.
+- Session metadata shows: `toolCallCount: 100`, summary `Agent reached max iterations (100)`.
+- The max-iteration path returned a timeout message but did not stream Execution Summary.
+
+Fix:
+- Raise default interactive max iterations from 100 to 200.
+- Use an effective iteration limit for loop control and timeout messaging.
+- Emit Execution Summary even when the loop stops because the iteration limit is reached.
+- Add regression coverage.
+
+Checks:
+- `npm test -- src/core/agent-loop.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 147 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 207.9 kB
+- Unpacked size: 975.3 kB
+- Total files: 221
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

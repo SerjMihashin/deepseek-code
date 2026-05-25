@@ -11,7 +11,7 @@ import { MetricsCollector } from './metrics.js'
 import { hooksManager } from './hooks.js'
 
 export interface AgentLoopOptions {
-  /** Maximum number of tool call iterations before stopping (default: 100) */
+  /** Maximum number of tool call iterations before stopping (default: 200) */
   maxIterations?: number;
   /** Timeout per tool execution in ms (default: 30000 for bash, 10000 for others) */
   toolTimeout?: number;
@@ -66,6 +66,8 @@ export interface ToolResultEvent {
   durationMs: number;
   error?: string;
 }
+
+const DEFAULT_MAX_ITERATIONS = 200
 
 /**
  * Build a dynamic system prompt with project context.
@@ -260,7 +262,7 @@ export class AgentLoop extends EventEmitter {
     this.model = config.model
     const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode)
     this.options = {
-      maxIterations: 100,
+      maxIterations: DEFAULT_MAX_ITERATIONS,
       toolTimeout: 30000,
       approvalMode: 'default',
       cwd: process.cwd(),
@@ -371,7 +373,7 @@ export class AgentLoop extends EventEmitter {
       messageCount: this.messages.length,
     }).catch(() => {})
 
-    while (this.iterationCount < Math.min(this.options.maxIterations, this.options.budget?.maxIterations ?? this.options.maxIterations)) {
+    while (this.iterationCount < this.getIterationLimit()) {
       this.iterationCount++
 
       // Budget: check maxToolCalls at top of each iteration
@@ -669,11 +671,21 @@ export class AgentLoop extends EventEmitter {
     }
 
     // Max iterations reached
-    const timeoutMsg = `Агент достиг максимального числа итераций (${this.options.maxIterations}). Задача может быть не завершена.`
+    const timeoutMsg = `Агент достиг максимального числа итераций (${this.getIterationLimit()}). Задача может быть не завершена.`
     this.messages.push({ role: 'assistant', content: timeoutMsg })
     this.options.onResponse(timeoutMsg)
     this.finalizeSession()
+    const summary = this.metrics.getSummary(this.model)
+    this.options.onStreamChunk(summary)
     return timeoutMsg
+  }
+
+  private getIterationLimit (): number {
+    const budgetLimit = this.options.budget?.maxIterations
+    if (budgetLimit && budgetLimit > 0) {
+      return Math.min(this.options.maxIterations, budgetLimit)
+    }
+    return this.options.maxIterations
   }
 
   /**

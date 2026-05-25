@@ -428,6 +428,32 @@ Checks:
 Next:
 - Commit the guard.
 
+### 2026-05-25: Max Iteration Stop Diagnosis and Fix
+
+Status: `DONE`
+
+Reason:
+- Latest AgentOS exam did not end with a normal final report.
+- Saved session metadata confirmed the agent stopped because it reached `maxIterations` with `toolCallCount: 100`.
+- Code review showed the max-iteration path finalized the session but did not stream Execution Summary.
+
+Done:
+- Increased the default interactive agent iteration limit from 100 to 200.
+- Added an effective iteration-limit helper so the timeout message reports the actual active limit, including budget overrides.
+- Max-iteration stops now finalize the session and emit Execution Summary.
+- Added regression coverage that max-iteration stop streams Execution Summary.
+
+Checks:
+- `npm test -- src/core/agent-loop.test.ts`: passed, 18 tests.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 147 tests.
+- `npm pack --dry-run`: passed, package size 207.9 kB, unpacked size 975.3 kB, 221 files.
+
+Next:
+- Commit the fix.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

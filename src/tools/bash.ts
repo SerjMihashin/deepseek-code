@@ -1,5 +1,6 @@
 import { execFileSync, execSync } from 'node:child_process'
 import { platform } from 'node:os'
+import { isAbsolute, relative } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 
 /**
@@ -13,8 +14,8 @@ const DANGEROUS_PATTERNS = [
   /^\s*format\s/m,
   /^\s*del\s+\/f\s+\/s\s/m,
   /^\s*rd\s+\/s\s+\/q\s/m,
-  /^\s*remove-item\b.*\s-(?:recurse|r)\b/im,
-  /^\s*rm\b.*\s-(?:recurse|r)\b/im,
+  /^\s*remove-item\b\s+["']?(?:[A-Z]:\\|\/)["']?\s+-(?:recurse|r)\b/im,
+  /^\s*rm\b\s+["']?(?:[A-Z]:\\|\/)["']?\s+-(?:recurse|r)\b/im,
   /^\s*clear-disk\b/im,
   /^\s*format-volume\b/im,
   /^\s*stop-computer\b/im,
@@ -49,9 +50,11 @@ const POWERSHELL_COMMANDS = new Set([
   'move-item',
   'new-item',
   'remove-item',
+  'select-object',
   'select-string',
   'set-content',
   'test-path',
+  'foreach-object',
   'where-object',
   'write-output',
 ])
@@ -103,6 +106,43 @@ function isDangerousCommand (command: string): string | null {
       return `Command matches dangerous pattern: ${pattern}`
     }
   }
+  return null
+}
+
+function isInsideWorkspace (targetPath: string): boolean {
+  if (!isAbsolute(targetPath)) return true
+  const rel = relative(process.cwd(), targetPath)
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
+}
+
+function extractFirstPathArgument (rest: string): string | null {
+  const trimmed = rest.trim()
+  const quoted = trimmed.match(/^["']([^"']+)["']/u)
+  if (quoted) return quoted[1]
+  const bare = trimmed.match(/^([^\s;|&]+)/u)
+  return bare?.[1] ?? null
+}
+
+function getWorkspacePolicyError (command: string): string | null {
+  const cdPattern = /(?:^|[;&|()])\s*(?:cd|chdir|set-location)\s+((?:"[^"]+")|(?:'[^']+')|[^\s;&|)]+)/gim
+  let match: RegExpExecArray | null
+  while ((match = cdPattern.exec(command)) !== null) {
+    const target = match[1].replace(/^["']|["']$/g, '')
+    if (isAbsolute(target) && !isInsideWorkspace(target)) {
+      return `Workspace policy: refusing to change directory outside the current workspace (${process.cwd()}): ${target}. Start the CLI in the intended project directory instead of switching projects inside a shell command.`
+    }
+  }
+
+  if (platform() !== 'win32') return null
+
+  const mutatingCmdletPattern = /(?:^|[;&|()])\s*(remove-item|new-item|set-content|add-content|copy-item|move-item)\b([^;&|)]*)/gim
+  while ((match = mutatingCmdletPattern.exec(command)) !== null) {
+    const target = extractFirstPathArgument(match[2])
+    if (target && isAbsolute(target) && !isInsideWorkspace(target)) {
+      return `Workspace policy: refusing to run ${match[1]} on a path outside the current workspace (${process.cwd()}): ${target}. Use the CLI from that project directory or ask for confirmation with the correct workspace.`
+    }
+  }
+
   return null
 }
 
@@ -212,10 +252,13 @@ export const bashTool: Tool = {
     // Security check — reject dangerous commands
     const danger = isDangerousCommand(command)
     if (danger) {
+      const isBroadProcessKill = /\b(?:taskkill|stop-process|pkill|killall)\b/iu.test(command)
       return {
         success: false,
         output: '',
-        error: `Blocked for security: ${danger}. Avoid broad process-kill commands. If you started a dev server, stop only that specific process by its known PID or use the child process handle managed by the tool.`,
+        error: isBroadProcessKill
+          ? `Blocked for security: ${danger}. Avoid broad process-kill commands. If you started a dev server, stop only that specific process by its known PID or use the child process handle managed by the tool.`
+          : `Blocked for security: ${danger}. This command is potentially destructive. Use explicit safe paths inside the current workspace and avoid broad recursive deletion.`,
       }
     }
 
@@ -234,6 +277,15 @@ export const bashTool: Tool = {
         success: false,
         output: '',
         error: windowsUnixFlagPolicyError,
+      }
+    }
+
+    const workspacePolicyError = getWorkspacePolicyError(command)
+    if (workspacePolicyError) {
+      return {
+        success: false,
+        output: '',
+        error: workspacePolicyError,
       }
     }
 

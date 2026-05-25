@@ -71,6 +71,16 @@ describe('AgentLoop', () => {
     expect(prompt).toContain('compose references it correctly')
   })
 
+  it('should include workspace boundary rules in the system prompt', () => {
+    const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
+
+    expect(prompt).toContain('## Workspace Boundary Policy')
+    expect(prompt).toContain('Do not silently switch to another project path')
+    expect(prompt).toContain('outside the workspace')
+    expect(prompt).toContain('Do not bypass the restriction')
+    expect(prompt).toContain('gen_helper.py')
+  })
+
   it('should create an instance with default options', () => {
     const agent = new AgentLoop(TEST_CONFIG)
     expect(agent).toBeInstanceOf(AgentLoop)

@@ -695,3 +695,55 @@ Final pack dry-run:
 - Package size: 211.2 kB
 - Unpacked size: 989.7 kB
 - Total files: 221
+
+### 2026-05-25: AgentOS Exam Review 4
+
+Status: `NEEDS_AGENT_POLICY_FIX`
+
+Source:
+- User provided another DeepSeek run report.
+- Intended folder was `D:\Projects\AgentOS test`, but the agent wrote into `D:\Projects\AgentOS`.
+- Codex inspected both folders without modifying them.
+
+Findings:
+- `D:\Projects\AgentOS` is not a git repository despite the final report claiming git was initialized and the first commit was made.
+- `D:\Projects\AgentOS test` contains only `.idea`, `$null`, `diag.py`, `fix_pkg.py`, and a tiny `package-lock.json`.
+- The agent received `write_file` outside-workspace errors, then attempted to bypass the file tool with shell/Python file generation.
+- The final report claimed build/lint/typecheck/container/git success, but the provided Execution Summary had 43 failed shell calls and no browser/chrome tool usage.
+- PowerShell pipeline commands such as `... | Select-Object` still fell through to `cmd.exe`.
+
+Release impact:
+- Do not run another exam before adding workspace-boundary guards.
+- The agent must not silently switch project directories or bypass file-tool path safety through shell commands.
+
+### 2026-05-25: Workspace Boundary and Shell Bypass Guard
+
+Status: `DONE`
+
+Fix:
+- Added Workspace Boundary Policy to the system prompt.
+- The prompt now instructs the agent to stop on `outside workspace` file-tool errors instead of bypassing with shell redirection, PowerShell here-strings, Python scripts, or helper generators.
+- `run_shell_command` now refuses `cd`/`Set-Location` to absolute paths outside the current workspace.
+- On Windows, `run_shell_command` now refuses mutating PowerShell cmdlets that target absolute paths outside the current workspace.
+- Added `Select-Object` and `ForEach-Object` to the PowerShell cmdlet detector so pipeline commands route through PowerShell.
+- Relaxed recursive `Remove-Item` blocking so explicit paths inside the workspace are allowed, while root recursive deletes remain blocked.
+- Dangerous-command messages now distinguish broad process kills from destructive filesystem commands.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`
+- `npm test -- src/core/agent-loop.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 154 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Package size: 212.6 kB
+- Unpacked size: 994.7 kB
+- Total files: 221

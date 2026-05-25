@@ -235,3 +235,23 @@ Acceptance:
 - Sandbox/debug режим перед включением в боевой TUI.
 
 Не делаем в `0.4.4`: реализацию desktop automation, глобальный контроль мыши/клавиатуры, работу с приложениями без явного разрешения пользователя.
+
+### Iteration 7.2: Workspace Boundary and Shell Bypass Guard
+
+Статус: `DONE`
+
+Цель: исправить проблему экзамена, где агент был запущен в `D:\Projects\AgentOS test`, но из-за старого prompt начал писать в `D:\Projects\AgentOS` через shell после отказа `write_file`.
+
+Работы:
+- Добавить Workspace Boundary Policy в system prompt.
+- Запретить агенту обходить `outside workspace` через shell redirection, PowerShell here-strings, Python helper scripts или временные генераторы.
+- Блокировать shell `cd`/`Set-Location` на абсолютный путь вне текущего workspace.
+- Блокировать mutating PowerShell cmdlets (`Remove-Item`, `New-Item`, `Set-Content`, `Copy-Item`, etc.) на абсолютные пути вне workspace.
+- Распознавать PowerShell pipeline cmdlets `Select-Object` и `ForEach-Object`, чтобы команды с pipe выполнялись через PowerShell, а не падали в `cmd.exe`.
+- Уточнить dangerous command сообщение: broad process-kill отдельно, destructive recursive delete отдельно.
+
+Acceptance:
+- Shell guard не даёт молча перейти в другой проект.
+- Shell guard не даёт мутировать абсолютные пути вне workspace.
+- Безопасный `Remove-Item -Recurse` внутри workspace разрешён.
+- Targeted tests, lint, typecheck, build, full tests и pack dry-run проходят.

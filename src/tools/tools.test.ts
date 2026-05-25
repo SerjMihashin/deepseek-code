@@ -266,13 +266,48 @@ describe('bash tool', () => {
     expect(result.output).toContain('powershell-ok')
   })
 
+  it('should execute PowerShell pipeline cmdlets through PowerShell on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'Write-Output "one","two" | Select-Object -First 1' })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('one')
+  })
+
   it('should reject cmd chaining mixed with PowerShell cmdlets on Windows', async () => {
     if (process.platform !== 'win32') return
 
-    const result = await bashTool.execute({ command: 'cd "D:\\Projects\\AgentOS" && Remove-Item "temp.txt" -Force' })
+    const result = await bashTool.execute({ command: 'cd "." && Remove-Item "temp.txt" -Force' })
     expect(result.success).toBe(false)
     expect(result.error).toContain('PowerShell cmdlets')
     expect(result.error).toContain('&&')
+  })
+
+  it('should reject changing directory outside the workspace', async () => {
+    const outsideProject = join(process.cwd(), '..', 'AgentOS')
+    const result = await bashTool.execute({ command: `cd "${outsideProject}"` })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Workspace policy')
+    expect(result.error).toContain('outside the current workspace')
+  })
+
+  it('should reject mutating PowerShell paths outside the workspace on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const outsideProject = join(process.cwd(), '..', 'AgentOS', 'frontend')
+    const result = await bashTool.execute({ command: `Remove-Item "${outsideProject}" -Recurse -Force` })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('Workspace policy')
+    expect(result.error).toContain('outside the current workspace')
+  })
+
+  it('should allow recursive Remove-Item for explicit paths inside the workspace on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const safeDir = mkdtempSync(join(process.cwd(), '.tmp-dsc-test-safe-remove-'))
+    writeFileSync(join(safeDir, 'file.txt'), 'safe', 'utf-8')
+    const result = await bashTool.execute({ command: `Remove-Item "${safeDir}" -Recurse -Force` })
+    expect(result.success).toBe(true)
   })
 
   it('should handle command failure', async () => {

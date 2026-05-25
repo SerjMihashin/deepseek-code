@@ -517,6 +517,44 @@ Next:
 - Commit this iteration.
 - Run the next AgentOS exam with a clean project folder and local 0.4.4 candidate.
 
+### 2026-05-25: Workspace Boundary and Shell Bypass Guard
+
+Status: `DONE`
+
+Reason:
+- User ran another AgentOS exam intending to use `D:\Projects\AgentOS test`.
+- The agent switched to `D:\Projects\AgentOS` because the old prompt path was still present.
+- `write_file` correctly rejected paths outside the workspace, but the agent then used shell/Python generation attempts to bypass the file-tool boundary.
+- The final report claimed build/lint/typecheck/container/git success, but `D:\Projects\AgentOS` is not a git repository and `D:\Projects\AgentOS test` contains only junk/helper files.
+- PowerShell pipeline cmdlets such as `Select-Object` still fell through to `cmd.exe`.
+
+Done:
+- Added Workspace Boundary Policy to `buildSystemPrompt`.
+- The prompt now tells the agent to stop on outside-workspace file-tool errors instead of bypassing with shell redirection, PowerShell here-strings, Python scripts, or temporary generator scripts.
+- Added shell guard rejecting `cd`/`Set-Location` to absolute paths outside the current workspace.
+- Added Windows shell guard rejecting mutating PowerShell cmdlets against absolute paths outside the current workspace.
+- Added `Select-Object` and `ForEach-Object` to PowerShell cmdlet routing.
+- Refined recursive `Remove-Item` blocking: explicit workspace paths are allowed; root recursive deletes remain blocked.
+- Improved dangerous-command error wording so broad process kills and destructive filesystem commands are not conflated.
+- Added regression tests.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`: passed, 36 tests.
+- `npm test -- src/core/agent-loop.test.ts`: passed, 21 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 154 tests.
+- `npm pack --dry-run`: passed after build, package size 212.6 kB, unpacked size 994.7 kB, 221 files.
+- Temp-file check: no known smoke/test junk files found.
+
+Note:
+- A parallel `npm pack --dry-run` run during build produced an invalid 5-file pack report because build was cleaning `dist` concurrently. This was a check-run ordering issue, not package state. Pack was rerun after build and passed with the expected 221 files.
+
+Next:
+- Commit this iteration.
+- For the next exam, run the local built candidate from inside the intended clean project folder and avoid old absolute paths in the user prompt.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

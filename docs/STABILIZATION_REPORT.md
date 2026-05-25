@@ -569,6 +569,39 @@ Final pack dry-run:
 - Unpacked size: 975.3 kB
 - Total files: 221
 
+### 2026-05-25: Auto-Compact Between Iterations
+
+Status: `DONE`
+
+Issue:
+- Raising max iterations helps one exam, but does not solve hour-long tasks or context growth.
+- Context compression must not interrupt active tool calls or streaming output.
+
+Fix:
+- Add automatic context compaction between iterations when the last request context crosses 70%.
+- Replace long message history with a compact continuation summary that preserves goals, files, commands, failures, checks, constraints, and pending work.
+- Expose compaction callbacks and TUI status bar progress.
+- Add regression coverage.
+
+Checks:
+- `npm test -- src/core/agent-loop.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 148 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 210.2 kB
+- Unpacked size: 985.7 kB
+- Total files: 221
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

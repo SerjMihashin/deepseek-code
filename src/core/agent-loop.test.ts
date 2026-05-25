@@ -160,6 +160,46 @@ describe('AgentLoop', () => {
     expect(streamChunks.join('')).toContain('Execution Summary')
   })
 
+  it('should auto-compact context between iterations when context is high', async () => {
+    const compactProgress: number[] = []
+    let streamCalls = 0
+    const agent = new AgentLoop(TEST_CONFIG, {
+      maxIterations: 3,
+      approvalMode: 'turbo',
+      autoCompact: { enabled: true, thresholdPercent: 1, minMessages: 1, keepRecentMessages: 0 },
+      onCompactProgress: event => { compactProgress.push(event.progress) },
+      onResponse: () => {},
+      onStreamChunk: () => {},
+      onReasoningChunk: () => {},
+      onToolCall: () => {},
+      onToolResult: () => {},
+      onError: () => {},
+    })
+
+    ;(agent as any).api.streamChat = async function * () {
+      streamCalls++
+      if (streamCalls === 1) {
+        yield toolUseChunk('read_file', 'call_1', { file_path: '/test/file.txt' })
+        yield usageChunk(100000, 5)
+        return
+      }
+      yield textChunk('done')
+      yield usageChunk(1000, 5)
+    }
+
+    ;(agent as any).api.chat = async () => ({
+      content: '- User asked for a test task.\n- One read_file call failed and should be reported honestly.',
+      usage: { input: 1000, cacheHitInput: 0, cacheMissInput: 1000, output: 100, reasoningOutput: 0, total: 1100 },
+    })
+
+    await agent.run('test')
+
+    expect(compactProgress.length).toBeGreaterThan(0)
+    expect(agent.getMessages().some(message =>
+      typeof message.content === 'string' && message.content.includes('Context Auto-Compacted')
+    )).toBe(true)
+  })
+
   it('should handle streaming text response', async () => {
     const streamChunks: string[] = []
     const agent = new AgentLoop(TEST_CONFIG, {

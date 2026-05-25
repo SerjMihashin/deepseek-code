@@ -119,6 +119,7 @@ export function App ({ config, options }: AppProps) {
   const [newMessagesWhilePaused, setNewMessagesWhilePaused] = useState(false)
   const visibleMessageCountRef = useRef(0)
   const [contextPercent, setContextPercent] = useState(0)
+  const [compactProgress, setCompactProgress] = useState(0)
   const [totalTokens, setTotalTokens] = useState(0)
   const [estimatedCost, setEstimatedCost] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
@@ -494,6 +495,18 @@ export function App ({ config, options }: AppProps) {
           onError: () => {
             // Handled by handleSubmit catch block — adding here would create duplicate
             // assistant messages, breaking the conversation structure for the next request
+          },
+          onCompactStart: () => {
+            setCompactProgress(5)
+            setStatusText('Compacting context...')
+          },
+          onCompactProgress: (event) => {
+            setCompactProgress(event.progress)
+            setStatusText(`Compacting context ${event.progress}%...`)
+          },
+          onCompactEnd: (event) => {
+            setCompactProgress(0)
+            setStatusText(event.phase === 'done' ? 'Context compacted' : 'Context compact failed')
           },
           onApprovalRequest: async (toolName, args) => {
             if (approvalModeRef.current === 'turbo') return true
@@ -1162,6 +1175,7 @@ export function App ({ config, options }: AppProps) {
         scrollOffset={chatScrollOffset}
         hasNewMessages={newMessagesWhilePaused}
         contextPercent={contextPercent}
+        compactProgress={compactProgress}
         totalTokens={totalTokens}
         estimatedCost={estimatedCost}
         model={config.model}

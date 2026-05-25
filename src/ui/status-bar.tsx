@@ -14,6 +14,7 @@ interface StatusBarProps {
   scrollOffset?: number;
   hasNewMessages?: boolean;
   contextPercent?: number;
+  compactProgress?: number;
   totalTokens?: number;
   estimatedCost?: number;
   model?: string;
@@ -45,7 +46,7 @@ export function getScrollStatusLabel (
   return 'VIEW:FOLLOW PageUp'
 }
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, totalTokens, estimatedCost, model }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -120,6 +121,9 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMod
           <Text color={contextPercent > 80 ? colors.error : contextPercent > 50 ? colors.warning : colors.textMuted}>
             ctx:{contextPercent}%{' '}
           </Text>
+        )}
+        {compactProgress !== undefined && compactProgress > 0 && compactProgress < 100 && (
+          <Text color={colors.info}>compact:{compactProgress}% </Text>
         )}
         {model && (
           <Text color={colors.textMuted}>

@@ -39,6 +39,30 @@ export interface AgentLoopOptions {
   signal?: AbortSignal;
   /** Budget limits for the task session */
   budget?: TaskBudget;
+  /** Automatically compress message history between iterations when context is high */
+  autoCompact?: AutoCompactOptions;
+  /** Callback when automatic context compression starts */
+  onCompactStart?: (details: AutoCompactEvent) => void;
+  /** Callback for automatic context compression progress */
+  onCompactProgress?: (details: AutoCompactEvent) => void;
+  /** Callback when automatic context compression finishes */
+  onCompactEnd?: (details: AutoCompactEvent) => void;
+}
+
+export interface AutoCompactOptions {
+  enabled?: boolean;
+  thresholdPercent?: number;
+  keepRecentMessages?: number;
+  minMessages?: number;
+}
+
+export interface AutoCompactEvent {
+  phase: 'start' | 'summarizing' | 'replacing' | 'done' | 'skipped' | 'failed';
+  progress: number;
+  contextPercent: number;
+  beforeMessages: number;
+  afterMessages?: number;
+  error?: string;
 }
 
 export interface ToolCallEvent {
@@ -68,6 +92,12 @@ export interface ToolResultEvent {
 }
 
 const DEFAULT_MAX_ITERATIONS = 200
+const DEFAULT_AUTO_COMPACT: Required<AutoCompactOptions> = {
+  enabled: true,
+  thresholdPercent: 70,
+  keepRecentMessages: 8,
+  minMessages: 18,
+}
 
 /**
  * Build a dynamic system prompt with project context.
@@ -255,6 +285,7 @@ export class AgentLoop extends EventEmitter {
   private metrics: MetricsCollector = new MetricsCollector()
   private iterationCount = 0
   private followUpSeq = 0
+  private lastCompactedAtMessageCount = 0
 
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
     super()
@@ -272,9 +303,13 @@ export class AgentLoop extends EventEmitter {
       onReasoningChunk: () => {},
       onResponse: () => {},
       onError: () => {},
+      onCompactStart: () => {},
+      onCompactProgress: () => {},
+      onCompactEnd: () => {},
       onApprovalRequest: async () => true,
       systemPrompt: defaultSystemPrompt,
       signal: undefined,
+      autoCompact: DEFAULT_AUTO_COMPACT,
       ...options,
     } as Required<AgentLoopOptions>
     this.tools = getToolsForMode(this.options.approvalMode)
@@ -382,6 +417,8 @@ export class AgentLoop extends EventEmitter {
       }
 
       try {
+        await this.maybeAutoCompact()
+
         // Use streaming chat to get real-time output
         // Budget: check maxApiCalls before API call
         if (this.options.budget?.maxApiCalls && this.metrics.apiCalls >= this.options.budget.maxApiCalls) {
@@ -686,6 +723,98 @@ export class AgentLoop extends EventEmitter {
       return Math.min(this.options.maxIterations, budgetLimit)
     }
     return this.options.maxIterations
+  }
+
+  private getAutoCompactOptions (): Required<AutoCompactOptions> {
+    return {
+      ...DEFAULT_AUTO_COMPACT,
+      ...(this.options.autoCompact ?? {}),
+    }
+  }
+
+  private async maybeAutoCompact (): Promise<void> {
+    const compact = this.getAutoCompactOptions()
+    if (!compact.enabled) return
+
+    const contextPercent = this.metrics.getCurrentWindowPercent()
+    const beforeMessages = this.messages.length
+    if (contextPercent < compact.thresholdPercent) return
+    if (beforeMessages < compact.minMessages) return
+    if (beforeMessages <= this.lastCompactedAtMessageCount + compact.keepRecentMessages) return
+
+    const startEvent: AutoCompactEvent = {
+      phase: 'start',
+      progress: 5,
+      contextPercent,
+      beforeMessages,
+    }
+    this.options.onCompactStart(startEvent)
+    this.options.onCompactProgress({ ...startEvent, phase: 'summarizing', progress: 35 })
+
+    try {
+      const result = await this.api.chat([
+        {
+          role: 'system',
+          content: 'Compress the conversation for continuation. Preserve concrete user goals, decisions, file paths, commands, failures, verification results, pending work, and constraints. Do not invent facts. Return concise bullet points.',
+        },
+        {
+          role: 'user',
+          content: this.buildCompactTranscript(),
+        },
+      ])
+
+      if (result.usage) {
+        this.metrics.recordUsage(result.usage)
+      }
+
+      const summary = result.content.trim() || 'Auto-compaction completed, but the summarizer returned an empty summary.'
+      this.options.onCompactProgress({
+        phase: 'replacing',
+        progress: 80,
+        contextPercent,
+        beforeMessages,
+      })
+
+      const systemMsg = this.messages.find(m => m.role === 'system')
+      this.messages = [
+        ...(systemMsg ? [systemMsg] : []),
+        {
+          role: 'assistant',
+          content: `**Context Auto-Compacted**\n\nOriginal messages: ${beforeMessages}\nPrevious context: ${contextPercent}% of window\n\n${summary}`,
+        },
+      ]
+      this.lastCompactedAtMessageCount = this.messages.length
+
+      this.options.onCompactEnd({
+        phase: 'done',
+        progress: 100,
+        contextPercent,
+        beforeMessages,
+        afterMessages: this.messages.length,
+      })
+    } catch (err) {
+      this.options.onCompactEnd({
+        phase: 'failed',
+        progress: 100,
+        contextPercent,
+        beforeMessages,
+        error: (err as Error).message,
+      })
+      throw err
+    }
+  }
+
+  private buildCompactTranscript (): string {
+    return this.messages
+      .filter(message => message.role !== 'system')
+      .map((message, index) => {
+        const content = typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content)
+        const toolCalls = message.tool_calls?.length ? ` tool_calls=${message.tool_calls.map(tc => tc.function.name).join(',')}` : ''
+        return `#${index + 1} ${message.role}${toolCalls}\n${content.slice(0, 8000)}`
+      })
+      .join('\n\n---\n\n')
   }
 
   /**

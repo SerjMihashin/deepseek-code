@@ -454,6 +454,33 @@ Checks:
 Next:
 - Commit the fix.
 
+### 2026-05-25: Auto-Compact Between Iterations
+
+Status: `DONE`
+
+Reason:
+- Static iteration limits are not enough for long-running coding tasks.
+- Large tasks need context management that happens between iterations, not during tool execution or streaming.
+
+Done:
+- Added automatic context compaction in `AgentLoop`.
+- Auto-compact triggers between iterations when the last request context reaches the configured threshold.
+- Default threshold is 70% of the 128k context window, with safeguards against compacting tiny histories repeatedly.
+- Compaction summarizes user goals, decisions, files, commands, failures, verification results, constraints, and pending work.
+- TUI status bar now shows compact progress while compaction is running.
+- Added regression coverage for auto-compact.
+
+Checks:
+- `npm test -- src/core/agent-loop.test.ts`: passed, 19 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 148 tests.
+- `npm pack --dry-run`: passed, package size 210.2 kB, unpacked size 985.7 kB, 221 files.
+
+Next:
+- Commit the auto-compact iteration.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

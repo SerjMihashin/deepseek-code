@@ -13,6 +13,7 @@
 - Commands that mix PowerShell cmdlets with `cmd`/Bash chaining operators such as `&&` are now rejected with a clear Windows shell policy error.
 - `mkdir -p` is now rejected on Windows to avoid creating a literal `-p` directory.
 - Default interactive agent iteration limit increased from 100 to 200, and max-iteration stops now still emit Execution Summary.
+- Added automatic context compaction between agent iterations when the last request approaches the context window limit, with compact progress shown in the TUI status bar.
 - Blocked broad process-kill commands such as `taskkill /F /IM node.exe` so the agent cannot terminate itself or unrelated Node-based sessions.
 - TUI status bar now shows `VIEW:FOLLOW` or `VIEW:PAUSED` with keyboard scroll hints.
 - `/help` now explicitly documents that mouse wheel input is not captured in the TUI.

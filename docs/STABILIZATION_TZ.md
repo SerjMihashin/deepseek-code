@@ -167,7 +167,7 @@ Acceptance:
 
 ### Iteration 6: Budget Modes
 
-Статус: `TODO`
+Статус: `DONE`
 
 Цель: сделать budget управляемым режимом, а не ловушкой.
 
@@ -176,6 +176,7 @@ Acceptance:
 - Добавить `/budget large`.
 - Оставить default `off`.
 - Обновить help/status.
+- Добавить tests для explicit budget modes.
 
 Acceptance:
 - Большие задачи не душатся по умолчанию.

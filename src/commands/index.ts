@@ -23,7 +23,7 @@ import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools/chrome.js'
 import { chromeManager } from '../tools/chrome-manager.js'
 import type { TaskBudget } from '../tools/types.js'
-import { AUDIT_BUDGET_PRESET } from '../tools/types.js'
+import { AUDIT_BUDGET_PRESET, LARGE_BUDGET_PRESET, NORMAL_BUDGET_PRESET } from '../tools/types.js'
 import { checkLatestVersion } from './update-checker.js'
 
 // ─── Command handler type ────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ const RU_DESCRIPTIONS: Record<string, string> = {
   '/browser-real-test': 'Smoke-тест реальных сайтов',
   '/last-browser-test': 'Показать последний отчёт browser-test',
   '/chrome': 'Режим Chrome: --headed|--headless|-s',
-  '/budget': 'Бюджет: /budget status|off|audit|small',
+  '/budget': 'Бюджет: /budget status|off|audit|small|normal|large',
   '/changelog': 'Показать изменения: /changelog [full|version]',
   '/update-check': 'Проверить новую версию',
 }
@@ -1088,21 +1088,21 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
   const notice = ctx.addServiceNotice ?? ((text: string) => {
     ctx.setMessages(prev => [...prev, { role: 'assistant', content: text }])
   })
+  const formatBudget = (label: string, budget: TaskBudget): string => [
+    `Budget: ${label}`,
+    `maxToolCalls: ${budget.maxToolCalls}`,
+    `maxApiCalls: ${budget.maxApiCalls}`,
+    `maxIterations: ${budget.maxIterations}`,
+    `maxReadFiles: ${budget.maxReadFiles}`,
+    `maxShellCommands: ${budget.maxShellCommands}`,
+  ].join('\n')
 
   if (sub === 'status') {
     const budget = ctx.getBudget?.()
     if (!budget) {
       notice('Budget: off')
     } else {
-      const prefix = 'Budget: active'
-      const lines = [
-        prefix,
-        `maxToolCalls: ${budget.maxToolCalls}`,
-        `maxApiCalls: ${budget.maxApiCalls}`,
-        `maxReadFiles: ${budget.maxReadFiles}`,
-        `maxShellCommands: ${budget.maxShellCommands}`,
-      ]
-      notice(lines.join('\n'))
+      notice(formatBudget('active', budget))
     }
     return true
   }
@@ -1115,18 +1115,23 @@ async function cmdBudget (ctx: SlashCommandContext, input: string): Promise<bool
 
   if (sub === 'audit' || sub === 'small') {
     ctx.setBudget?.({ ...AUDIT_BUDGET_PRESET })
-    const lines = [
-      'Budget: audit enabled',
-      `maxToolCalls: ${AUDIT_BUDGET_PRESET.maxToolCalls}`,
-      `maxApiCalls: ${AUDIT_BUDGET_PRESET.maxApiCalls}`,
-      `maxReadFiles: ${AUDIT_BUDGET_PRESET.maxReadFiles}`,
-      `maxShellCommands: ${AUDIT_BUDGET_PRESET.maxShellCommands}`,
-    ]
-    notice(lines.join('\n'))
+    notice(formatBudget('audit enabled', AUDIT_BUDGET_PRESET))
     return true
   }
 
-  notice('Usage: /budget status|off|audit|small')
+  if (sub === 'normal') {
+    ctx.setBudget?.({ ...NORMAL_BUDGET_PRESET })
+    notice(formatBudget('normal enabled', NORMAL_BUDGET_PRESET))
+    return true
+  }
+
+  if (sub === 'large') {
+    ctx.setBudget?.({ ...LARGE_BUDGET_PRESET })
+    notice(formatBudget('large enabled', LARGE_BUDGET_PRESET))
+    return true
+  }
+
+  notice('Usage: /budget status|off|audit|small|normal|large')
   return true
 }
 
@@ -1302,7 +1307,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/browser-real-test', description: 'Smoke test on real websites', handler: cmdBrowserRealTest },
   { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
   { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
-  { name: '/budget', description: 'Budget: /budget status|off|audit|small', handler: cmdBudget },
+  { name: '/budget', description: 'Budget: /budget status|off|audit|small|normal|large', handler: cmdBudget },
   { name: '/changelog', description: 'Show changelog: /changelog [full|version]', handler: cmdChangelog },
   { name: '/update-check', description: 'Check latest npm version', handler: cmdUpdateCheck },
 ]

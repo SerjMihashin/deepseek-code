@@ -47,20 +47,18 @@ d0634f8 fix: enable interactive default budget
 ## Current Risks
 
 - TUI history has clearer follow/paused indicators, but real interactive scroll behavior still needs manual terminal smoke.
-- Budget modes are incomplete: only `audit|small|status|off`.
 - Temp cleanup is now enforced by prompt policy, but there is still no automatic final cleanup scanner.
 - Large project exam has not been run for `0.4.4`.
 
 ## Proposed Next Work Block
 
-Start with Iteration 6: `Budget Modes`.
+Start with Iteration 7: `Large Project Exam`.
 
 Order:
-1. Add `/budget normal`.
-2. Add `/budget large`.
-3. Keep default interactive budget off.
-4. Update `/budget status` and help text.
-5. Re-run lint, typecheck, build, tests, and pack dry-run.
+1. Run an end-to-end agent task against a realistic web project scenario.
+2. Verify build/dev/browser acceptance where possible.
+3. Check for failed tool calls, temp files, and honest reporting.
+4. Decide whether `0.4.4` is publish-ready after manual TUI smoke.
 
 ## Verification Log
 
@@ -360,6 +358,45 @@ Final pack dry-run:
 - Filename: `serjm-deepseek-code-0.4.4.tgz`
 - Package size: 204.7 kB
 - Unpacked size: 963.6 kB
+- Total files: 221
+
+Temp-file check:
+- No `fibonacci.py`, `.tmp-grep-fallback-*`, `.tmp-dsc-test-*`, `err.txt`, `lint_err.txt`, `temp_patch*`, `temp_fix*`, or stray file `1` found in repository files.
+
+### 2026-05-25: Iteration 6 Budget Modes
+
+Status: `DONE`
+
+Fix:
+- Added `NORMAL_BUDGET_PRESET`.
+- Added `LARGE_BUDGET_PRESET`.
+- Added `/budget normal`.
+- Added `/budget large`.
+- Updated `/budget status` to include `maxIterations`.
+- Updated `/budget` usage and help descriptions.
+- Confirmed interactive default budget remains off: `budgetRef` starts as `undefined`.
+
+Tests added/updated:
+- `src/commands/index.test.ts`
+- `src/tools/types.test.ts`
+
+Checks passed:
+- `npm test -- src/commands/index.test.ts src/tools/types.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 143 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 205.3 kB
+- Unpacked size: 965.6 kB
 - Total files: 221
 
 Temp-file check:

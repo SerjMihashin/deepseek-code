@@ -29,7 +29,7 @@ Target version: `0.4.4`
 | 3 | Abort and Error Reporting Hardening | DONE | Stream timeouts now surface as explicit errors and full verification passed. |
 | 4 | Windows Shell and Temp Cleanup Policy | DONE | Added Windows shell policy, runtime Unix-command guard, and temp cleanup reporting rules. |
 | 5 | TUI Stability Stage 1 | DONE | Added explicit follow/paused status and documented keyboard scroll without mouse capture. |
-| 6 | Budget Modes | TODO | Add normal/large modes, keep default off. |
+| 6 | Budget Modes | DONE | Added explicit normal/large modes and kept default off. |
 | 7 | Large Project Exam | TODO | Run real acceptance exam before publish decision. |
 
 ## Entries
@@ -314,3 +314,40 @@ Temp-file check:
 
 Next:
 - Start Iteration 6: `Budget Modes`.
+
+### 2026-05-25: Iteration 6 Budget Modes
+
+Status: `DONE`
+
+Done:
+- Added `NORMAL_BUDGET_PRESET`.
+- Added `LARGE_BUDGET_PRESET`.
+- Added `/budget normal`.
+- Added `/budget large`.
+- Updated `/budget status` to show `maxIterations`.
+- Updated `/budget` help/usage text.
+- Confirmed default interactive budget remains off via `budgetRef` initialized as `undefined`.
+- Added tests for explicit budget modes and preset ordering.
+
+Checks:
+- `npm test -- src/commands/index.test.ts src/tools/types.test.ts`: passed.
+- `npm run typecheck`: passed.
+- `npm run lint`: passed.
+- `npm run build`: passed.
+- `npm test`: passed.
+- `npm pack --dry-run`: passed.
+
+Final test result:
+- 24 test files passed.
+- 143 tests passed.
+
+Pack dry-run:
+- Package `@serjm/deepseek-code@0.4.4`.
+- Filename `serjm-deepseek-code-0.4.4.tgz`.
+- Package size 205.3 kB, unpacked size 965.6 kB, total files 221.
+
+Temp-file check:
+- No known smoke/test junk files found in repository file list.
+
+Next:
+- Start Iteration 7: `Large Project Exam`.

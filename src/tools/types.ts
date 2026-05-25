@@ -74,6 +74,30 @@ export const INTERACTIVE_DEFAULT_BUDGET_PRESET: TaskBudget = {
 }
 
 /**
+ * Explicit normal interactive budget. Not enabled by default.
+ * Intended for regular development tasks where the user wants guardrails.
+ */
+export const NORMAL_BUDGET_PRESET: TaskBudget = {
+  maxToolCalls: 45,
+  maxApiCalls: 18,
+  maxIterations: 24,
+  maxReadFiles: 30,
+  maxShellCommands: 16,
+}
+
+/**
+ * Explicit large-task interactive budget. Not enabled by default.
+ * Intended for broad edits and large project exploration.
+ */
+export const LARGE_BUDGET_PRESET: TaskBudget = {
+  maxToolCalls: 120,
+  maxApiCalls: 45,
+  maxIterations: 60,
+  maxReadFiles: 90,
+  maxShellCommands: 40,
+}
+
+/**
  * OpenAI-compatible tool format for DeepSeek API function calling.
  */
 export interface OpenAITool {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { type Tool, toOpenAITools } from './types.js'
+import { AUDIT_BUDGET_PRESET, LARGE_BUDGET_PRESET, NORMAL_BUDGET_PRESET, type Tool, toOpenAITools } from './types.js'
 
 describe('toOpenAITools', () => {
   it('should convert a Tool to OpenAI tool format', () => {
@@ -43,5 +43,14 @@ describe('toOpenAITools', () => {
     const result = toOpenAITools([{ tool, approval: 'never' }])
 
     expect(result[0].function.parameters.required).toHaveLength(0)
+  })
+})
+
+describe('budget presets', () => {
+  it('should keep normal and large presets looser than audit', () => {
+    expect(NORMAL_BUDGET_PRESET.maxApiCalls).toBeGreaterThan(AUDIT_BUDGET_PRESET.maxApiCalls ?? 0)
+    expect(NORMAL_BUDGET_PRESET.maxToolCalls).toBeGreaterThan(AUDIT_BUDGET_PRESET.maxToolCalls ?? 0)
+    expect(LARGE_BUDGET_PRESET.maxApiCalls).toBeGreaterThan(NORMAL_BUDGET_PRESET.maxApiCalls ?? 0)
+    expect(LARGE_BUDGET_PRESET.maxToolCalls).toBeGreaterThan(NORMAL_BUDGET_PRESET.maxToolCalls ?? 0)
   })
 })

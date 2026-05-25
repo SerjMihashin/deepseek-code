@@ -11,6 +11,7 @@
 - Added Windows shell policy guidance and runtime rejection for common Unix-only inspection commands in Windows shells.
 - TUI status bar now shows `VIEW:FOLLOW` or `VIEW:PAUSED` with keyboard scroll hints.
 - `/help` now explicitly documents that mouse wheel input is not captured in the TUI.
+- Added explicit `/budget normal` and `/budget large` modes while keeping the interactive default budget off.
 - Stabilized streaming output by batching assistant chunks to reduce TUI rerenders.
 - Stabilized slash-command editing, including `/model`, Backspace/Delete, Esc, and Ctrl+U behavior.
 - Preserved live follow-up input while the agent is running, so user messages are queued into the active loop instead of being lost.

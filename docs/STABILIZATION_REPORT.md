@@ -471,6 +471,38 @@ Final pack dry-run:
 Temp-file check:
 - No known smoke/test junk files found in repository file list.
 
+### 2026-05-25: Pre-Exam Windows Shell Syntax Guard
+
+Status: `DONE`
+
+Issue:
+- Routing PowerShell cmdlets through PowerShell fixed `Remove-Item` falling through to `cmd.exe`, but mixed commands such as `cd path && Remove-Item ...` can still fail under Windows PowerShell.
+
+Fix:
+- Reject commands that combine recognized PowerShell cmdlets with unquoted `&&` or `||`.
+- Return a clear Windows shell policy error before execution.
+- Update system prompt guidance and regression tests.
+
+Checks passed so far:
+- `npm test -- src/tools/tools.test.ts`
+- `npm test -- src/core/agent-loop.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 146 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Filename: `serjm-deepseek-code-0.4.4.tgz`
+- Package size: 207.4 kB
+- Unpacked size: 973.1 kB
+- Total files: 221
+
 ### 2026-05-25: External DeepSeek Smoke Report Review
 
 Status: `NEEDS_CLEANUP`

@@ -120,6 +120,36 @@ function shouldRunWithPowerShell (command: string): boolean {
   return findBareCommandAtSegmentStart(command, POWERSHELL_COMMANDS) !== null
 }
 
+function hasUnquotedWindowsShellChaining (command: string): boolean {
+  let quote: '"' | "'" | null = null
+
+  for (let i = 0; i < command.length - 1; i++) {
+    const char = command[i]
+
+    if (quote) {
+      if (char === quote) quote = null
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+
+    const pair = command.slice(i, i + 2)
+    if (pair === '&&' || pair === '||') return true
+  }
+
+  return false
+}
+
+function getPowerShellSyntaxPolicyError (command: string): string | null {
+  if (!shouldRunWithPowerShell(command)) return null
+  if (!hasUnquotedWindowsShellChaining(command)) return null
+
+  return 'Windows shell policy: this command uses PowerShell cmdlets together with cmd/bash chaining operators && or ||. Use separate tool calls, or PowerShell-compatible separators such as ; with explicit error checks.'
+}
+
 function executeCommand (command: string, timeout: number): string {
   const options = {
     timeout,
@@ -184,6 +214,15 @@ export const bashTool: Tool = {
         success: false,
         output: '',
         error: windowsPolicyError,
+      }
+    }
+
+    const powershellSyntaxPolicyError = getPowerShellSyntaxPolicyError(command)
+    if (powershellSyntaxPolicyError) {
+      return {
+        success: false,
+        output: '',
+        error: powershellSyntaxPolicyError,
       }
     }
 

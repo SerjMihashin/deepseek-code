@@ -257,6 +257,15 @@ describe('bash tool', () => {
     expect(result.output).toContain('powershell-ok')
   })
 
+  it('should reject cmd chaining mixed with PowerShell cmdlets on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'cd "D:\\Projects\\AgentOS" && Remove-Item "temp.txt" -Force' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('PowerShell cmdlets')
+    expect(result.error).toContain('&&')
+  })
+
   it('should handle command failure', async () => {
     const result = await bashTool.execute({ command: 'nonexistent_command_xyz' })
     expect(result.success).toBe(false)

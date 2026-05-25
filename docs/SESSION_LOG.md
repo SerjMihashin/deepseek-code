@@ -377,6 +377,32 @@ Checks:
 Next:
 - Commit the hotfix.
 
+### 2026-05-25: Pre-Exam Windows Shell Syntax Guard
+
+Status: `DONE`
+
+Reason:
+- After PowerShell cmdlets were routed through PowerShell, one remaining risk was mixed syntax such as `cd path && Remove-Item ...`.
+- Windows PowerShell 5 can reject `&&`, while `cmd.exe` cannot run `Remove-Item`.
+
+Done:
+- Added a guard for commands that combine recognized PowerShell cmdlets with unquoted `&&` or `||`.
+- The shell tool now returns a clear Windows shell policy error instead of executing the incompatible command.
+- Updated the system prompt to prefer separate tool calls or `Set-Location path; Remove-Item ...` with explicit checks.
+- Added regression coverage for `cd ... && Remove-Item ...`.
+
+Checks:
+- `npm test -- src/tools/tools.test.ts`: passed, 31 tests.
+- `npm test -- src/core/agent-loop.test.ts`: passed, 18 tests.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 146 tests.
+- `npm pack --dry-run`: passed, package size 207.4 kB, unpacked size 973.1 kB, 221 files.
+
+Next:
+- Commit the pre-exam guard if approved, then run the next large-project exam.
+
 ### 2026-05-25: Hotfix PowerShell Cmdlet Execution
 
 Status: `DONE`

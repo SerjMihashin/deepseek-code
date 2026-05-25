@@ -377,6 +377,39 @@ Checks:
 Next:
 - Commit the hotfix.
 
+### 2026-05-25: Final Report Quality Gate and Browser Proof Contract
+
+Status: `DONE`
+
+Reason:
+- The latest AgentOS exam produced a visibly weaker UI while the final report still claimed the project was complete.
+- Execution Summary showed many failed tool calls and failed Chrome calls, but the user-facing report was too optimistic and hard to parse.
+- For UI projects, HTTP 200/build success is not enough; the agent must prove rendered quality with browser evidence.
+
+Done:
+- Added a mandatory final-report quality verdict: `Passed`, `Partial`, or `Failed`.
+- The system prompt now forbids `Passed` when failed tool calls, failed Chrome calls, budget stops, or skipped required checks are present unless every failure is explicitly non-critical and the required check later succeeded.
+- Added a required `Browser proof` block for web/UI work: URL, page title, console error count, screenshot/rendered-state verdict, and Chrome pass/fail state.
+- Added visual acceptance policy: blank, sparse, sidebar-only, broken, or below-quality UI must be reported as `Partial`/`Failed`, not complete.
+- Execution Summary now includes a concise `Quality gate` line before the tool breakdown.
+- Failed tool detail output was reduced from first 5 to first 3 entries to make the summary easier to read while preserving the total failed-call count.
+- Added regression tests for the prompt contract, compact failed-call summary, and Chrome failure highlighting.
+
+Checks:
+- `npm test -- src/core/metrics.test.ts`: passed, 6 tests.
+- `npm test -- src/core/agent-loop.test.ts`: passed, 22 tests.
+- `npx eslint src/core/agent-loop.ts src/core/metrics.ts src/core/agent-loop.test.ts src/core/metrics.test.ts`: passed.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed.
+- `npm test`: passed, 24 files / 156 tests.
+- `npm pack --dry-run`: passed, package size 213.2 kB, unpacked size 996.9 kB, 221 files.
+- Temp-file check: no known smoke/test junk files found.
+
+Next:
+- Commit the iteration.
+- Run the next AgentOS exam from a clean intended workspace.
+
 ### 2026-05-25: Pre-Exam Windows Shell Syntax Guard
 
 Status: `DONE`

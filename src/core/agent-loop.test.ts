@@ -81,6 +81,18 @@ describe('AgentLoop', () => {
     expect(prompt).toContain('gen_helper.py')
   })
 
+  it('should include final report quality gate and browser proof rules', () => {
+    const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
+
+    expect(prompt).toContain('Final report must start with a quality verdict')
+    expect(prompt).toContain('Passed')
+    expect(prompt).toContain('Partial')
+    expect(prompt).toContain('Browser proof')
+    expect(prompt).toContain('screenshot/rendered-state verdict')
+    expect(prompt).toContain('visual acceptance is required')
+    expect(prompt).toContain('sidebar-only')
+  })
+
   it('should create an instance with default options', () => {
     const agent = new AgentLoop(TEST_CONFIG)
     expect(agent).toBeInstanceOf(AgentLoop)

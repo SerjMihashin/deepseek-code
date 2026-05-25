@@ -311,15 +311,25 @@ export class MetricsCollector {
         if (call.success) { g.success++ } else { g.fail++ }
         groups.set(call.tool, g)
       }
+      const failedCalls = this.toolCallLog.filter(c => !c.success)
+      const chromeFailures = failedCalls.filter(c => c.tool === 'chrome').length
+      if (failedCalls.length > 0) {
+        summary += 'Quality gate: attention required'
+        summary += ` (${failedCalls.length} failed tool call${failedCalls.length === 1 ? '' : 's'}`
+        if (chromeFailures > 0) summary += `, ${chromeFailures} chrome failure${chromeFailures === 1 ? '' : 's'}`
+        summary += ')\n'
+        summary += '  Final report must be Partial/Failed unless failures were non-critical and retried successfully.\n'
+      } else {
+        summary += 'Quality gate: no failed tool calls recorded\n'
+      }
       summary += `Tools: ${Array.from(groups.entries()).map(([name, g]) =>
         `${name} x${g.count}${g.fail > 0 ? ` (${g.success} ok ${g.fail} failed)` : ''}`
       ).join(', ')}\n`
 
-      // Failed tool calls detail block (max 5 entries)
-      const failedCalls = this.toolCallLog.filter(c => !c.success)
+      // Failed tool calls detail block (max 3 entries to keep the visible summary readable)
       if (failedCalls.length > 0) {
-        summary += '\nFailed tool calls:\n'
-        for (const fc of failedCalls.slice(0, 5)) {
+        summary += '\nFailed tool calls (first 3):\n'
+        for (const fc of failedCalls.slice(0, 3)) {
           const label = fc.label
             ? (fc.label.length > 120 ? fc.label.slice(0, 117) + '...' : fc.label)
             : ''
@@ -328,8 +338,8 @@ export class MetricsCollector {
             : 'failed'
           summary += `- ${fc.tool}${label ? `: ${label}` : ''} -> ${error}\n`
         }
-        if (failedCalls.length > 5) {
-          summary += `  ... and ${failedCalls.length - 5} more failed call(s)\n`
+        if (failedCalls.length > 3) {
+          summary += `  ... and ${failedCalls.length - 3} more failed call(s)\n`
         }
       }
     }

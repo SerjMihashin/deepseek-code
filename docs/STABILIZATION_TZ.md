@@ -236,6 +236,25 @@ Acceptance:
 
 Не делаем в `0.4.4`: реализацию desktop automation, глобальный контроль мыши/клавиатуры, работу с приложениями без явного разрешения пользователя.
 
+### Iteration 7.3: Final Report Quality Gate and Browser Proof
+
+Status: `DONE`
+
+Goal: fix the exam pattern where the agent says "project is complete" even when the UI is visually weak and Execution Summary contains many failed tool/browser calls.
+
+Work:
+- Require final report verdict: `Passed`, `Partial`, or `Failed`.
+- Forbid `Passed` when failed tool calls, failed Chrome calls, budget stops, or skipped required acceptance checks exist, unless all failures are explicitly non-critical and the required check later succeeded.
+- Require `Browser proof` for web/UI tasks: tested URL, title, console error count, screenshot/rendered-state verdict, and Chrome pass/fail state.
+- Require visual acceptance for UI/product tasks. Blank, sparse, sidebar-only, broken, or below-quality screenshots must be reported as `Partial`/`Failed`.
+- Make Execution Summary easier to read by adding a concise quality gate and limiting visible failed-call examples.
+
+Acceptance:
+- System prompt contains final-report quality gate and browser-proof rules.
+- Execution Summary highlights failed tool/browser calls with a concise quality gate.
+- Failed-call detail remains available but does not overwhelm the user.
+- Targeted tests, changed-file ESLint, lint, typecheck, build, full tests, and pack dry-run passed.
+
 ### Iteration 7.2: Workspace Boundary and Shell Bypass Guard
 
 Статус: `DONE`

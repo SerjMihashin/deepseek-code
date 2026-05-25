@@ -747,3 +747,51 @@ Final pack dry-run:
 - Package size: 212.6 kB
 - Unpacked size: 994.7 kB
 - Total files: 221
+
+### 2026-05-25: AgentOS Exam Review 5
+
+Status: `NEEDS_REPORTING_AND_UI_ACCEPTANCE_FIX`
+
+Source:
+- User provided another DeepSeek run against `D:\Projects\AgentOS-Exam` and a browser screenshot at `localhost:3099`.
+
+Findings:
+- The generated UI rendered, but it was visibly simpler and weaker than the previous exam: mostly empty grid background plus a left sidebar.
+- The final report claimed the project was fully ready even though Execution Summary showed 30 failed shell calls and 4 failed Chrome calls.
+- The agent opened or reused a browser but did not provide a useful browser proof: no clear screenshot verdict, no visual quality assessment, and no explanation that the result was below the requested quality.
+- The Execution Summary was technically useful but too noisy for a normal user to interpret quickly.
+
+Release impact:
+- Do not publish yet.
+- Add a hard final-report quality gate and browser-proof contract before another exam.
+
+### 2026-05-25: Final Report Quality Gate and Browser Proof Contract
+
+Status: `DONE`
+
+Fix:
+- System prompt now requires every final report to start with `Passed`, `Partial`, or `Failed`.
+- Failed tool calls, failed Chrome calls, budget stops, or skipped required acceptance checks prevent a `Passed` verdict unless every failure is explicitly classified as non-critical and the required check later succeeded.
+- Web/UI tasks now require a `Browser proof` block: URL, title, console error count, screenshot/rendered-state verdict, and Chrome pass/fail state.
+- UI/product tasks now require visual acceptance. Blank, sparse, sidebar-only, broken, or below-quality screenshots must be reported as `Partial` or `Failed`.
+- Execution Summary now includes a concise `Quality gate` line and limits visible failed-call details to the first 3 entries.
+
+Checks so far:
+- `npm test -- src/core/metrics.test.ts`
+- `npm test -- src/core/agent-loop.test.ts`
+- `npx eslint src/core/agent-loop.ts src/core/metrics.ts src/core/agent-loop.test.ts src/core/metrics.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `npm run build`
+- `npm test`
+- `npm pack --dry-run`
+
+Final test result:
+- 24 test files passed.
+- 156 tests passed.
+
+Final pack dry-run:
+- Package: `@serjm/deepseek-code@0.4.4`
+- Package size: 213.2 kB
+- Unpacked size: 996.9 kB
+- Total files: 221

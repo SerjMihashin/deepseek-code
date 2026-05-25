@@ -49,7 +49,9 @@ describe('MetricsCollector', () => {
 
     const summary = metrics.getSummary('deepseek-chat')
 
-    expect(summary).toContain('Failed tool calls:')
+    expect(summary).toContain('Quality gate: attention required (2 failed tool calls)')
+    expect(summary).toContain('Final report must be Partial/Failed')
+    expect(summary).toContain('Failed tool calls (first 3):')
     expect(summary).toContain('run_shell_command')
     expect(summary).toContain('npx vitest')
     expect(summary).toContain('Command failed with exit code 1')
@@ -57,13 +59,13 @@ describe('MetricsCollector', () => {
     expect(summary).toContain('failed')
     // read_file appears in the Tools summary but not in Failed tool calls block
     // The block starts after "Failed tool calls:" — check read_file isn't listed as failed
-    const failedIdx = summary.indexOf('Failed tool calls:')
+    const failedIdx = summary.indexOf('Failed tool calls')
     const timeIdx = summary.indexOf('Time:')
     const failedBlock = failedIdx >= 0 ? summary.slice(failedIdx, timeIdx >= 0 ? timeIdx : undefined) : ''
     expect(failedBlock).not.toContain('read_file')
   })
 
-  it('limits failed tool calls block to max 5 entries', () => {
+  it('limits failed tool calls block to max 3 entries', () => {
     const metrics = new MetricsCollector()
 
     for (let i = 0; i < 7; i++) {
@@ -73,12 +75,13 @@ describe('MetricsCollector', () => {
 
     const summary = metrics.getSummary('deepseek-chat')
 
-    // Should contain first 5
-    for (let i = 0; i < 5; i++) {
+    // Should contain first 3
+    for (let i = 0; i < 3; i++) {
       expect(summary).toContain(`cmd_${i}`)
     }
+    expect(summary).not.toContain('cmd_3')
     // Should mention remaining
-    expect(summary).toContain('2 more failed call(s)')
+    expect(summary).toContain('4 more failed call(s)')
   })
 
   it('omits Failed tool calls block when no failures', () => {
@@ -89,5 +92,19 @@ describe('MetricsCollector', () => {
 
     const summary = metrics.getSummary('deepseek-chat')
     expect(summary).not.toContain('Failed tool calls:')
+    expect(summary).toContain('Quality gate: no failed tool calls recorded')
+  })
+
+  it('highlights chrome failures in the quality gate', () => {
+    const metrics = new MetricsCollector()
+
+    metrics.recordToolCallStart('chrome')
+    metrics.recordToolCallEnd('chrome', false, 'open http://localhost:3000', 'timeout')
+    metrics.recordToolCallStart('run_shell_command')
+    metrics.recordToolCallEnd('run_shell_command', false, 'npm run build', 'Command failed')
+
+    const summary = metrics.getSummary('deepseek-chat')
+
+    expect(summary).toContain('Quality gate: attention required (2 failed tool calls, 1 chrome failure)')
   })
 })

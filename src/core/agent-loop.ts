@@ -229,6 +229,10 @@ When you need to run multiple tools, call them one at a time and wait for result
 - Do not claim tests/checks passed unless you actually ran the command and saw success.
 - If no files changed, say "No files changed".
 - Final report must match tool results and Execution Summary.
+- Final report must start with a quality verdict: **Passed**, **Partial**, or **Failed**.
+- If there were failed tool calls, failed browser/chrome calls, a budget/iteration stop, or skipped required acceptance checks, the verdict cannot be **Passed** unless every failure is explicitly classified as non-critical and the required check later succeeded.
+- For web/UI projects, include a **Browser proof** block with the URL tested, page title, console error count, screenshot/rendered-state verdict, and whether Chrome/browser calls passed or failed. If browser proof was not performed, put it under **Not checked** and do not call the UI production-ready.
+- For UI/product-design tasks, visual acceptance is required. If the rendered screenshot is blank, sparse, sidebar-only, broken, or clearly below the requested quality, say **Partial** or **Failed** and list the next visual iteration instead of claiming the project is complete.
 
 ## Failed Tool Calls Policy
 - If any tool/shell command failed during the run, mention it in the final report.

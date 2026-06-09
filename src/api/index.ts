@@ -52,7 +52,7 @@ export interface ToolCallMessage {
   tool_calls: NonNullable<ChatMessage['tool_calls']>;
 }
 
-// ─── Retry helpers ───────────────────────────────────────────────────────────
+// Retry helpers
 
 const MAX_RETRY_ATTEMPTS = 3
 const STREAM_CHUNK_TIMEOUT_MS = 60_000
@@ -341,7 +341,43 @@ export class DeepSeekAPI {
 // ─── Helper functions ────────────────────────────────────────────────────────
 
 /**
+ * Convert a string that contains data: URLs into ContentBlock[] for vision models.
+ * If no data: URLs found, returns the original string.
+ * Used to upgrade read_file output (images/PDF as base64) into multimodal input.
+ */
+export function dataUrlsToContentBlocks (text: string): string | ContentBlock[] {
+  const DATA_URL_RE = /!?\[.*?\]\(data:([^;]+);base64,([^)]+)\)/g
+  const blocks: ContentBlock[] = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+
+  while ((match = DATA_URL_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      blocks.push({ type: 'text', text: text.slice(lastIndex, match.index).trim() || '\n' })
+    }
+    const mime = match[1]
+    const b64 = match[2]
+    blocks.push({ type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (blocks.length === 0) return text
+
+  if (lastIndex < text.length) {
+    const remaining = text.slice(lastIndex).trim()
+    if (remaining) blocks.push({ type: 'text', text: remaining })
+  }
+
+  if (!blocks.some(b => b.type === 'text')) {
+    blocks.unshift({ type: 'text', text: 'Analyze the following image(s):' })
+  }
+
+  return blocks
+}
+
+/**
  * Build OpenAI-compatible message array from our internal ChatMessage format.
+ * Handles both string content and ContentBlock[] (for vision/multimodal models).
  */
 function buildMessages (messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMessageParam[] {
   return messages.map(m => {
@@ -367,9 +403,15 @@ function buildMessages (messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMess
       } satisfies OpenAI.Chat.ChatCompletionAssistantMessageParam
     }
     // Content can be string or ContentBlock[] (for vision/multimodal messages)
+    if (typeof m.content === 'string') {
+      return {
+        role: m.role as 'system' | 'user' | 'assistant',
+        content: m.content,
+      } as OpenAI.Chat.ChatCompletionUserMessageParam
+    }
     return {
       role: m.role as 'system' | 'user' | 'assistant',
-      content: m.content as unknown as string,
+      content: m.content as unknown as OpenAI.Chat.ChatCompletionContentPart[],
     } as OpenAI.Chat.ChatCompletionUserMessageParam
   })
 }

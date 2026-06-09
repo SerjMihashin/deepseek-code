@@ -39,6 +39,52 @@ async function readAsNotebook (filePath: string): Promise<ToolResult> {
   return { success: true, output: cells.join('\n\n') }
 }
 
+async function readAsPdf (filePath: string): Promise<ToolResult> {
+  const buffer = await readFile(filePath) // binary
+  const mime = MIME_TYPES['.pdf']
+  const base64 = buffer.toString('base64')
+  const dataUrl = `data:${mime};base64,${base64}`
+
+  // Naive text extraction: collect printable ASCII runs from the binary content
+  const extracted = extractPrintableRuns(buffer)
+  if (extracted.length > 0) {
+    const text = extracted.join('\n')
+    return {
+      success: true,
+      output: `[PDF: ${filePath}](${dataUrl})\nSize: ${buffer.length} bytes\n\nExtracted text:\n${text}`,
+    }
+  }
+
+  // Fallback: base64 data URL only
+  return {
+    success: true,
+    output: `[PDF: ${filePath}](${dataUrl})\nSize: ${buffer.length} bytes, Type: ${mime}`,
+  }
+}
+
+/** Collect consecutive printable ASCII runs (length >= 4) from a binary buffer */
+function extractPrintableRuns (buffer: Buffer): string[] {
+  const MIN_RUN = 4
+  const chunks: string[] = []
+  let run = ''
+  for (let i = 0; i < buffer.length; i++) {
+    const byte = buffer[i]
+    // Printable ASCII: space (32) through tilde (126), plus tab (9), newline (10), carriage return (13)
+    if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
+      run += String.fromCharCode(byte)
+    } else {
+      if (run.length >= MIN_RUN) {
+        chunks.push(run)
+      }
+      run = ''
+    }
+  }
+  if (run.length >= MIN_RUN) {
+    chunks.push(run)
+  }
+  return chunks
+}
+
 export const readTool: Tool = {
   name: 'read_file',
   description: 'Read the contents of a file. Supports text files, images (PNG, JPG, GIF, WEBP, SVG, BMP), PDF files, and Jupyter notebooks.',
@@ -77,6 +123,11 @@ export const readTool: Tool = {
       // Jupyter Notebook
       if (ext === '.ipynb') {
         return readAsNotebook(filePath)
+      }
+
+      // PDF — binary read + naive text extraction + base64 data URL
+      if (ext === '.pdf') {
+        return readAsPdf(filePath)
       }
 
       // Default: text file with optional offset/limit

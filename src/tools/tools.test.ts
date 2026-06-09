@@ -136,6 +136,50 @@ describe('read_file tool', () => {
     expect(result.success).toBe(true)
     expect(result.output).toContain('no code or markdown cells')
   })
+
+  it('should read a PDF and extract text', async () => {
+    // Minimal PDF with embedded text
+    const pdf = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>endobj
+4 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj
+5 0 obj<</Length 44>>stream
+BT /F1 12 Tf 100 700 Td (Hello PDF World) Tj ET
+endstream endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000266 00000 n
+0000000340 00000 n
+trailer<</Size 6/Root 1 0 R>>
+startxref
+446
+%%EOF`
+    const filePath = join(tmpDir, 'doc.pdf')
+    writeFileSync(filePath, pdf, 'utf-8')
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('[PDF:')
+    expect(result.output).toContain('data:application/pdf;base64,')
+    expect(result.output).toContain('Extracted text:')
+    expect(result.output).toContain('Hello PDF World')
+  })
+
+  it('should read a PDF with no extractable text', async () => {
+    // PDF with only binary stream content (no readable text)
+    const buf = Buffer.from('%PDF-1.4\n%\xFF\xFE\x00\x01\x02\x03\x04\x05\x06\x07')
+    const filePath = join(tmpDir, 'binary.pdf')
+    writeFileSync(filePath, buf)
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('[PDF:')
+    expect(result.output).toContain('data:application/pdf;base64,')
+    // With real binary PDF streams the text extraction is minimal; always has data URL
+  })
 })
 
 describe('write_file tool', () => {

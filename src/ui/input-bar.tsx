@@ -421,7 +421,8 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
       if (!isSetupMode && normalizedInput.length > BIG_PASTE_THRESHOLD) {
         setPendingPaste(normalizedInput)
         return
-      } const newInput = currentInput.slice(0, currentCursor) + normalizedInput + currentInput.slice(currentCursor)
+      }
+      const newInput = currentInput.slice(0, currentCursor) + normalizedInput + currentInput.slice(currentCursor)
       setInput(newInput)
       setCursorIndex(currentCursor + normalizedInput.length)
       setSuggestionIndex(-1)
@@ -574,7 +575,8 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
             <Text color={colors.textMuted}>Enter — вставить  Esc — отмена</Text>
           </Box>
         </Box>
-      )}      {/* Empty input hint */}
+      )}
+      {/* Empty input hint */}
       {emptyHint && !input && (
         <Box marginLeft={1} marginBottom={0}>
           <Text dimColor>Введите сообщение или /help для списка команд</Text>

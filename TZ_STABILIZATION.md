@@ -79,7 +79,7 @@ npm run dev
 
 ## P0.0 — Token Accounting
 
-Статус: `IN_PROGRESS`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -191,7 +191,7 @@ large task:
 
 ## P0.2 — Prompt Delivery Diagnostics
 
-Статус: `IN_PROGRESS`
+Статус: `VERIFIED`
 
 ### Проблема
 
@@ -491,7 +491,7 @@ Delete    → ABCE
 
 ## P1.1 — Проверочный Pipeline
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -514,7 +514,7 @@ npm test
 
 ## P1.2 — Чистые документы и Roadmap
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -785,7 +785,7 @@ Respond in Russian unless the user explicitly asks otherwise.
 
 ## P3.4 — Slash Suggestions
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -966,7 +966,7 @@ Ctrl+C ещё раз — выйти
 
 ## P6.2 — Execution Summary
 
-Статус: `IN_PROGRESS`
+Статус: `VERIFIED`
 
 ### Требования
 

@@ -1,20 +1,23 @@
 # Changelog
 
-## 0.4.5 — Multimodal & Pipeline
+## 0.4.5 — Multimodal, Pipeline & UX
 
 ### Added
 - `read_file` now supports images (PNG, JPG, GIF, WEBP, SVG, BMP) — reads as binary, encodes to base64 data URL.
 - `read_file` now supports Jupyter notebooks (`.ipynb`) — parses JSON, extracts code and markdown cells.
 - `read_file` now supports PDF files — naive text extraction + base64 data URL as fallback.
-- `dataUrlsToContentBlocks()` utility in API layer converts data: URLs to `ContentBlock[]` for vision models.
-- Added `deepseek-vl2` (vision-language) model to `DEEPSEEK_MODELS`.
-- Added `npm run check` pipeline: lint → typecheck → build → test in one command.
+- `dataUrlsToContentBlocks()` utility in API layer converts data: URLs to `ContentBlock[]` for multimodal messages.
+- `npm run check` pipeline: lint → typecheck → build → test in one command.
+- **Big Paste Preview** — dialog shown when pasting >500 chars, displaying char/line count with Enter to confirm or Esc to cancel.
+- **Follow-up Queue Indicator** — StatusBar shows `[F:1]` badge when follow-up messages are queued during agent run, cleared on new message send.
 
 ### Changed
 - `buildMessages()` in API layer now properly passes `ContentBlock[]` for multimodal messages (no longer casts to string).
+- **Removed `deepseek-vl2`** — only `deepseek-v4-pro` and `deepseek-v4-flash` remain; images pass as base64 data URLs in text.
 
 ### Fixed
 - Default model set to `deepseek-v4-pro`; `DEEPSEEK_MODELS` updated to V4-Flash / V4-Pro.
+- Removed false vision-model warning on image paste — DeepSeek V4 models receive images as text-embedded data URLs.
 
 ## 0.4.4 — TUI Stability & Release Candidate
 

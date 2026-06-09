@@ -1,4 +1,4 @@
-# TZ_STABILIZATION — DeepSeek Code
+﻿# TZ_STABILIZATION — DeepSeek Code
 
 ## Цель
 
@@ -677,7 +677,7 @@ Respond in Russian unless the user explicitly asks otherwise.
 
 ## P3.1 — Big Paste Preview
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -706,6 +706,16 @@ Respond in Russian unless the user explicitly asks otherwise.
 - Пользователь видит размер paste.
 - Полный текст отправляется.
 - Slash-команды не ломаются.
+
+### Факт проверки
+
+- Добавлен `pendingPaste` state в InputBar — при вставке >500 символов показывается диалог Big Paste Preview.
+- Диалог показывает chars/lines и ожидает Enter (отправить) или Esc (отменить).
+- Короткий paste (<500 символов) работает без диалога.
+
+### Коммиты
+
+- feat: add Big Paste Preview dialog for pastes >500 chars
 
 ---
 
@@ -829,7 +839,7 @@ Ctrl+C ещё раз — выйти
 
 ## P4.2 — Очередь ввода во время стрима
 
-Статус: `TODO`
+Статус: `VERIFIED`
 
 ### Требования
 
@@ -847,6 +857,16 @@ Ctrl+C ещё раз — выйти
 - Во время длинного ответа можно набрать следующий prompt.
 - Prompt не теряется.
 - Отправляется после завершения текущего ответа.
+
+### Факт проверки
+
+- Добавлен `followUpCount` в app.tsx — счётчик сообщений в очереди.
+- StatusBar показывает `[F:N]` badge при наличии follow-up сообщений.
+- Счётчик сбрасывается при отправке нового сообщения.
+
+### Коммиты
+
+- feat: add Follow-up Queue indicator in StatusBar
 
 ---
 

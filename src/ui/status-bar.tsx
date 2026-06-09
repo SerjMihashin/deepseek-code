@@ -10,6 +10,7 @@ interface StatusBarProps {
   status: string;
   messageCount: number;
   isProcessing?: boolean;
+  isPaused?: boolean;
   scrollMode?: 'follow' | 'paused';
   scrollOffset?: number;
   hasNewMessages?: boolean;
@@ -47,7 +48,7 @@ export function getScrollStatusLabel (
   return 'VIEW:FOLLOW PageUp'
 }
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model, followUpCount }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, isPaused, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model, followUpCount }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -103,7 +104,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMod
               <Text color={pulseColors[pulseIdx % pulseColors.length]} bold>{i18n.t('thinking')}</Text>
             </Text>
             )
-          : <Text color={colors.textMuted}>{status}</Text>}
+          : <Text color={isPaused ? colors.warning : colors.textMuted}>{isPaused ? '[PAUSED] ' + status : status}</Text>}
       </Box>
       <Box>
         <Text color={scrollMode === 'paused' || scrollOffset > 0 ? colors.warning : colors.textMuted}>

@@ -92,6 +92,7 @@ export function App ({ config, options }: AppProps) {
   )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isPaused, setIsPaused] = useState(false)
   const [statusText, setStatusText] = useState(i18n.t('ready'))
   const [localApiKey, setLocalApiKey] = useState(config.apiKey || '')
   const agentLoopRef = useRef<AgentLoop | null>(null)
@@ -396,6 +397,7 @@ export function App ({ config, options }: AppProps) {
       return
     }
 
+    setIsPaused(false)
     if (input.startsWith('/')) {
       try {
         const handled = await handleSlashCommand(input)
@@ -664,12 +666,13 @@ export function App ({ config, options }: AppProps) {
     if (key.ctrl && _input === 'c') {
       if (isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort()
-        setStatusText(i18n.t('cancelled'))
+        setStatusText(i18n.t('paused'))
         if (pendingApprovalResolveRef.current) {
           pendingApprovalResolveRef.current(false)
           pendingApprovalResolveRef.current = null
         }
         setPendingApproval(null)
+        setIsPaused(true)
         return
       }
       // When not processing: set flag so SIGINT handler can exit immediately
@@ -853,6 +856,12 @@ export function App ({ config, options }: AppProps) {
           }
           return
         }
+        return
+      }
+      // Esc when paused: dismiss pause, return to ready
+      if (key.escape && isPaused && !pendingApproval && !pendingClear && !themePicker && !modelPicker && !langPicker) {
+        setIsPaused(false)
+        setStatusText(i18n.t('ready'))
         return
       }
       // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
@@ -1163,6 +1172,7 @@ export function App ({ config, options }: AppProps) {
         status={statusText}
         messageCount={messages.length}
         isProcessing={isProcessing}
+        isPaused={isPaused}
         scrollMode={scrollMode}
         scrollOffset={chatScrollOffset}
         hasNewMessages={newMessagesWhilePaused}

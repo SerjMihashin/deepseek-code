@@ -95,6 +95,11 @@ interface LocaleStrings {
 
   // Exit hint
   ctrlCHint: string;
+
+  // Pause state
+  agentPaused: string;
+  agentPausedHint: string;
+  paused: string;
 }
 
 const EN: LocaleStrings = {
@@ -180,6 +185,10 @@ const EN: LocaleStrings = {
   apiErrorTimeout: 'Request timed out. Check your internet connection or API address.',
 
   ctrlCHint: 'Press Ctrl+C again to exit',
+
+  agentPaused: '[PAUSED] Agent stopped. You can add a message.',
+  agentPausedHint: 'Enter — send continuation | Esc — return | Ctrl+C again — exit',
+  paused: 'Paused',
 }
 
 const RU: LocaleStrings = {
@@ -265,6 +274,10 @@ const RU: LocaleStrings = {
   apiErrorTimeout: 'Таймаут запроса. Проверьте подключение к интернету или адрес API.',
 
   ctrlCHint: 'Нажмите Ctrl+C ещё раз для выхода',
+
+  agentPaused: '[ПАУЗА] Агент остановлен. Можно дописать сообщение.',
+  agentPausedHint: 'Enter — отправить продолжение | Esc — вернуться | Ctrl+C ещё раз — выйти',
+  paused: 'Пауза',
 }
 
 const ZH: LocaleStrings = {
@@ -350,6 +363,10 @@ const ZH: LocaleStrings = {
   apiErrorTimeout: '请求超时，请检查网络或 API 地址。',
 
   ctrlCHint: '再次按 Ctrl+C 退出',
+
+  agentPaused: '[暂停] 代理已停止。您可以添加消息。',
+  agentPausedHint: 'Enter — 发送继续 | Esc — 返回 | Ctrl+C — 退出',
+  paused: '已暂停',
 }
 
 const LOCALES: Record<Locale, LocaleStrings> = {

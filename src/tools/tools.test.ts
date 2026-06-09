@@ -73,6 +73,69 @@ describe('read_file tool', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('outside the workspace')
   })
+
+  // ── Image & Jupyter support ──────────────────────────────────────────
+
+  it('should read a PNG image as base64 data URL', async () => {
+    // Minimal valid 1x1 pink PNG
+    const pngBuf = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
+      'base64'
+    )
+    const filePath = join(tmpDir, 'image.png')
+    writeFileSync(filePath, pngBuf)
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('[Image:')
+    expect(result.output).toContain('data:image/png;base64,')
+    expect(result.output).toContain('Size:')
+    expect(result.output).toContain('Type: image/png')
+  })
+
+  it('should read a JPG image as base64 data URL', async () => {
+    // Minimal valid JPEG (1x1)
+    const jpgBuf = Buffer.from(
+      '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsM',
+      'base64'
+    )
+    const filePath = join(tmpDir, 'photo.jpg')
+    writeFileSync(filePath, jpgBuf)
+    const result = await readTool.execute({ file_path: filePath })
+    // May fail validation but should still be detected as image
+    expect(result.output).toContain('data:image/jpeg;base64,')
+  })
+
+  it('should read a Jupyter notebook', async () => {
+    const notebook = {
+      cells: [
+        { cell_type: 'markdown', source: ['# Title\n', 'Some description'] },
+        { cell_type: 'code', source: ['print("hello")\n', '# comment'] },
+        { cell_type: 'raw', source: ['raw content'] },
+      ],
+      metadata: {},
+      nbformat: 4,
+      nbformat_minor: 5,
+    }
+    const filePath = join(tmpDir, 'notebook.ipynb')
+    writeFileSync(filePath, JSON.stringify(notebook), 'utf-8')
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('### [markdown]')
+    expect(result.output).toContain('# Title')
+    expect(result.output).toContain('### [code]')
+    expect(result.output).toContain('print("hello")')
+    // raw cell should be filtered out
+    expect(result.output).not.toContain('raw')
+  })
+
+  it('should handle empty notebook', async () => {
+    const notebook = { cells: [], metadata: {}, nbformat: 4, nbformat_minor: 5 }
+    const filePath = join(tmpDir, 'empty.ipynb')
+    writeFileSync(filePath, JSON.stringify(notebook), 'utf-8')
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('no code or markdown cells')
+  })
 })
 
 describe('write_file tool', () => {

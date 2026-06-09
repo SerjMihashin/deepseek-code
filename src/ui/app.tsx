@@ -123,6 +123,7 @@ export function App ({ config, options }: AppProps) {
   const [totalTokens, setTotalTokens] = useState(0)
   const [estimatedCost, setEstimatedCost] = useState(0)
   const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
+  const [followUpCount, setFollowUpCount] = useState(0)
   const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
   const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
   const [langPicker, setLangPicker] = useState<{ selectedIndex: number } | null>(null)
@@ -371,7 +372,8 @@ export function App ({ config, options }: AppProps) {
       // Live follow-up: inject into current active AgentLoop
       if (agentLoopRef.current) {
         agentLoopRef.current.addUserFollowUp(input.trim())
-        addServiceNotice('Follow-up added. The agent will continue after the current step.')
+        setFollowUpCount(c => c + 1)
+        addServiceNotice('[queue] Follow-up #' + (followUpCount + 1) + ' added. Agent will continue after current step.')
       } else {
         addServiceNotice('Agent is not active. Send it as a new message.')
       }
@@ -1154,17 +1156,7 @@ export function App ({ config, options }: AppProps) {
         isSetupMode={setupStep !== 'done'}
         blockInput={setupStep === 'done' && (pendingApproval !== null || pendingClear)}
         emptyHint={emptyInputHint}
-        onImagePaste={(base64, mimeType) => {
-          const model = config.model ?? ''
-          if (!model.includes('vl') && !model.includes('vision')) {
-            setMessages(prev => [...prev, {
-              role: 'assistant',
-              content: `[warn] Вставка изображения требует модель с поддержкой vision.\nТекущая модель: ${model || 'неизвестно'}\nИспользуйте модель с "vl" или "vision" в названии.`,
-            }])
-            return
-          }
-          setPendingImage({ base64, mimeType })
-        }}
+        onImagePaste={(base64, mimeType) => setPendingImage({ base64, mimeType })}
       />
       <StatusBar
         mode={approvalMode}
@@ -1179,6 +1171,7 @@ export function App ({ config, options }: AppProps) {
         totalTokens={totalTokens}
         estimatedCost={estimatedCost}
         model={config.model}
+        followUpCount={followUpCount}
       />
     </Box>
   )

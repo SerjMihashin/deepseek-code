@@ -28,6 +28,9 @@ const MAX_VISIBLE_ROWS = 5
 /** Max visible suggestions in the dropdown before scrolling */
 const SUGGESTIONS_MAX_VISIBLE = 8
 
+/** Large paste threshold */
+const BIG_PASTE_THRESHOLD = 500
+
 // ── Visual line helpers ──────────────────────────────────────────────────────
 
 interface VisualLine {
@@ -122,6 +125,7 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const [suggestionsHidden, setSuggestionsHidden] = useState(false)
   const [cursorVisible, setCursorVisible] = useState(true)
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
+  const [pendingPaste, setPendingPaste] = useState<string | null>(null)
   const [inputScrollOffset, setInputScrollOffset] = useState(0)
 
   // eslint-disable-next-line camelcase
@@ -241,6 +245,22 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     if (blockInput) return
 
     // ── Setup mode ────────────────────────────────────────────────────────
+
+    // Big paste preview dialog
+    if (pendingPaste) {
+      if (key.return) {
+        const cur = inputRef.current
+        const ci = cursorIndexRef.current
+        const ni = cur.slice(0, ci) + pendingPaste + cur.slice(ci)
+        setInput(ni)
+        setCursorIndex(ci + pendingPaste.length)
+        setPendingPaste(null)
+        setSuggestionIndex(-1)
+      } else if (key.escape) {
+        setPendingPaste(null)
+      }
+      return
+    }
     if (isSetupMode) {
       if (key.return && input.trim()) {
         onSubmit(input)
@@ -396,7 +416,12 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     if (_input && !key.ctrl && !key.meta && !key.return && !key.tab && !key.escape && !key.upArrow && !key.downArrow && !key.leftArrow && !key.rightArrow && !key.backspace && !key.delete) {
       // Normalize Windows line endings (\r\n -> \n, \r -> \n) before storing
       const normalizedInput = _input.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-      const newInput = currentInput.slice(0, currentCursor) + normalizedInput + currentInput.slice(currentCursor)
+
+      // Big paste preview: intercept large text pastes
+      if (!isSetupMode && normalizedInput.length > BIG_PASTE_THRESHOLD) {
+        setPendingPaste(normalizedInput)
+        return
+      } const newInput = currentInput.slice(0, currentCursor) + normalizedInput + currentInput.slice(currentCursor)
       setInput(newInput)
       setCursorIndex(currentCursor + normalizedInput.length)
       setSuggestionIndex(-1)
@@ -536,7 +561,20 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
           )}
         </Box>
       )}
-      {/* Empty input hint */}
+      {/* Big paste preview */}
+      {pendingPaste && (
+        <Box flexDirection='column' marginLeft={2} marginBottom={1} borderStyle='round' borderColor={colors.warning}>
+          <Box>
+            <Text bold color={colors.warning}>Крупная вставка · {pendingPaste.length} символов · {pendingPaste.split(/\r?\n/).length} строк</Text>
+          </Box>
+          <Box marginLeft={1}>
+            <Text color={colors.textMuted}>{pendingPaste.slice(0, 300)}{pendingPaste.length > 300 ? '…' : ''}</Text>
+          </Box>
+          <Box marginLeft={1} marginTop={1}>
+            <Text color={colors.textMuted}>Enter — вставить  Esc — отмена</Text>
+          </Box>
+        </Box>
+      )}      {/* Empty input hint */}
       {emptyHint && !input && (
         <Box marginLeft={1} marginBottom={0}>
           <Text dimColor>Введите сообщение или /help для списка команд</Text>

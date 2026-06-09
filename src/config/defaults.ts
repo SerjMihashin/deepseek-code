@@ -74,9 +74,4 @@ export const DEEPSEEK_MODELS: ModelInfo[] = [
     label: 'DeepSeek V4-Pro',
     description: 'Full power — best for complex coding, deep reasoning, and production tasks',
   },
-  {
-    id: 'deepseek-vl2',
-    label: 'DeepSeek VL2',
-    description: 'Vision-language model — supports image understanding and multimodal input',
-  },
 ]

@@ -18,6 +18,7 @@ interface StatusBarProps {
   totalTokens?: number;
   estimatedCost?: number;
   model?: string;
+  followUpCount?: number;
 }
 
 function tokAbbr (n: number): string {
@@ -46,7 +47,7 @@ export function getScrollStatusLabel (
   return 'VIEW:FOLLOW PageUp'
 }
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model, followUpCount }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -131,6 +132,9 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMod
           </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>
+        {followUpCount !== undefined && followUpCount > 0 && (
+          <Text color={colors.warning}> queue: {followUpCount}</Text>
+        )}
       </Box>
     </Box>
   )

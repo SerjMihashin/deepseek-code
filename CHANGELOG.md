@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.5 — Multimodal & Pipeline
+
+### Added
+- `read_file` now supports images (PNG, JPG, GIF, WEBP, SVG, BMP) — reads as binary, encodes to base64 data URL.
+- `read_file` now supports Jupyter notebooks (`.ipynb`) — parses JSON, extracts code and markdown cells.
+- `read_file` now supports PDF files — naive text extraction + base64 data URL as fallback.
+- `dataUrlsToContentBlocks()` utility in API layer converts data: URLs to `ContentBlock[]` for vision models.
+- Added `deepseek-vl2` (vision-language) model to `DEEPSEEK_MODELS`.
+- Added `npm run check` pipeline: lint → typecheck → build → test in one command.
+
+### Changed
+- `buildMessages()` in API layer now properly passes `ContentBlock[]` for multimodal messages (no longer casts to string).
+
+### Fixed
+- Default model set to `deepseek-v4-pro`; `DEEPSEEK_MODELS` updated to V4-Flash / V4-Pro.
+
 ## 0.4.4 — TUI Stability & Release Candidate
 
 ### Fixed

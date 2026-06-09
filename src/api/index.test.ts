@@ -5,7 +5,7 @@ import type { DeepSeekConfig } from '../config/defaults.js'
 const TEST_CONFIG: DeepSeekConfig = {
   apiKey: 'test-key',
   baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-pro',
   approvalMode: 'turbo',
   theme: 'default-dark',
   language: 'en',

@@ -222,8 +222,8 @@ export class MetricsCollector {
     return Math.min(100, Math.round((this._lastInputTokens / maxContext) * 100))
   }
 
-  estimatedCostUSD (model: string = 'deepseek-chat'): number {
-    const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['deepseek-chat']
+  estimatedCostUSD (model: string = 'deepseek-v4-pro'): number {
+    const pricing = MODEL_PRICING[model] ?? MODEL_PRICING['deepseek-v4-pro']
     return (this._cacheHitInputTokens / 1_000_000) * pricing.cacheHitInputPer1M +
       (this._cacheMissInputTokens / 1_000_000) * pricing.cacheMissInputPer1M +
       (this._outputTokens / 1_000_000) * pricing.outputPer1M
@@ -248,7 +248,7 @@ export class MetricsCollector {
     return Math.min(100, Math.round((this.totalTokens / maxContext) * 100))
   }
 
-  getSummary (model: string = 'deepseek-chat'): string {
+  getSummary (model: string = 'deepseek-v4-pro'): string {
     const elapsed = Math.round(this.elapsedMs / 1000)
     const mins = Math.floor(elapsed / 60)
     const secs = elapsed % 60

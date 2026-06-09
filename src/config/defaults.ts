@@ -27,7 +27,7 @@ export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'turbo'
 
 export const DEFAULT_CONFIG: DeepSeekConfig = {
   baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-chat',
+  model: 'deepseek-v4-pro',
   approvalMode: 'default',
   theme: 'default-dark',
   language: 'en',
@@ -65,13 +65,13 @@ export interface ModelInfo {
 
 export const DEEPSEEK_MODELS: ModelInfo[] = [
   {
-    id: 'deepseek-chat',
-    label: 'DeepSeek V3',
-    description: 'Fast & capable — best for coding and general tasks',
+    id: 'deepseek-v4-flash',
+    label: 'DeepSeek V4-Flash',
+    description: 'Fast & efficient — best for light coding, chat, and general tasks',
   },
   {
-    id: 'deepseek-reasoner',
-    label: 'DeepSeek R1',
-    description: 'Deep reasoning, chain-of-thought — slower, higher quality',
+    id: 'deepseek-v4-pro',
+    label: 'DeepSeek V4-Pro',
+    description: 'Full power — best for complex coding, deep reasoning, and production tasks',
   },
 ]

@@ -22,7 +22,7 @@ program
   .argument('[query...]', 'Optional query to run in non-interactive mode')
   .option('-p, --prompt <text>', 'Run a single prompt and exit (non-interactive)')
   .option('-i, --prompt-interactive <text>', 'Run a prompt then continue in interactive mode')
-  .option('-m, --model <model>', 'Model to use (e.g. deepseek-chat)')
+  .option('-m, --model <model>', 'Model to use (e.g. deepseek-v4-pro)')
   .option('-t, --turbo', 'Enable Turbo mode (auto-approve all actions)')
   .option('--approval-mode <mode>', 'Set approval mode: plan, default, auto-edit, turbo')
   .option('--debug', 'Enable debug logging')

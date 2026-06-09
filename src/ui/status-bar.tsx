@@ -127,7 +127,7 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, scrollMod
         )}
         {model && (
           <Text color={colors.textMuted}>
-            {model === 'deepseek-chat' ? 'V3' : model === 'deepseek-reasoner' ? 'R1' : model}{' '}
+            {model === 'deepseek-v4-flash' ? 'V4-Flash' : model === 'deepseek-v4-pro' ? 'V4-Pro' : model}{' '}
           </Text>
         )}
         <Text color={colors.textMuted}>{i18n.t('system')}: {messageCount}</Text>

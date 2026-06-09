@@ -229,7 +229,7 @@ export function useSetupWizard (
 
   const finishSetup = useCallback(async () => {
     const themeName = themeManager.listThemes()[themeCursor]?.name ?? 'default-dark'
-    const modelId = DEEPSEEK_MODELS[modelCursor]?.id ?? 'deepseek-chat'
+    const modelId = DEEPSEEK_MODELS[modelCursor]?.id ?? 'deepseek-v4-pro'
     const mode = modeOptions[modeCursor] ?? 'default'
     await saveConfig({
       ...config,

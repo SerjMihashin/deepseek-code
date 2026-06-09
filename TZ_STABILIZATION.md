@@ -808,7 +808,7 @@ Respond in Russian unless the user explicitly asks otherwise.
 
 ## P4.1 — Ctrl+C как Pause/Cancel
 
-Статус: `VERIFIED`
+Статус: `VERIFIED` (`f5c538d` — isPausedRef, agentLoop abort skip, finally guard)
 
 ### Требования
 

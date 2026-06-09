@@ -37,7 +37,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
 
   let cleanup: (() => void) | null = null
 
-  // Double Ctrl+C guard: first Ctrl+C in Ready shows hint, second within 2s exits.
+  // Double Ctrl+C guard: first Ctrl+C in Ready shows hint, second within 3s exits.
   // App registers process.__agentSoftCancel while isProcessing=true.
   let pendingExitTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -45,11 +45,18 @@ export async function startInteractiveSession (options: SessionOptions): Promise
     const proc = process as NodeJS.Process & {
       __agentSoftCancel?: () => void;
       __pendingExit?: boolean;
+      __agentAbortController?: AbortController;
     }
 
     // 1) Agent is running — soft cancel, never exit
     if (proc.__agentSoftCancel) {
       proc.__agentSoftCancel()
+      return
+    }
+    // 1b) Fallback: __agentSoftCancel may not be set yet (useEffect race on Windows),
+    // but synchronous AbortController exists from handleSubmit
+    if (proc.__agentAbortController) {
+      proc.__agentAbortController.abort()
       return
     }
 
@@ -63,7 +70,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
 
     // 3) Ready state — double Ctrl+C guard
     if (pendingExitTimer) {
-      // Second Ctrl+C within 2s — exit
+      // Second Ctrl+C within 3s — exit
       clearTimeout(pendingExitTimer)
       pendingExitTimer = null
       if (cleanup) cleanup()
@@ -74,7 +81,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
     // First Ctrl+C — show hint, start timer
     pendingExitTimer = setTimeout(() => {
       pendingExitTimer = null
-    }, 2000)
+    }, 3000)
 
     // Write hint to stderr so it appears even if TUI is rendering
     process.stderr.write(`\n\x1b[33m⚠ ${i18n.t('ctrlCHint')}\x1b[0m\n`)

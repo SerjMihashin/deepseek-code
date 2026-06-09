@@ -276,26 +276,9 @@ export function App ({ config, options }: AppProps) {
     })()
   }, [])
 
-  // Register soft-cancel hook for the SIGINT handler in interactive.ts.
-  // While isProcessing, interactive.ts's onSIGINT calls this instead of process.exit().
-  useEffect(() => {
-    const proc = process as NodeJS.Process & { __agentSoftCancel?: () => void }
-    if (isProcessing) {
-      proc.__agentSoftCancel = () => {
-        abortControllerRef.current?.abort()
-        setIsPaused(true)
-        if (pendingApprovalResolveRef.current) {
-          pendingApprovalResolveRef.current(false)
-          pendingApprovalResolveRef.current = null
-        }
-        setPendingApproval(null)
-        setStatusText(i18n.t('paused'))
-      }
-    } else {
-      proc.__agentSoftCancel = undefined
-    }
-    return () => { proc.__agentSoftCancel = undefined }
-  }, [isProcessing])
+  // __agentSoftCancel is now set synchronously in handleSubmit (before agentLoop.run())
+  // to eliminate the async useEffect race window on Windows where SIGINT fires
+  // before the effect commits. Cleanup is handled in finally block.
 
   const { stdin } = useStdin()
 
@@ -427,6 +410,22 @@ export function App ({ config, options }: AppProps) {
     }
     const abortController = new AbortController()
     abortControllerRef.current = abortController
+
+    // SYNCHRONOUS: register soft-cancel hook before agentLoop.run().
+    // The old useEffect-based registration had a race window on Windows where
+    // SIGINT could fire between isProcessing=true and the effect commit.
+    const proc = process as NodeJS.Process & { __agentSoftCancel?: () => void; __agentAbortController?: AbortController }
+    proc.__agentSoftCancel = () => {
+      abortController.abort()
+      setIsPaused(true)
+      if (pendingApprovalResolveRef.current) {
+        pendingApprovalResolveRef.current(false)
+        pendingApprovalResolveRef.current = null
+      }
+      setPendingApproval(null)
+      setStatusText(i18n.t('paused'))
+    }
+    proc.__agentAbortController = abortController
 
     let userContent: ChatMessage['content'] = input
     if (pendingImage) {
@@ -665,6 +664,10 @@ export function App ({ config, options }: AppProps) {
       if (abortControllerRef.current === abortController) {
         abortControllerRef.current = null
       }
+      // Cleanup synchronous SIGINT hooks
+      const proc2 = process as NodeJS.Process & { __agentSoftCancel?: () => void; __agentAbortController?: AbortController }
+      if (proc2.__agentSoftCancel) proc2.__agentSoftCancel = undefined
+      if (proc2.__agentAbortController === abortController) proc2.__agentAbortController = undefined
     }
   }, [messages, isProcessing, setupStep, handleApiKeySubmit, handleSlashCommand, approvalMode, config, localApiKey])
 

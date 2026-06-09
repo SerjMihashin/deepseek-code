@@ -93,6 +93,9 @@ export function App ({ config, options }: AppProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
+  const isPausedRef = useRef(false)
+  // Keep isPausedRef in sync so finally block can read it without stale closure
+  useEffect(() => { isPausedRef.current = isPaused }, [isPaused])
   const [statusText, setStatusText] = useState(i18n.t('ready'))
   const [localApiKey, setLocalApiKey] = useState(config.apiKey || '')
   const agentLoopRef = useRef<AgentLoop | null>(null)
@@ -280,12 +283,13 @@ export function App ({ config, options }: AppProps) {
     if (isProcessing) {
       proc.__agentSoftCancel = () => {
         abortControllerRef.current?.abort()
+        setIsPaused(true)
         if (pendingApprovalResolveRef.current) {
           pendingApprovalResolveRef.current(false)
           pendingApprovalResolveRef.current = null
         }
         setPendingApproval(null)
-        setStatusText(i18n.t('cancelled'))
+        setStatusText(i18n.t('paused'))
       }
     } else {
       proc.__agentSoftCancel = undefined
@@ -529,6 +533,11 @@ export function App ({ config, options }: AppProps) {
 
       const finalResponse = await agentLoopRef.current.run(input, historyForModel(messages))
 
+      // Abort during run: skip session save, let finally handle UI reset
+      if (abortController.signal.aborted) {
+        return
+      }
+
       const toolHistory = agentLoopRef.current.getToolCallHistory()
       const bundleFile = await writeExecutionBundle({
         sessionId: sessionIdRef.current,
@@ -642,7 +651,10 @@ export function App ({ config, options }: AppProps) {
       // Safety net: ensure UI is always reset regardless of exit path
       flushBuffer()
       setIsProcessing(false)
-      setStatusText(i18n.t('ready'))
+      // Don't overwrite status if user paused the agent
+      if (!isPausedRef.current) {
+        setStatusText(i18n.t('ready'))
+      }
 
       // Clear any pending approval (covers error/abort exit paths)
       if (pendingApprovalResolveRef.current) {
@@ -666,13 +678,13 @@ export function App ({ config, options }: AppProps) {
     if (key.ctrl && _input === 'c') {
       if (isProcessing && abortControllerRef.current) {
         abortControllerRef.current.abort()
+        setIsPaused(true)
         setStatusText(i18n.t('paused'))
         if (pendingApprovalResolveRef.current) {
           pendingApprovalResolveRef.current(false)
           pendingApprovalResolveRef.current = null
         }
         setPendingApproval(null)
-        setIsPaused(true)
         return
       }
       // When not processing: set flag so SIGINT handler can exit immediately

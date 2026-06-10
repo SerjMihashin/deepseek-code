@@ -808,7 +808,40 @@ Respond in Russian unless the user explicitly asks otherwise.
 
 ## P4.1 — Ctrl+C как Pause/Cancel
 
-Статус: `VERIFIED` (`f5c538d` — isPausedRef, agentLoop abort skip, finally guard)
+Статус: `BLOCKED` — НЕ РАБОТАЕТ на Windows. Прошлый статус `VERIFIED` был ложным. Отложено по решению пользователя (2026-06-09), вернуться позже.
+
+### Симптом
+
+На Windows (Windows Terminal, win32, TTY) Ctrl+C во время работы агента («Думаю...») выкидывает процесс обратно в PowerShell вместо паузы.
+
+### Журнал расследования (2026-06-09, сессия Claude)
+
+Диагностика через инструментирование (`logEvent` → `~/.deepseek-code/events.log`, синхронная запись) дала точную хронологию. Что выяснено:
+
+1. **Ctrl+C приходит как ввод в Ink `useInput` (`\x03`), НЕ как SIGINT.** В логах ни одного события SIGINT. Значит обработчик в `interactive.ts onSIGINT` на этом терминале не участвует; всё решает `useInput` в `app.tsx`.
+2. **Обработчик `useInput` отрабатывает корректно:** лог показывает `useInput Ctrl+C {isProcessing:true, isPaused:false, hasAbort:true}` → `abort+pause`. То есть пауза логически выставляется правильно, `exit()` не вызывается.
+3. **Процесс выходит сам, кодом 0, через ~2мс после `finally`** (первые сборки). `process.on('exit')` фиксировал `code:0`, `beforeExit` — нет → это был не штатный drain и не `process.exit()`.
+
+Что пробовалось:
+
+- **(A) Проброс пользовательского AbortSignal в HTTP-запрос OpenAI** (`api/index.ts`, combine с timeout-контроллером). Идея: реально обрывать стрим. Результат: процесс стал жёстко убиваться (ни `exit`, ни `beforeExit` не срабатывали) — сигнатура нативного краша при резком разрыве потокового сокета на Windows. ОТКАЧЕНО.
+- **(B) Crash-guard** — глобальные `process.on('unhandledRejection'|'uncaughtException')` с записью в `~/.deepseek-code/crash.log` и без выхода. Результат: `crash.log` пуст — значит это НЕ JS-исключение/rejection. ОСТАВЛЕНО (полезно как защита).
+- **(C) keep-alive** — ref'нутый `setInterval` пока TUI смонтирован, чтобы event-loop не опустел. Результат: не помогло само по себе, но корректно. ОСТАВЛЕНО.
+- **(D) Кооперативная отмена с дренированием** (`agent-loop.ts`): при Ctrl+C перестаём обрабатывать чанки, но даём стриму закрыться штатно (EOF), сокет не рвём; `abort()` стал просто кооперативным флагом. Результат: **частичный прогресс** — процесс ВЫЖИЛ ≥2с после отмены (метка `alive 2s after run finally` сработала), мгновенный краш ушёл. Но позже процесс всё равно вернулся в оболочку, уже без записей в логе. ОСТАВЛЕНО.
+
+### Гипотезы на возврат
+
+- После дренирования что-то добивает процесс спустя секунды (второй Ctrl+C? отложенный эффект Ink/raw-mode? TerminateProcess от консоли?). Лог обрывается на `alive 2s` без `exit`/`beforeExit` → снова похоже на внешнее/нативное завершение.
+- Проверить: поведение Ink 5 raw-mode на Windows Terminal; не вызывает ли `clear()`/restore raw-mode завершения; добавить `process.on('SIGBREAK')` и probe-таймеры на 5/10с; попробовать `node --trace-exit`.
+
+### Сделанные инфраструктурные изменения (оставлены, полезны независимо от P4.1)
+
+- `tools/bash.ts`: блокирующий `execSync`/`execFileSync` → асинхронный `spawn`; убийство всего дерева процессов (`taskkill /t /f` на Windows, группа процессов на POSIX) по abort/timeout. Event-loop больше не висит на время долгих команд.
+- `tools/types.ts` + `agent-loop.ts`: `Tool.execute(args, signal?)` — сигнал отмены пробрасывается во все инструменты.
+- `utils/logger.ts`: `logCrash`/`getCrashLogPath` (всегда), `logEvent`/`getEventLogPath` (тихо, только под `--debug`).
+- `cli/interactive.ts`: crash-guard + keep-alive + трассировка (под debug).
+
+### Требования (исходные)
 
 ### Требования
 

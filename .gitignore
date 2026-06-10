@@ -54,3 +54,6 @@ DEEPSEEK.md
 
 # Personal AI assistant settings
 .claude/
+
+# Scratch sandboxes for other AI agents (local-only test projects)
+.temp_*/

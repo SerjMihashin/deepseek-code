@@ -441,6 +441,11 @@ export class AgentLoop extends EventEmitter {
           return this.buildBudgetHaltMessage()
         }
 
+        // Cancelled before we even start the request — nothing to drain.
+        if (this.options.signal?.aborted) {
+          return this.finishCancelled()
+        }
+
         const followUpSeqAtRequestStart = this.followUpSeq
         const stream = this.api.streamChat(this.messages, openAITools)
         let responseContent = ''
@@ -450,23 +455,16 @@ export class AgentLoop extends EventEmitter {
           function: { name: string; arguments: string };
         }> = []
 
-        // Check for cancellation
-        if (this.options.signal?.aborted) {
-          const cancelledMsg = i18n.t('agentCancelled')
-          this.messages.push({ role: 'assistant', content: cancelledMsg })
-          this.options.onResponse(cancelledMsg)
-          this.finalizeSession()
-          return cancelledMsg
-        }
+        // Cooperative cancellation: once aborted we stop acting on chunks but keep
+        // draining the stream to its natural end. Breaking out early would tear
+        // down the streaming socket mid-flight, which hard-crashed the process on
+        // Windows. The UI already shows the paused state immediately.
+        let cancelledDuringStream = false
 
         for await (const chunk of stream) {
-          // Check for cancellation during streaming
           if (this.options.signal?.aborted) {
-            const cancelledMsg = i18n.t('agentCancelled')
-            this.messages.push({ role: 'assistant', content: cancelledMsg })
-            this.options.onResponse(cancelledMsg)
-            this.finalizeSession()
-            return cancelledMsg
+            cancelledDuringStream = true
+            continue
           }
 
           if (chunk.type === 'usage' && chunk.usage) {
@@ -489,6 +487,11 @@ export class AgentLoop extends EventEmitter {
               })
             }
           }
+        }
+
+        // Stream drained — if the user cancelled mid-stream, stop here cleanly.
+        if (cancelledDuringStream || this.options.signal?.aborted) {
+          return this.finishCancelled()
         }
 
         // Budget: catch limits reached during streaming usage accounting.
@@ -718,6 +721,10 @@ export class AgentLoop extends EventEmitter {
         return responseContent
       } catch (err) {
         const error = err as Error
+        // If the user cancelled, treat any resulting error as a clean stop.
+        if (this.options.signal?.aborted) {
+          return this.finishCancelled()
+        }
         this.options.onError(error)
         throw error
       }
@@ -731,6 +738,15 @@ export class AgentLoop extends EventEmitter {
     const summary = this.metrics.getSummary(this.model)
     this.options.onStreamChunk(summary)
     return timeoutMsg
+  }
+
+  /** Record a clean user-cancellation result and finalize the session. */
+  private finishCancelled (): string {
+    const cancelledMsg = i18n.t('agentCancelled')
+    this.messages.push({ role: 'assistant', content: cancelledMsg })
+    this.options.onResponse(cancelledMsg)
+    this.finalizeSession()
+    return cancelledMsg
   }
 
   private getIterationLimit (): number {
@@ -993,7 +1009,7 @@ export class AgentLoop extends EventEmitter {
     }
 
     try {
-      const result = await def.tool.execute(args)
+      const result = await def.tool.execute(args, this.options.signal)
       return {
         success: result.success,
         output: result.output,

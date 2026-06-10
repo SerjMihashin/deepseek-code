@@ -126,6 +126,11 @@ export class DeepSeekAPI {
       }, STREAM_CHUNK_TIMEOUT_MS)
     }
 
+    // NOTE: user cancellation is cooperative (the agent loop drains this stream
+    // to its natural end on Ctrl+C) — we intentionally do NOT abort the request
+    // socket here. Abruptly tearing down the streaming socket mid-flight hard-
+    // crashed the process on Windows (no JS exit handlers fired). Only the
+    // chunk-timeout aborts the socket.
     const stream = await withRetry(() =>
       this.client.chat.completions.create(
         {

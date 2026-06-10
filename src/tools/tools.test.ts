@@ -421,6 +421,24 @@ describe('bash tool', () => {
     const result = await bashTool.execute({ command: 'nonexistent_command_xyz' })
     expect(result.success).toBe(false)
   })
+
+  it('returns an aborted result when the signal is already aborted', async () => {
+    const result = await bashTool.execute({ command: 'echo hi' }, AbortSignal.abort())
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('aborted')
+  })
+
+  it('aborts a long-running command promptly when the signal fires', async () => {
+    const controller = new AbortController()
+    const command = process.platform === 'win32' ? 'ping -n 15 127.0.0.1' : 'sleep 15'
+    const start = Date.now()
+    const pending = bashTool.execute({ command, timeout: 30_000 }, controller.signal)
+    setTimeout(() => controller.abort(), 200)
+    const result = await pending
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('aborted')
+    expect(Date.now() - start).toBeLessThan(8000)
+  })
 })
 
 describe('glob tool', () => {

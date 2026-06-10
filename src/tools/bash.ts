@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { platform } from 'node:os'
 import { isAbsolute, relative } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
@@ -201,25 +201,96 @@ function getPowerShellSyntaxPolicyError (command: string): string | null {
   return 'Windows shell policy: this command uses PowerShell cmdlets together with cmd/bash chaining operators && or ||. Use separate tool calls, or PowerShell-compatible separators such as ; with explicit error checks.'
 }
 
-function executeCommand (command: string, timeout: number): string {
-  const options = {
-    timeout,
-    encoding: 'utf-8' as const,
-    maxBuffer: 10 * 1024 * 1024,
-    windowsHide: true,
-  }
+const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 
-  if (shouldRunWithPowerShell(command)) {
-    return execFileSync('powershell.exe', [
-      '-NoProfile',
-      '-ExecutionPolicy',
-      'Bypass',
-      '-Command',
-      command,
-    ], options)
-  }
+interface CommandResult {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+  aborted: boolean;
+  timedOut: boolean;
+}
 
-  return execSync(command, options)
+/**
+ * Kill a child and its whole process tree. A bare `child.kill()` only signals
+ * the direct child (the shell wrapper); on Windows the actual command keeps the
+ * stdout pipe open so the `close` event never fires, and on Unix the command is
+ * orphaned. We therefore kill the entire tree/process group.
+ */
+function killProcessTree (child: ChildProcess): void {
+  const pid = child.pid
+  if (pid == null) return
+  if (platform() === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true })
+    } catch {
+      try { child.kill('SIGKILL') } catch { /* already gone */ }
+    }
+  } else {
+    try {
+      // Negative pid targets the process group (requires detached spawn).
+      process.kill(-pid, 'SIGTERM')
+    } catch {
+      try { child.kill('SIGKILL') } catch { /* already gone */ }
+    }
+  }
+}
+
+/**
+ * Run a shell command asynchronously so the event loop (and therefore the TUI
+ * and Ctrl+C handling) stays responsive while the command runs. The command is
+ * killed if `signal` aborts (user cancellation) or the timeout elapses.
+ */
+function executeCommand (command: string, timeout: number, signal?: AbortSignal): Promise<CommandResult> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      resolve({ stdout: '', stderr: '', code: null, aborted: true, timedOut: false })
+      return
+    }
+
+    // detached on POSIX makes the child a process-group leader so the whole
+    // group can be killed; on Windows the tree is killed via taskkill /t.
+    const detached = platform() !== 'win32'
+    const child = shouldRunWithPowerShell(command)
+      ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
+      : spawn(command, { shell: true, windowsHide: true, detached })
+
+    let stdout = ''
+    let stderr = ''
+    let stdoutBytes = 0
+    let truncated = false
+    let aborted = false
+    let timedOut = false
+
+    const onAbort = () => { aborted = true; killProcessTree(child) }
+    if (signal) signal.addEventListener('abort', onAbort, { once: true })
+
+    const timer = setTimeout(() => { timedOut = true; killProcessTree(child) }, timeout)
+
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    child.stdout?.on('data', (chunk: string) => {
+      stdoutBytes += Buffer.byteLength(chunk)
+      if (stdoutBytes <= MAX_OUTPUT_BYTES) stdout += chunk
+      else truncated = true
+    })
+    child.stderr?.on('data', (chunk: string) => { stderr += chunk })
+
+    const cleanup = () => {
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', onAbort)
+    }
+
+    child.on('error', (err) => {
+      cleanup()
+      reject(err)
+    })
+    child.on('close', (code) => {
+      cleanup()
+      if (truncated) stdout += `\n\n... [output truncated at ${MAX_OUTPUT_BYTES} bytes]`
+      resolve({ stdout, stderr, code, aborted, timedOut })
+    })
+  })
 }
 
 export const bashTool: Tool = {
@@ -245,7 +316,7 @@ export const bashTool: Tool = {
       required: false,
     },
   ],
-  async execute (args: Record<string, unknown>): Promise<ToolResult> {
+  async execute (args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const command = args.command as string
     const timeout = (args.timeout as number) ?? 120_000
 
@@ -299,21 +370,32 @@ export const bashTool: Tool = {
     }
 
     try {
-      const output = executeCommand(command, timeout)
+      const { stdout, stderr, code, aborted, timedOut } = await executeCommand(command, timeout, signal)
 
-      return {
-        success: true,
-        output: output || '(command completed with no output)',
+      if (aborted) {
+        return { success: false, output: stdout, error: 'Command aborted by user (Ctrl+C).' }
       }
-    } catch (err) {
-      const error = err as Error & { stdout?: string; stderr?: string }
-      const stdout = error.stdout ?? ''
-      const stderr = error.stderr ?? ''
+      if (timedOut) {
+        return {
+          success: false,
+          output: stdout,
+          error: `Command timed out after ${timeout}ms.${stderr ? `\n${stderr}` : ''}`,
+        }
+      }
+      if (code === 0) {
+        return { success: true, output: stdout || '(command completed with no output)' }
+      }
       return {
         success: false,
         output: stdout,
-        error: stderr || error.message,
+        error: stderr || `Command exited with code ${code}`,
       }
+    } catch (err) {
+      const error = err as Error & { code?: string }
+      if (signal?.aborted || error.code === 'ABORT_ERR' || error.name === 'AbortError') {
+        return { success: false, output: '', error: 'Command aborted by user (Ctrl+C).' }
+      }
+      return { success: false, output: '', error: error.message }
     }
   },
 }

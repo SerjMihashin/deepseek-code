@@ -2,7 +2,11 @@ export interface Tool {
   name: string;
   description: string;
   parameters: ToolParameter[];
-  execute(args: Record<string, unknown>): Promise<ToolResult>;
+  /**
+   * Execute the tool. The optional `signal` is aborted when the user cancels
+   * (Ctrl+C); long-running tools should honor it to stop promptly.
+   */
+  execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>;
 }
 
 export interface ToolParameter {

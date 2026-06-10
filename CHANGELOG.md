@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.4.5 — Multimodal, Pipeline & UX
+## 0.4.5 — TUI Stabilization, Multimodal & Pipeline
 
 ### Added
+- **Tool-call activity in history** — finished tool batches are committed to the scrollback as a readable per-call list (`✓`/`✗` + tool + file/command + duration), so you can see exactly what the agent did.
+- **Crash guard** — stray runtime errors are recorded to `~/.deepseek-code/crash.log` instead of dropping you back to the shell mid-session.
 - `read_file` now supports images (PNG, JPG, GIF, WEBP, SVG, BMP) — reads as binary, encodes to base64 data URL.
 - `read_file` now supports Jupyter notebooks (`.ipynb`) — parses JSON, extracts code and markdown cells.
 - `read_file` now supports PDF files — naive text extraction + base64 data URL as fallback.
@@ -12,12 +14,21 @@
 - **Follow-up Queue Indicator** — StatusBar shows `[F:1]` badge when follow-up messages are queued during agent run, cleared on new message send.
 
 ### Changed
+- **Chat history now renders through Ink `<Static>`** — finalized messages are printed once to the terminal scrollback. This eliminates the full-screen redraw flicker and enables native mouse-wheel scrolling. The in-app PageUp/PageDown windowing was removed in favor of the terminal's own scrollback.
+- **Shell commands run asynchronously** — `run_shell_command` now uses `spawn` instead of blocking `execSync`, so long commands (installs, builds, tests) no longer freeze the UI and can be cancelled. Cancellation/timeout kills the whole process tree (`taskkill /t` on Windows, process-group on POSIX).
+- Cancellation signal is now plumbed to every tool.
 - `buildMessages()` in API layer now properly passes `ContentBlock[]` for multimodal messages (no longer casts to string).
 - **Removed `deepseek-vl2`** — only `deepseek-v4-pro` and `deepseek-v4-flash` remain; images pass as base64 data URLs in text.
 
 ### Fixed
+- **Screen flicker on long output is gone** — the live region is now height-bounded (wrap-aware) so Ink never falls back to clearing the whole terminal each frame, which was the cause of both the shaking and the broken scrollback.
 - Default model set to `deepseek-v4-pro`; `DEEPSEEK_MODELS` updated to V4-Flash / V4-Pro.
 - Removed false vision-model warning on image paste — DeepSeek V4 models receive images as text-embedded data URLs.
+
+### Known Issues
+- **Ctrl+C on Windows may still drop to the shell** instead of pausing the agent. Cancellation is now cooperative and the process no longer hard-crashes, but the clean pause-on-interrupt is still under investigation on Windows terminals.
+- The new `<Static>` rendering has been validated primarily on **Windows Terminal**; appearance may differ on cmd.exe, the VS Code terminal, macOS, or Linux.
+- Switching between `deepseek-v4-pro` and `deepseek-v4-flash` updates the configured model, but the practical difference in responses has not been independently verified.
 
 ## 0.4.4 — TUI Stability & Release Candidate
 

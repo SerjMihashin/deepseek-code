@@ -11,9 +11,6 @@ interface StatusBarProps {
   messageCount: number;
   isProcessing?: boolean;
   isPaused?: boolean;
-  scrollMode?: 'follow' | 'paused';
-  scrollOffset?: number;
-  hasNewMessages?: boolean;
   contextPercent?: number;
   compactProgress?: number;
   totalTokens?: number;
@@ -48,7 +45,7 @@ export function getScrollStatusLabel (
   return 'VIEW:FOLLOW PageUp'
 }
 
-export function StatusBar ({ mode, status, messageCount, isProcessing, isPaused, scrollMode = 'follow', scrollOffset = 0, hasNewMessages = false, contextPercent, compactProgress, totalTokens, estimatedCost, model, followUpCount }: StatusBarProps) {
+export function StatusBar ({ mode, status, messageCount, isProcessing, isPaused, contextPercent, compactProgress, totalTokens, estimatedCost, model, followUpCount }: StatusBarProps) {
   const colors = themeManager.getColors()
   const modeColors: Record<ApprovalMode, string> = {
     plan: colors.warning,
@@ -60,7 +57,6 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, isPaused,
   const [chromeState, setChromeState] = useState<ChromeRuntimeState>(chromeManager.getState())
   const [spinnerFrame, setSpinnerFrame] = useState(0)
   const [pulseIdx, setPulseIdx] = useState(0)
-  const scrollStatus = getScrollStatusLabel(scrollMode, scrollOffset, hasNewMessages)
 
   useEffect(() => {
     if (!isProcessing) return
@@ -107,9 +103,6 @@ export function StatusBar ({ mode, status, messageCount, isProcessing, isPaused,
           : <Text color={isPaused ? colors.warning : colors.textMuted}>{isPaused ? '[PAUSED] ' + status : status}</Text>}
       </Box>
       <Box>
-        <Text color={scrollMode === 'paused' || scrollOffset > 0 ? colors.warning : colors.textMuted}>
-          {scrollStatus}{' '}
-        </Text>
         {chromeState.connected && (
           <Text color={colors.success}> Chrome{chromeState.headless ? ':H' : ''} </Text>
         )}

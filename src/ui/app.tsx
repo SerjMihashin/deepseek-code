@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { Box, Text, useInput, useApp, useStdin } from 'ink'
+import { Box, Text, useInput, useApp } from 'ink'
 import { ChatView } from './chat-view.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
@@ -22,6 +22,7 @@ import { i18n, type Locale } from '../core/i18n.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 import { executeSlashCommand, type SlashCommandContext } from '../commands/index.js'
 import { checkLatestVersion } from '../commands/update-checker.js'
+import { logEvent } from '../utils/logger.js'
 import type { TaskBudget } from '../tools/types.js'
 
 /** Empty input hint timeout in ms before showing the guide text */
@@ -102,6 +103,10 @@ export function App ({ config, options }: AppProps) {
   const abortControllerRef = useRef<AbortController | null>(null)
   const pendingApprovalResolveRef = useRef<((value: boolean) => void) | null>(null)
   const liveToolMessageIndexRef = useRef(-1)
+  // Tools belonging to the CURRENT (still-live) tool card. Each tool batch gets
+  // its own card so completed batches can be committed to the Static scrollback
+  // while only the active batch stays in the live region.
+  const currentCardToolsRef = useRef<ToolCallEvent[]>([])
   const prevToolCallsRef = useRef<ToolCallEvent[]>([])
   const [toolCalls, setToolCalls] = useState<ToolCallEvent[]>([])
   const [pendingApproval, setPendingApproval] = useState<{
@@ -118,10 +123,10 @@ export function App ({ config, options }: AppProps) {
   const initializedRef = useRef(false)
   const [emptyInputHint, setEmptyInputHint] = useState(false)
   const emptyInputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [chatScrollOffset, setChatScrollOffset] = useState(0)
-  const [scrollMode, setScrollMode] = useState<'follow' | 'paused'>('follow')
-  const [newMessagesWhilePaused, setNewMessagesWhilePaused] = useState(false)
-  const visibleMessageCountRef = useRef(0)
+  // Chat history is rendered via Ink <Static> (see ChatView): finalized messages
+  // are printed once to the terminal scrollback (no flicker, native mouse scroll).
+  // `chatEpoch` remounts Static to reset the scrollback on /clear.
+  const [chatEpoch, setChatEpoch] = useState(0)
   const [contextPercent, setContextPercent] = useState(0)
   const [compactProgress, setCompactProgress] = useState(0)
   const [totalTokens, setTotalTokens] = useState(0)
@@ -134,29 +139,17 @@ export function App ({ config, options }: AppProps) {
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetRef = useRef<TaskBudget | undefined>(undefined)
+  // Double Ctrl+C to exit when idle/paused (raw mode owns Ctrl+C on all platforms).
+  const ctrlCExitArmedRef = useRef(false)
+  const ctrlCExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Stream chunk batching ──────────────────────────────────────────────
   const pendingChunksRef = useRef('')
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const scheduleFlush = useCallback(() => {
-    if (flushTimerRef.current) return
-    flushTimerRef.current = setTimeout(() => {
-      flushTimerRef.current = null
-      const buffered = pendingChunksRef.current
-      if (!buffered) return
-      pendingChunksRef.current = ''
-      setMessages(prev => {
-        const last = prev[prev.length - 1]
-        if (last?.role === 'assistant') {
-          const updated = [...prev]
-          updated[updated.length - 1] = { ...last, content: last.content + buffered }
-          return updated
-        }
-        return [...prev, { role: 'assistant', content: buffered }]
-      })
-    }, 75)
-  }, [])
-  const flushBuffer = useCallback(() => {
+  // Flush buffered assistant text into the message list. Starting a new text
+  // block also finalizes the previous live tool card (→ compact) so it commits
+  // to the Static scrollback as a completed item.
+  const flushPending = useCallback(() => {
     if (flushTimerRef.current) {
       clearTimeout(flushTimerRef.current)
       flushTimerRef.current = null
@@ -171,9 +164,27 @@ export function App ({ config, options }: AppProps) {
         updated[updated.length - 1] = { ...last, content: last.content + buffered }
         return updated
       }
-      return [...prev, { role: 'assistant', content: buffered }]
+      const updated = [...prev]
+      const cardIdx = liveToolMessageIndexRef.current
+      if (cardIdx >= 0 && cardIdx < updated.length && updated[cardIdx]?.role === 'tool' && currentCardToolsRef.current.length > 0) {
+        updated[cardIdx] = {
+          role: 'tool',
+          content: JSON.stringify({ type: 'tool_activity_card', toolCalls: currentCardToolsRef.current, status: 'compact' as const }),
+        }
+      }
+      liveToolMessageIndexRef.current = -1
+      currentCardToolsRef.current = []
+      updated.push({ role: 'assistant', content: buffered })
+      return updated
     })
   }, [])
+  const scheduleFlush = useCallback(() => {
+    if (flushTimerRef.current) return
+    flushTimerRef.current = setTimeout(() => {
+      flushTimerRef.current = null
+      flushPending()
+    }, 75)
+  }, [flushPending])
 
   const addServiceNotice = useCallback((text: string) => {
     setServiceNotice(text)
@@ -280,41 +291,10 @@ export function App ({ config, options }: AppProps) {
   // to eliminate the async useEffect race window on Windows where SIGINT fires
   // before the effect commits. Cleanup is handled in finally block.
 
-  const { stdin } = useStdin()
-
-  // Compensate scroll offset when new visible messages arrive while paused.
-  // Use a ref-based approach to avoid re-render loops.
-  useEffect(() => {
-    if (setupStepRef.current !== 'done') return
-    const visible = messages.filter(m => m.role !== 'tool').length
-    if (scrollMode === 'paused' && visible > visibleMessageCountRef.current) {
-      const diff = visible - visibleMessageCountRef.current
-      setChatScrollOffset(prev => prev + diff)
-      setNewMessagesWhilePaused(true)
-    }
-    visibleMessageCountRef.current = visible
-  }, [messages])
-
   // Sync prevToolCallsRef with toolCalls state
   useEffect(() => {
     prevToolCallsRef.current = toolCalls
   }, [toolCalls])
-
-  // Detect End key from raw stdin (Ink does not expose it in useInput)
-  useEffect(() => {
-    if (!stdin) return
-    const handler = (data: Buffer) => {
-      if (setupStepRef.current !== 'done') return
-      const seq = data.toString()
-      if (seq === '\x1b[F' || seq === '\x1b[4~' || seq === '\x1b[8~' || seq === '\x1bOF') {
-        setChatScrollOffset(0)
-        setScrollMode('follow')
-        setNewMessagesWhilePaused(false)
-      }
-    }
-    stdin.on('data', handler)
-    return () => { stdin.off('data', handler) }
-  }, [stdin])
 
   // Slash commands — delegated to commands/index.ts
   const handleSlashCommand = useCallback(async (input: string): Promise<boolean> => {
@@ -416,6 +396,7 @@ export function App ({ config, options }: AppProps) {
     // SIGINT could fire between isProcessing=true and the effect commit.
     const proc = process as NodeJS.Process & { __agentSoftCancel?: () => void; __agentAbortController?: AbortController }
     proc.__agentSoftCancel = () => {
+      logEvent('__agentSoftCancel invoked')
       abortController.abort()
       setIsPaused(true)
       if (pendingApprovalResolveRef.current) {
@@ -426,6 +407,7 @@ export function App ({ config, options }: AppProps) {
       setStatusText(i18n.t('paused'))
     }
     proc.__agentAbortController = abortController
+    logEvent('agent run: softCancel registered')
 
     let userContent: ChatMessage['content'] = input
     if (pendingImage) {
@@ -449,9 +431,7 @@ export function App ({ config, options }: AppProps) {
     setStatusText(i18n.t('working'))
     setToolCalls([])
     liveToolMessageIndexRef.current = -1
-    setChatScrollOffset(0)
-    setScrollMode('follow')
-    setNewMessagesWhilePaused(false)
+    currentCardToolsRef.current = []
 
     try {
       await hooksManager.execute('UserPromptSubmit', {
@@ -468,22 +448,23 @@ export function App ({ config, options }: AppProps) {
           signal: abortController.signal,
           budget: budgetRef.current,
           onToolCall: (tc) => {
+            // Commit any buffered assistant text first so it lands above the card.
+            flushPending()
             const updatedCalls = [...prevToolCallsRef.current, tc]
             prevToolCallsRef.current = updatedCalls
             setToolCalls(updatedCalls)
+            currentCardToolsRef.current = [...currentCardToolsRef.current, tc]
             setStatusText(`[tool] ${tc.name}...`)
 
-            // Add/update live tool activity card in chat messages
+            // Add/update the live tool activity card (one card per tool batch).
             setMessages(prev => {
               const idx = liveToolMessageIndexRef.current
-              const card = { type: 'tool_activity_card', toolCalls: updatedCalls, status: 'live' as const }
+              const card = { type: 'tool_activity_card', toolCalls: currentCardToolsRef.current, status: 'live' as const }
               if (idx >= 0 && idx < prev.length && prev[idx]?.role === 'tool') {
-                // Update existing card
                 const updated = [...prev]
                 updated[idx] = { role: 'tool', content: JSON.stringify(card) }
                 return updated
               }
-              // Add new card
               liveToolMessageIndexRef.current = prev.length
               return [...prev, { role: 'tool', content: JSON.stringify(card) }]
             })
@@ -581,15 +562,16 @@ export function App ({ config, options }: AppProps) {
       setIsProcessing(false)
       setStatusText(i18n.t('ready'))
 
-      // Convert live tool activity card to compact summary
-      if (liveToolMessageIndexRef.current >= 0 && toolHistory.length > 0) {
+      // Finalize the last live tool batch (if the turn ended on tools) to compact.
+      if (liveToolMessageIndexRef.current >= 0 && currentCardToolsRef.current.length > 0) {
+        const cardTools = currentCardToolsRef.current
         setMessages(prev => {
           const idx = liveToolMessageIndexRef.current
           if (idx >= 0 && idx < prev.length && prev[idx]?.role === 'tool') {
             const updated = [...prev]
             updated[idx] = {
               role: 'tool',
-              content: JSON.stringify({ type: 'tool_activity_card', toolCalls: toolHistory, status: 'compact' as const }),
+              content: JSON.stringify({ type: 'tool_activity_card', toolCalls: cardTools, status: 'compact' as const }),
             }
             return updated
           }
@@ -597,6 +579,7 @@ export function App ({ config, options }: AppProps) {
         })
       }
       liveToolMessageIndexRef.current = -1
+      currentCardToolsRef.current = []
     } catch (err) {
       const error = err as Error
       // User-triggered cancellation is expected and should not become an error message.
@@ -647,8 +630,9 @@ export function App ({ config, options }: AppProps) {
         bundleFile,
       })
     } finally {
+      logEvent('agent run: finally (clearing softCancel)')
       // Safety net: ensure UI is always reset regardless of exit path
-      flushBuffer()
+      flushPending()
       setIsProcessing(false)
       // Don't overwrite status if user paused the agent
       if (!isPausedRef.current) {
@@ -674,12 +658,15 @@ export function App ({ config, options }: AppProps) {
   useInput((_input, key) => {
     const step = setupStepRef.current
 
-    // Ctrl+C: delegate to interactive.ts SIGINT handler.
-    // - During processing: soft cancel (via __agentSoftCancel)
-    // - During Ready: double Ctrl+C guard (first shows hint, second exits)
-    // - Never call exit() here — that would bypass the double-Ctrl+C guard.
+    // Ctrl+C is handled here because Ink raw mode delivers it as input (not a
+    // SIGINT signal) on all platforms when exitOnCtrlC is false. The SIGINT
+    // handler in interactive.ts is only a fallback for non-TTY runs.
+    // - While the agent runs: first Ctrl+C aborts/pauses, never exits.
+    // - When idle or already paused: double Ctrl+C within 3s exits.
     if (key.ctrl && _input === 'c') {
-      if (isProcessing && abortControllerRef.current) {
+      logEvent('useInput Ctrl+C', { isProcessing, isPaused, hasAbort: !!abortControllerRef.current, step })
+      if (isProcessing && abortControllerRef.current && !isPaused) {
+        logEvent('useInput Ctrl+C -> abort+pause')
         abortControllerRef.current.abort()
         setIsPaused(true)
         setStatusText(i18n.t('paused'))
@@ -688,12 +675,29 @@ export function App ({ config, options }: AppProps) {
           pendingApprovalResolveRef.current = null
         }
         setPendingApproval(null)
+        // Reset exit-arming: the interrupt is the user's action this press.
+        ctrlCExitArmedRef.current = false
+        if (ctrlCExitTimerRef.current) {
+          clearTimeout(ctrlCExitTimerRef.current)
+          ctrlCExitTimerRef.current = null
+        }
         return
       }
-      // When not processing: set flag so SIGINT handler can exit immediately
-      // (interactive.ts checks __pendingExit for immediate exit after agent finishes)
-      const proc = process as NodeJS.Process & { __pendingExit?: boolean }
-      proc.__pendingExit = true
+      // Idle or paused — second press within the window exits.
+      if (ctrlCExitArmedRef.current) {
+        logEvent('useInput Ctrl+C -> doublePress -> exit()')
+        if (ctrlCExitTimerRef.current) clearTimeout(ctrlCExitTimerRef.current)
+        exit()
+        return
+      }
+      logEvent('useInput Ctrl+C -> firstPress armed')
+      ctrlCExitArmedRef.current = true
+      addServiceNotice(i18n.t('ctrlCHint'))
+      if (ctrlCExitTimerRef.current) clearTimeout(ctrlCExitTimerRef.current)
+      ctrlCExitTimerRef.current = setTimeout(() => {
+        ctrlCExitArmedRef.current = false
+        ctrlCExitTimerRef.current = null
+      }, 3000)
       return
     }
 
@@ -770,25 +774,9 @@ export function App ({ config, options }: AppProps) {
         })
         return
       }
-      // Scroll chat history — always works regardless of processing state.
-      // PageUp: scroll up by ~half a screen
-      if (key.pageUp) {
-        const visibleCount = messages.filter(m => m.role !== 'tool').length
-        const next = Math.min(chatScrollOffset + 10, Math.max(0, visibleCount - 1))
-        if (next > 0) setScrollMode('paused')
-        setChatScrollOffset(next)
-        return
-      }
-      // PageDown: scroll down by ~half a screen
-      if (key.pageDown) {
-        const next = Math.max(0, chatScrollOffset - 10)
-        setChatScrollOffset(next)
-        if (next === 0) {
-          setScrollMode('follow')
-          setNewMessagesWhilePaused(false)
-        }
-        return
-      }
+      // Chat history scrolling is handled natively by the terminal (messages are
+      // committed to the scrollback via Ink <Static>), so PageUp/PageDown are no
+      // longer intercepted here.
       // Theme picker: interactive selection
       if (themePicker) {
         if (key.escape) {
@@ -877,24 +865,6 @@ export function App ({ config, options }: AppProps) {
       if (key.escape && isPaused && !pendingApproval && !pendingClear && !themePicker && !modelPicker && !langPicker) {
         setIsPaused(false)
         setStatusText(i18n.t('ready'))
-        return
-      }
-      // ArrowUp/ArrowDown: scroll by 1 line, but only when InputBar is disabled (processing)
-      // When InputBar is active, arrows belong to input history/suggestions.
-      if (key.upArrow && isProcessing) {
-        const visibleCount = messages.filter(m => m.role !== 'tool').length
-        const next = Math.min(chatScrollOffset + 1, Math.max(0, visibleCount - 1))
-        if (next > 0) setScrollMode('paused')
-        setChatScrollOffset(next)
-        return
-      }
-      if (key.downArrow && isProcessing) {
-        const next = Math.max(0, chatScrollOffset - 1)
-        setChatScrollOffset(next)
-        if (next === 0) {
-          setScrollMode('follow')
-          setNewMessagesWhilePaused(false)
-        }
         return
       }
       return
@@ -1005,9 +975,7 @@ export function App ({ config, options }: AppProps) {
     setToolCalls([])
     setPendingApproval(null)
     setPendingImage(null)
-    setScrollMode('follow')
-    setNewMessagesWhilePaused(false)
-    setChatScrollOffset(0)
+    setChatEpoch(e => e + 1) // remount Static so the scrollback resets
     liveToolMessageIndexRef.current = -1
     setServiceNotice(null)
     if (serviceNoticeTimerRef.current) {
@@ -1029,7 +997,7 @@ export function App ({ config, options }: AppProps) {
   const colors = themeManager.getColors()
 
   return (
-    <Box flexDirection='column' height='100%'>
+    <Box flexDirection='column'>
       {setupStep !== 'done'
         ? <SetupWizard state={{
           step: setupStep,
@@ -1043,9 +1011,13 @@ export function App ({ config, options }: AppProps) {
         }}
           />
         : (
-          <Box flexDirection='column' flexGrow={1}>
-            <Logo />
-            <ChatView messages={messages} scrollOffset={chatScrollOffset} hasNewMessages={newMessagesWhilePaused} />
+          <Box flexDirection='column'>
+            <ChatView
+              messages={messages}
+              isProcessing={isProcessing}
+              epoch={chatEpoch}
+              header={<Logo />}
+            />
             {serviceNotice && (
               <Box marginLeft={2} marginBottom={1}>
                 <Text color={colors.primary}>{serviceNotice}</Text>
@@ -1188,9 +1160,6 @@ export function App ({ config, options }: AppProps) {
         messageCount={messages.length}
         isProcessing={isProcessing}
         isPaused={isPaused}
-        scrollMode={scrollMode}
-        scrollOffset={chatScrollOffset}
-        hasNewMessages={newMessagesWhilePaused}
         contextPercent={contextPercent}
         compactProgress={compactProgress}
         totalTokens={totalTokens}

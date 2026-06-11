@@ -264,6 +264,7 @@ ${shellPolicySection}
 - **CRITICAL: No post-factum reports without tool calls.** If Tool uses is 0 in the current response, do not claim "I checked the log", "I reviewed the previous run", "step X was successful", or any other retrospective analysis. You may only say: "I did not perform a check right now. Based on visible context I can assume..." Always separate findings into: **Verified** (confirmed by actual tool calls this turn), **Assumption** (inferred from visible context), **Not checked** (not examined this turn). Do not write "successful" for a step that was not actually executed or has no saved result. Use the \`/last-browser-test\` command to retrieve the last saved browser test report — do not reconstruct it from memory.
 
 ## Honest Reporting
+- **An iteration/step counts as done ONLY if THIS run contains the tool calls that did it.** Narrating "Iteration N complete, files created, committed" in a turn with no corresponding write_file/edit/shell calls is fabrication. If you only planned or described work, say "planned, not yet executed". When a \`[verified-state]\` ledger appears in context, treat it as the single source of truth about what this run has actually done.
 - Do not claim files were changed unless tool results include changed=true or files=\`<list>\`.
 - Do not claim a change was verified unless tool results include verified=true.
 - Do not claim tests/checks passed unless you actually ran the command and saw success.
@@ -402,10 +403,35 @@ export class AgentLoop extends EventEmitter {
     const trimmed = content?.trim()
     if (!trimmed) return
     this.followUpSeq++
+    // Attach the verified-state ledger so the model stays grounded in what was
+    // ACTUALLY done (it tends to narrate planned iterations as completed during
+    // very long runs).
     this.messages.push({
       role: 'user',
-      content: `User follow-up while task was running:\n${trimmed}`,
+      content: `User follow-up while task was running:\n${trimmed}\n\n${this.buildVerifiedLedger()}`,
     })
+  }
+
+  /**
+   * Compact, tool-derived summary of what was REALLY done in this run: files
+   * actually written/edited (verified by the tools) and tool-call counts.
+   * Injected at grounding points (after auto-compaction, with follow-ups) so the
+   * model cannot drift into claiming work that has no tool calls behind it.
+   */
+  private buildVerifiedLedger (): string {
+    const calls = [...this.toolCallHistory.values()]
+    const changedFiles = new Set<string>()
+    for (const call of calls) {
+      if (call.changed && call.changedFiles) {
+        for (const file of call.changedFiles) changedFiles.add(file)
+      }
+    }
+    const completed = calls.filter(c => c.status === 'completed').length
+    const failed = calls.filter(c => c.status === 'failed' || c.status === 'rejected').length
+    const filesList = changedFiles.size > 0
+      ? [...changedFiles].slice(0, 40).join(', ') + (changedFiles.size > 40 ? ` … +${changedFiles.size - 40} more` : '')
+      : '(none)'
+    return `[verified-state] Tool calls so far in THIS run: ${completed} ok, ${failed} failed. Files actually changed (tool-verified): ${filesList}. Anything not listed here was NOT done in this run — do not claim it as completed; verify with git/glob before claiming prior work.`
   }
 
   /**
@@ -854,7 +880,10 @@ export class AgentLoop extends EventEmitter {
         ...(systemMsg ? [systemMsg] : []),
         {
           role: 'assistant',
-          content: `**Context Auto-Compacted**\n\nOriginal messages: ${beforeMessages}\nPrevious context: ${contextPercent}% of window\n\n${summary}`,
+          // The summary is lossy — after compaction the model is prone to
+          // "remembering" planned work as done. Pin the tool-verified ledger
+          // right next to it so reality stays in context.
+          content: `**Context Auto-Compacted**\n\nOriginal messages: ${beforeMessages}\nPrevious context: ${contextPercent}% of window\n\n${summary}\n\n${this.buildVerifiedLedger()}`,
         },
       ]
       this.lastCompactedAtMessageCount = this.messages.length

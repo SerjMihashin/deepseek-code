@@ -2,7 +2,7 @@ import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { resolveWindowsShell } from '../tools/shell.js'
-import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
+import { contextWindowFor, type DeepSeekConfig, type ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
 import { i18n } from './i18n.js'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
@@ -350,6 +350,7 @@ export class AgentLoop extends EventEmitter {
     super()
     this.api = new DeepSeekAPI(config)
     this.model = config.model
+    this.metrics.setContextWindow(contextWindowFor(this.model))
     const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode)
     this.options = {
       maxIterations: DEFAULT_MAX_ITERATIONS,
@@ -876,8 +877,34 @@ export class AgentLoop extends EventEmitter {
       })
 
       const systemMsg = this.messages.find(m => m.role === 'system')
+
+      // BUG FIX: previously the whole history was replaced by [system, summary],
+      // silently dropping both the original task text and the recent messages
+      // that keepRecentMessages promised to keep. Continuing from a lossy
+      // summary alone is how the model drifts into claiming un-done work.
+      // Keep: the original user task verbatim + the recent tail.
+      const firstUserMsg = this.messages.find(m => m.role === 'user')
+      let taskText = ''
+      if (firstUserMsg) {
+        taskText = typeof firstUserMsg.content === 'string'
+          ? firstUserMsg.content
+          : firstUserMsg.content.filter(b => b.type === 'text').map(b => (b as { type: 'text'; text: string }).text).join('\n')
+      }
+      const taskMsg: ChatMessage | null = taskText
+        ? {
+            role: 'user',
+            content: `**Original task (verbatim, pre-compaction):**\n${taskText.length > 6000 ? taskText.slice(0, 6000) + '\n…[truncated]' : taskText}`,
+          }
+        : null
+
+      // Recent tail, trimmed so it does not start with an orphan tool message
+      // (a tool result must follow its assistant tool_calls message).
+      const tail = this.messages.slice(-compact.keepRecentMessages).filter(m => m.role !== 'system')
+      while (tail.length > 0 && tail[0].role === 'tool') tail.shift()
+
       this.messages = [
         ...(systemMsg ? [systemMsg] : []),
+        ...(taskMsg ? [taskMsg] : []),
         {
           role: 'assistant',
           // The summary is lossy — after compaction the model is prone to
@@ -885,6 +912,7 @@ export class AgentLoop extends EventEmitter {
           // right next to it so reality stays in context.
           content: `**Context Auto-Compacted**\n\nOriginal messages: ${beforeMessages}\nPrevious context: ${contextPercent}% of window\n\n${summary}\n\n${this.buildVerifiedLedger()}`,
         },
+        ...tail,
       ]
       this.lastCompactedAtMessageCount = this.messages.length
 

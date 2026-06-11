@@ -113,6 +113,8 @@ export function parsePorcelain (stdout: string): GitStatusSnapshot {
 
 export class MetricsCollector {
   private startTime: number = Date.now()
+  /** Context window of the active model (set by AgentLoop); conservative default. */
+  private _contextWindow: number = 128_000
   private _toolCalls: number = 0
   private _inputTokens: number = 0
   private _cacheHitInputTokens: number = 0
@@ -213,11 +215,20 @@ export class MetricsCollector {
     this._apiCalls++
   }
 
+  /** Set the context window of the active model (tokens). */
+  setContextWindow (tokens: number): void {
+    if (tokens > 0) this._contextWindow = tokens
+  }
+
+  get contextWindow (): number {
+    return this._contextWindow
+  }
+
   /**
    * Get current context window usage as % of max context.
    * Uses last API request's prompt_tokens — the actual size of the current window.
    */
-  getCurrentWindowPercent (maxContext: number = 128_000): number {
+  getCurrentWindowPercent (maxContext: number = this._contextWindow): number {
     if (maxContext <= 0 || this._lastInputTokens === 0) return 0
     return Math.min(100, Math.round((this._lastInputTokens / maxContext) * 100))
   }
@@ -241,9 +252,9 @@ export class MetricsCollector {
   }
 
   /**
-   * Get context usage percentage based on model's max context (default 128k for deepseek-chat)
+   * Get context usage percentage based on the active model's max context.
    */
-  getContextUsagePercent (maxContext: number = 128_000): number {
+  getContextUsagePercent (maxContext: number = this._contextWindow): number {
     if (maxContext <= 0) return 0
     return Math.min(100, Math.round((this.totalTokens / maxContext) * 100))
   }
@@ -282,7 +293,10 @@ export class MetricsCollector {
     // Last request context window (the actual size of the last prompt)
     const contextPercent = this.getCurrentWindowPercent()
     if (contextPercent > 0 && this._lastInputTokens > 0) {
-      summary += `\nLast request context: ${this._lastInputTokens.toLocaleString()} tokens (${contextPercent}% of 128k window)\n`
+      const windowLabel = this._contextWindow >= 1_000_000
+        ? `${(this._contextWindow / 1_000_000).toFixed(this._contextWindow % 1_000_000 === 0 ? 0 : 1)}M`
+        : `${Math.round(this._contextWindow / 1000)}k`
+      summary += `\nLast request context: ${this._lastInputTokens.toLocaleString()} tokens (${contextPercent}% of ${windowLabel} window)\n`
     }
 
     // Git change report

@@ -50,11 +50,31 @@ Guidelines:
 export const CONFIG_FILE_NAME = 'settings.json'
 export const CONFIG_DIR_NAME = '.deepseek-code'
 
+// Verified against https://api-docs.deepseek.com/quick_start/pricing (2026-06-11).
+// Legacy deepseek-chat/reasoner are aliases of v4-flash (deprecated 2026-07-24).
 export const MODEL_PRICING: Record<string, { cacheHitInputPer1M: number; cacheMissInputPer1M: number; outputPer1M: number }> = {
   'deepseek-chat': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
   'deepseek-reasoner': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
   'deepseek-v4-flash': { cacheHitInputPer1M: 0.0028, cacheMissInputPer1M: 0.14, outputPer1M: 0.28 },
   'deepseek-v4-pro': { cacheHitInputPer1M: 0.003625, cacheMissInputPer1M: 0.435, outputPer1M: 0.87 },
+}
+
+/**
+ * Context window per model, in tokens. All DeepSeek V4 models (and the legacy
+ * aliases) have a 1M-token window per the official pricing page (2026-06-11).
+ * The old hardcoded 128k undercounted by ~8x, which both misreported ctx% and
+ * fired auto-compaction far too early.
+ */
+export const MODEL_CONTEXT_WINDOW: Record<string, number> = {
+  'deepseek-chat': 1_000_000,
+  'deepseek-reasoner': 1_000_000,
+  'deepseek-v4-flash': 1_000_000,
+  'deepseek-v4-pro': 1_000_000,
+}
+
+/** Context window for a model, with a conservative fallback for unknown ids. */
+export function contextWindowFor (model: string): number {
+  return MODEL_CONTEXT_WINDOW[model] ?? 128_000
 }
 
 export interface ModelInfo {

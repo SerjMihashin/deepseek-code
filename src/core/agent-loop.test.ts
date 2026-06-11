@@ -443,8 +443,10 @@ describe('AgentLoop', () => {
 
     await agent.run('test')
     const metrics = agent.getMetrics()
-    expect(metrics.getContextUsagePercent()).toBe(100)
+    // 128k total tokens against the v4 1M context window (see MODEL_CONTEXT_WINDOW)
+    expect(metrics.getContextUsagePercent()).toBe(13)
     expect(metrics.getContextUsagePercent(256000)).toBe(50)
+    expect(metrics.contextWindow).toBe(1_000_000)
   })
 
   it('should emit reasoning chunks', async () => {

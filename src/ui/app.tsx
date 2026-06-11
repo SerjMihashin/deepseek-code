@@ -658,39 +658,19 @@ export function App ({ config, options }: AppProps) {
   useInput((_input, key) => {
     const step = setupStepRef.current
 
-    // Ctrl+C is handled here because Ink raw mode delivers it as input (not a
-    // SIGINT signal) on all platforms when exitOnCtrlC is false. The SIGINT
-    // handler in interactive.ts is only a fallback for non-TTY runs.
-    // - While the agent runs: first Ctrl+C aborts/pauses, never exits.
-    // - When idle or already paused: double Ctrl+C within 3s exits.
+    // Ctrl+C = exit only after a double confirmation. Ink raw mode delivers it
+    // as input (not a SIGINT) when exitOnCtrlC is false. We intentionally do NOT
+    // abort the running agent on Ctrl+C — aborting the in-flight work was what
+    // dropped the process to the shell. To steer or stop the agent mid-run, type
+    // a follow-up message instead (it is queued into the active run).
+    // - First press: show a hint, do nothing else (agent keeps running).
+    // - Second press within 3s: exit cleanly.
     if (key.ctrl && _input === 'c') {
-      logEvent('useInput Ctrl+C', { isProcessing, isPaused, hasAbort: !!abortControllerRef.current, step })
-      if (isProcessing && abortControllerRef.current && !isPaused) {
-        logEvent('useInput Ctrl+C -> abort+pause')
-        abortControllerRef.current.abort()
-        setIsPaused(true)
-        setStatusText(i18n.t('paused'))
-        if (pendingApprovalResolveRef.current) {
-          pendingApprovalResolveRef.current(false)
-          pendingApprovalResolveRef.current = null
-        }
-        setPendingApproval(null)
-        // Reset exit-arming: the interrupt is the user's action this press.
-        ctrlCExitArmedRef.current = false
-        if (ctrlCExitTimerRef.current) {
-          clearTimeout(ctrlCExitTimerRef.current)
-          ctrlCExitTimerRef.current = null
-        }
-        return
-      }
-      // Idle or paused — second press within the window exits.
       if (ctrlCExitArmedRef.current) {
-        logEvent('useInput Ctrl+C -> doublePress -> exit()')
         if (ctrlCExitTimerRef.current) clearTimeout(ctrlCExitTimerRef.current)
         exit()
         return
       }
-      logEvent('useInput Ctrl+C -> firstPress armed')
       ctrlCExitArmedRef.current = true
       addServiceNotice(i18n.t('ctrlCHint'))
       if (ctrlCExitTimerRef.current) clearTimeout(ctrlCExitTimerRef.current)

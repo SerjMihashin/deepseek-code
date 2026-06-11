@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { platform } from 'node:os'
 
 export type WindowsShell = 'powershell' | 'cmd'
@@ -35,4 +35,51 @@ export function resolveWindowsShell (): WindowsShell {
   if (platform() !== 'win32') return 'cmd'
   if (cached === null) cached = detectWindowsShell()
   return cached
+}
+
+/**
+ * Spawn a shell command through the resolved shell for this OS (PowerShell/cmd on
+ * Windows, /bin/sh on POSIX). `detached` should be true on POSIX so the whole
+ * process group can be killed later. Shared by run_shell_command and the
+ * background process manager.
+ */
+export function spawnShellCommand (command: string, detached: boolean): ChildProcess {
+  if (platform() === 'win32') {
+    return resolveWindowsShell() === 'powershell'
+      ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
+      : spawn(command, { shell: true, windowsHide: true, detached })
+  }
+  return spawn(command, { shell: true, detached })
+}
+
+/**
+ * Kill a child and its whole process tree. A bare `child.kill()` only signals the
+ * shell wrapper; on Windows the real command keeps the stdout pipe open (so the
+ * `close` event never fires) and on POSIX it is orphaned.
+ */
+export function killProcessTree (child: ChildProcess): void {
+  const pid = child.pid
+  if (pid == null) return
+  if (platform() === 'win32') {
+    try {
+      spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true })
+    } catch {
+      try { child.kill('SIGKILL') } catch { /* already gone */ }
+    }
+  } else {
+    try {
+      process.kill(-pid, 'SIGTERM')
+    } catch {
+      try { child.kill('SIGKILL') } catch { /* already gone */ }
+    }
+  }
+}
+
+/** Synchronous tree kill by pid — for process-exit cleanup of background tasks. */
+export function killProcessTreeSync (pid: number): void {
+  if (platform() === 'win32') {
+    try { spawnSync('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true, timeout: 5000 }) } catch { /* best effort */ }
+  } else {
+    try { process.kill(-pid, 'SIGKILL') } catch { /* best effort */ }
+  }
 }

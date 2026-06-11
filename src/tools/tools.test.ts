@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
+import net from 'node:net'
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
 import { editTool } from './edit.js'
@@ -447,6 +448,33 @@ describe('bash tool', () => {
     expect(result.success).toBe(false)
     expect(result.error).toContain('aborted')
     expect(Date.now() - start).toBeLessThan(8000)
+  })
+
+  it('starts a background server, waits for its port, then stops it', async () => {
+    const port = await new Promise<number>((resolve) => {
+      const srv = net.createServer()
+      srv.listen(0, () => {
+        const p = (srv.address() as net.AddressInfo).port
+        srv.close(() => resolve(p))
+      })
+    })
+    const code = `require('http').createServer((q,s)=>s.end('ok')).listen(${port})`
+
+    const start = await bashTool.execute({ command: `node -e "${code}"`, background: true, wait_for_port: port, timeout: 15000 })
+    expect(start.success).toBe(true)
+    expect(start.output).toContain('is ready')
+
+    const pid = Number(start.output.match(/pid=(\d+)/)?.[1])
+    expect(Number.isInteger(pid)).toBe(true)
+
+    const stop = await bashTool.execute({ stop_pid: pid })
+    expect(stop.success).toBe(true)
+  }, 20000)
+
+  it('reports an error when no command and no action is given', async () => {
+    const result = await bashTool.execute({})
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('No command')
   })
 })
 

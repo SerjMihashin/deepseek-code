@@ -1,6 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process'
+import { type ChildProcess } from 'node:child_process'
 import { platform } from 'node:os'
-import { resolveWindowsShell } from './shell.js'
+import { spawnShellCommand, killProcessTree, resolveWindowsShell } from './shell.js'
+import { startBackground, stopBackground, getBackgroundOutput, isBackgroundRunning, getBackgroundExitInfo, waitForPort } from './process-manager.js'
 import { isAbsolute, relative } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 
@@ -193,31 +194,6 @@ interface CommandResult {
 }
 
 /**
- * Kill a child and its whole process tree. A bare `child.kill()` only signals
- * the direct child (the shell wrapper); on Windows the actual command keeps the
- * stdout pipe open so the `close` event never fires, and on Unix the command is
- * orphaned. We therefore kill the entire tree/process group.
- */
-function killProcessTree (child: ChildProcess): void {
-  const pid = child.pid
-  if (pid == null) return
-  if (platform() === 'win32') {
-    try {
-      spawn('taskkill', ['/pid', String(pid), '/t', '/f'], { windowsHide: true })
-    } catch {
-      try { child.kill('SIGKILL') } catch { /* already gone */ }
-    }
-  } else {
-    try {
-      // Negative pid targets the process group (requires detached spawn).
-      process.kill(-pid, 'SIGTERM')
-    } catch {
-      try { child.kill('SIGKILL') } catch { /* already gone */ }
-    }
-  }
-}
-
-/**
  * Run a shell command asynchronously so the event loop (and therefore the TUI
  * and Ctrl+C handling) stays responsive while the command runs. The command is
  * killed if `signal` aborts (user cancellation) or the timeout elapses.
@@ -231,20 +207,7 @@ function executeCommand (command: string, timeout: number, signal?: AbortSignal)
 
     // detached on POSIX makes the child a process-group leader so the whole
     // group can be killed; on Windows the tree is killed via taskkill /t.
-    const detached = platform() !== 'win32'
-    // On Windows commands run through a single, predictable shell — PowerShell by
-    // default (what the model writes naturally: $env:, ;, 2>$null), with a cmd.exe
-    // fallback when PowerShell can't run (resolveWindowsShell). This removes the
-    // "wrote PowerShell, ran under cmd" failures that produced junk like a literal
-    // "$null" file. The active shell is announced in the system prompt.
-    let child: ChildProcess
-    if (platform() === 'win32') {
-      child = resolveWindowsShell() === 'powershell'
-        ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
-        : spawn(command, { shell: true, windowsHide: true, detached })
-    } else {
-      child = spawn(command, { shell: true, detached })
-    }
+    const child: ChildProcess = spawnShellCommand(command, platform() !== 'win32')
 
     let stdout = ''
     let stderr = ''
@@ -286,18 +249,36 @@ function executeCommand (command: string, timeout: number, signal?: AbortSignal)
 
 export const bashTool: Tool = {
   name: 'run_shell_command',
-  description: 'Execute an OS-compatible shell command. Use for build/test/git commands; prefer read_file, grep_search, and glob for repository inspection. On Windows, use PowerShell/cmd-compatible commands unless Unix tools were verified.',
+  description: 'Execute an OS-compatible shell command (build/test/git). Prefer read_file, grep_search, glob for inspection. For long-running processes like dev/preview servers, set background:true (optionally with wait_for_port) so the call returns instead of hanging; later stop it with stop_pid. The active shell dialect is described in the system prompt.',
   parameters: [
     {
       name: 'command',
       type: 'string',
-      description: 'The shell command to execute',
-      required: true,
+      description: 'The shell command to execute. Omit only when using stop_pid, or wait_for_port alone.',
+      required: false,
     },
     {
       name: 'timeout',
       type: 'number',
-      description: 'Optional timeout in milliseconds (default: 120000)',
+      description: 'Timeout in ms (default 120000 for normal commands; 30000 for wait_for_port).',
+      required: false,
+    },
+    {
+      name: 'background',
+      type: 'boolean',
+      description: 'Run the command as a long-running background process (e.g. a dev server) and return immediately with its pid instead of waiting for it to finish.',
+      required: false,
+    },
+    {
+      name: 'wait_for_port',
+      type: 'number',
+      description: 'After starting (or by itself), poll this localhost TCP port until it accepts connections or the timeout elapses. Use to wait for a dev server before a browser check.',
+      required: false,
+    },
+    {
+      name: 'stop_pid',
+      type: 'number',
+      description: 'Stop a previously started background process by its pid (kills the whole process tree). No command needed.',
       required: false,
     },
     {
@@ -308,8 +289,32 @@ export const bashTool: Tool = {
     },
   ],
   async execute (args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    const command = args.command as string
+    const command = args.command as string | undefined
     const timeout = (args.timeout as number) ?? 120_000
+    const background = args.background === true
+    const waitForPortNum = args.wait_for_port as number | undefined
+    const stopPid = args.stop_pid as number | undefined
+
+    // ── Stop a background process ──────────────────────────────────────────
+    if (typeof stopPid === 'number') {
+      const result = stopBackground(stopPid)
+      if (!result.stopped) return { success: false, output: '', error: result.error }
+      const tail = result.output ? `\n--- last output ---\n${result.output.slice(-4000)}` : ''
+      return { success: true, output: `Stopped background process pid=${stopPid}.${tail}` }
+    }
+
+    // ── Wait for a port with no command (server already started elsewhere) ──
+    if (!command && typeof waitForPortNum === 'number') {
+      const portTimeout = (args.timeout as number) ?? 30_000
+      const ready = await waitForPort(waitForPortNum, '127.0.0.1', portTimeout)
+      return ready
+        ? { success: true, output: `Port ${waitForPortNum} is accepting connections.` }
+        : { success: false, output: '', error: `Port ${waitForPortNum} not ready within ${portTimeout}ms.` }
+    }
+
+    if (!command) {
+      return { success: false, output: '', error: 'No command provided. Pass `command`, or use `stop_pid` / `wait_for_port`.' }
+    }
 
     // Security check — reject dangerous commands
     const danger = isDangerousCommand(command)
@@ -357,6 +362,36 @@ export const bashTool: Tool = {
         success: false,
         output: '',
         error: powershellSyntaxPolicyError,
+      }
+    }
+
+    // ── Background process (dev/preview servers etc.) ──────────────────────
+    if (background) {
+      const { pid, error } = startBackground(command)
+      if (pid == null) return { success: false, output: '', error }
+
+      let portMsg = ''
+      let portReady = true
+      if (typeof waitForPortNum === 'number') {
+        const portTimeout = (args.timeout as number) ?? 30_000
+        portReady = await waitForPort(waitForPortNum, '127.0.0.1', portTimeout)
+        portMsg = portReady
+          ? `\nPort ${waitForPortNum} is ready.`
+          : `\nWARNING: port ${waitForPortNum} did not become ready within ${portTimeout}ms.`
+      } else {
+        // brief grace period to surface startup output / immediate crashes
+        await new Promise(resolve => setTimeout(resolve, 800))
+      }
+
+      const running = isBackgroundRunning(pid)
+      const exitInfo = getBackgroundExitInfo(pid)
+      const out = getBackgroundOutput(pid)
+      const tail = out ? `\n--- output so far ---\n${out.slice(-4000)}` : ''
+      const success = running && portReady
+      return {
+        success,
+        output: `Started background process pid=${pid}.${running ? '' : ` Process already ${exitInfo}.`}${portMsg}\nStop it later with stop_pid=${pid}.${tail}`,
+        error: success ? undefined : (running ? `Port ${waitForPortNum} not ready.` : `Background process exited immediately: ${exitInfo}`),
       }
     }
 

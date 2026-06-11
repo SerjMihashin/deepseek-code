@@ -1,6 +1,7 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
+import { resolveWindowsShell } from '../tools/shell.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
 import { i18n } from './i18n.js'
@@ -102,6 +103,46 @@ const DEFAULT_AUTO_COMPACT: Required<AutoCompactOptions> = {
 /**
  * Build a dynamic system prompt with project context.
  */
+const NO_BRUTE_FORCE = '- **Do NOT brute-force command variants.** If a command fails, read the actual error and fix the real cause, then issue ONE corrected command. Never spray permutations (cmd /c …, chcp, node.exe vs npx, env-prefix variants) hoping one works — that just fills the log with failures.'
+const NO_BROAD_KILL = "- Never use broad process-kill commands such as `taskkill /F /IM node.exe`, `Stop-Process -Name node`, `pkill node`, or `killall node`. They can terminate the agent, the user's IDE terminal, and unrelated dev servers. Stop only a specific process you started and can identify by PID."
+
+/**
+ * Shell guidance that matches the shell `run_shell_command` actually uses, so the
+ * model writes the correct dialect instead of guessing (and brute-forcing).
+ */
+function buildShellPolicySection (): string {
+  if (platform() !== 'win32') {
+    return `## Shell Policy
+- \`run_shell_command\` runs through your system shell (\`/bin/sh\`). Standard POSIX syntax works: \`&&\`, \`||\`, \`$VAR\`, pipes, redirects.
+- Prefer the built-in tools over shell for inspection: \`read_file\`, \`grep_search\`, \`glob\`.
+${NO_BRUTE_FORCE}
+${NO_BROAD_KILL}`
+  }
+
+  if (resolveWindowsShell() === 'cmd') {
+    return `## Windows Shell Policy
+- On this machine \`run_shell_command\` runs through **cmd.exe** (PowerShell was unavailable or \`DEEPSEEK_CODE_SHELL=cmd\`). Write cmd syntax — NOT PowerShell.
+- Chain with \`&&\` (next only on success) or \`&\` (always). Environment variables: \`%VAR%\`; set inline with \`set VAR=value&& <command>\`.
+- Do NOT use PowerShell syntax here (\`$env:\`, \`;\` as a separator, \`> $null\`, cmdlets) — it fails under cmd and can create junk files like a literal \`$null\`.
+- Unix tools do NOT exist (\`sed\`, \`head\`, \`tail\`, \`grep\`, \`cat\`, \`ls\`, \`rm\`, \`touch\`, \`xargs\`). Use \`findstr\`, \`type\`, \`dir\`, \`del\`, or the \`read_file\`/\`grep_search\`/\`glob\` tools.
+- Never use \`mkdir -p\` (creates a literal \`-p\` directory); use \`mkdir <path>\`.
+- Prefer the built-in tools over shell for inspection: \`read_file\`, \`grep_search\`, \`glob\`.
+${NO_BRUTE_FORCE}
+${NO_BROAD_KILL}`
+  }
+
+  return `## Windows Shell Policy
+- On Windows, \`run_shell_command\` runs through **Windows PowerShell 5.1** (a single, predictable shell — never cmd.exe). Write every command in PowerShell syntax. \`npm\`, \`node\`, \`git\`, \`npx\` run normally inside it.
+- **No \`&&\` or \`||\`** — PowerShell 5.1 does not support them (it is a parse error). Run sequentially with \`;\`. To run B only if A succeeded: \`A; if ($?) { B }\`. Example: \`npm run build; if ($?) { npm test }\` — NOT \`npm run build && npm test\`.
+- **Environment variables**: read with \`$env:NAME\`, set inline with \`$env:NAME='value'; <command>\`. There is no \`VAR=value cmd\` prefix and no \`set VAR=...\`.
+- **Redirects work as PowerShell**: \`> $null\`, \`2>$null\`, \`*> out.txt\` are valid here.
+- These are PowerShell aliases and work fine: \`cat\`, \`ls\`, \`rm\`, \`cp\`, \`mv\`, \`echo\`, \`pwd\`. These do NOT exist (use the noted replacement): \`sed\`, \`head\` (→ \`Get-Content -TotalCount n\`), \`tail\` (→ \`Get-Content -Tail n\`), \`grep\` (→ \`grep_search\` tool or \`Select-String\`), \`xargs\`, \`touch\` (→ \`New-Item\`).
+- Never use \`mkdir -p\` (the \`-p\` is not a PowerShell parameter). Use \`New-Item -ItemType Directory -Force <path>\`.
+- Prefer the built-in tools over shell for inspection: \`read_file\` for file content, \`grep_search\` for text search, \`glob\` for file discovery.
+${NO_BRUTE_FORCE}
+${NO_BROAD_KILL}`
+}
+
 export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
   const osInfo = `${type()} ${release()} (${platform()})`
   let projectInfo = ''
@@ -175,6 +216,8 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): s
 
   const languageSection = `\n## Language\n- Respond in ${responseLanguage} unless the user explicitly asks otherwise.`
 
+  const shellPolicySection = buildShellPolicySection()
+
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
 You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${languageSection}
@@ -202,16 +245,7 @@ When you need to run multiple tools, call them one at a time and wait for result
 - If the user intended a different folder, ask them to restart/open the CLI in that folder or confirm the correct workspace.
 - Avoid generating project files through ad-hoc scripts such as \`gen_helper.py\`, \`diag.py\`, or \`fix_pkg.py\`. Use the file tools for file content and remove any temporary helper before the final report.
 
-## Windows Shell Policy
-- The OS is listed in Project Context. If it is Windows or \`win32\`, write shell commands for PowerShell/cmd compatibility.
-- On Windows, do not assume Unix tools exist. Avoid \`sed\`, \`head\`, \`tail\`, \`cat\`, \`grep\`, \`find\`, \`xargs\`, \`rm\`, \`touch\`, or Bash-specific syntax unless you first verified the command exists.
-- On Windows, never use \`mkdir -p\`; it can create a literal \`-p\` directory. Use \`New-Item -ItemType Directory -Force <path>\` or \`mkdir <path>\` without \`-p\`.
-- Prefer built-in tools over shell for repository inspection: use \`read_file\` for file content, \`grep_search\` for text search, and \`glob\` for file discovery.
-- For Windows shell reads, prefer PowerShell commands such as \`Get-Content\`, \`Select-String\`, \`Get-ChildItem\`, \`Test-Path\`, \`Remove-Item\`, and \`New-Item\`.
-- The shell tool automatically runs recognized PowerShell cmdlets through PowerShell on Windows. Plain commands such as \`npm\`, \`node\`, \`git\`, and \`npx\` run normally.
-- Do not mix Bash/cmd chaining syntax with PowerShell cmdlets in the same command. Avoid \`cd path && Remove-Item ...\`; use separate tool calls or PowerShell-compatible \`Set-Location path; Remove-Item ...\` with explicit error checks.
-- If a command fails because of shell incompatibility, retry with an OS-compatible command and report the failed attempt honestly.
-- Never use broad process-kill commands such as \`taskkill /F /IM node.exe\`, \`Stop-Process -Name node\`, \`pkill node\`, or \`killall node\`. They can terminate the agent, the user's IDE terminal, and unrelated dev servers. Stop only a specific process you started and can identify by PID.
+${shellPolicySection}
 
 ## Important
 - ALWAYS use absolute paths when referring to files. The project root is \`${cwd || 'the current working directory'}\`.

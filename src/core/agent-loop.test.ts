@@ -49,8 +49,8 @@ describe('AgentLoop', () => {
     const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
 
     expect(prompt).toContain('## Windows Shell Policy')
-    expect(prompt).toContain('PowerShell/cmd compatibility')
-    expect(prompt).toContain('do not assume Unix tools exist')
+    expect(prompt).toContain('Windows PowerShell 5.1')
+    expect(prompt).toContain('Do NOT brute-force command variants')
     expect(prompt).toContain('read_file')
     expect(prompt).toContain('grep_search')
     expect(prompt).toContain('glob')

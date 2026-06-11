@@ -381,13 +381,22 @@ describe('bash tool', () => {
     expect(result.output).toContain('one')
   })
 
-  it('should reject cmd chaining mixed with PowerShell cmdlets on Windows', async () => {
+  it('should reject && / || chaining on Windows (PowerShell 5.1 has no &&)', async () => {
     if (process.platform !== 'win32') return
 
-    const result = await bashTool.execute({ command: 'cd "." && Remove-Item "temp.txt" -Force' })
+    const result = await bashTool.execute({ command: 'npm run build && npm test' })
     expect(result.success).toBe(false)
-    expect(result.error).toContain('PowerShell cmdlets')
     expect(result.error).toContain('&&')
+    expect(result.error).toContain('PowerShell')
+  })
+
+  it('runs PowerShell ; sequencing (the && replacement) on Windows', async () => {
+    if (process.platform !== 'win32') return
+
+    const result = await bashTool.execute({ command: 'Write-Output one; Write-Output two' })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('one')
+    expect(result.output).toContain('two')
   })
 
   it('should reject changing directory outside the workspace', async () => {

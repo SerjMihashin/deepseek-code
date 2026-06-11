@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { platform } from 'node:os'
+import { resolveWindowsShell } from './shell.js'
 import { isAbsolute, relative } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 
@@ -31,33 +32,17 @@ const DANGEROUS_PATTERNS = [
   /^\s*>+\s+\/dev\//m, // destructive redirects
 ]
 
+// Commands with NO Windows PowerShell 5.1 equivalent (would just fail). Note we
+// no longer list cat/rm/ls/cp/mv/echo here: under PowerShell those are aliases
+// (Get-Content/Remove-Item/Get-ChildItem/...) and work fine.
 const WINDOWS_UNIX_COMMAND_REPLACEMENTS: Record<string, string> = {
   sed: 'Use PowerShell string replacement, Select-String, or read_file/edit instead.',
   head: 'Use Get-Content <path> -TotalCount <n>.',
   tail: 'Use Get-Content <path> -Tail <n>.',
-  cat: 'Use Get-Content <path>.',
   grep: 'Use grep_search, Select-String, or rg if available.',
   xargs: 'Use PowerShell pipelines with ForEach-Object.',
   touch: 'Use New-Item -ItemType File or Set-Content.',
-  rm: 'Use Remove-Item with an explicit safe path.',
 }
-
-const POWERSHELL_COMMANDS = new Set([
-  'add-content',
-  'copy-item',
-  'get-childitem',
-  'get-content',
-  'move-item',
-  'new-item',
-  'remove-item',
-  'select-object',
-  'select-string',
-  'set-content',
-  'test-path',
-  'foreach-object',
-  'where-object',
-  'write-output',
-])
 
 function findBareCommandAtSegmentStart (command: string, names: Set<string>): string | null {
   let atSegmentStart = true
@@ -166,11 +151,6 @@ function getWindowsUnixFlagPolicyError (command: string): string | null {
   return null
 }
 
-function shouldRunWithPowerShell (command: string): boolean {
-  if (platform() !== 'win32') return false
-  return findBareCommandAtSegmentStart(command, POWERSHELL_COMMANDS) !== null
-}
-
 function hasUnquotedWindowsShellChaining (command: string): boolean {
   let quote: '"' | "'" | null = null
 
@@ -195,10 +175,11 @@ function hasUnquotedWindowsShellChaining (command: string): boolean {
 }
 
 function getPowerShellSyntaxPolicyError (command: string): string | null {
-  if (!shouldRunWithPowerShell(command)) return null
+  if (platform() !== 'win32') return null
+  if (resolveWindowsShell() !== 'powershell') return null
   if (!hasUnquotedWindowsShellChaining(command)) return null
 
-  return 'Windows shell policy: this command uses PowerShell cmdlets together with cmd/bash chaining operators && or ||. Use separate tool calls, or PowerShell-compatible separators such as ; with explicit error checks.'
+  return 'Windows shell policy: commands run through Windows PowerShell 5.1, which does NOT support the && or || operators. Use ; to run sequentially, or "; if ($?) { <next> }" to run the next command only if the previous one succeeded. Or split into separate tool calls.'
 }
 
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
@@ -251,9 +232,19 @@ function executeCommand (command: string, timeout: number, signal?: AbortSignal)
     // detached on POSIX makes the child a process-group leader so the whole
     // group can be killed; on Windows the tree is killed via taskkill /t.
     const detached = platform() !== 'win32'
-    const child = shouldRunWithPowerShell(command)
-      ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
-      : spawn(command, { shell: true, windowsHide: true, detached })
+    // On Windows commands run through a single, predictable shell — PowerShell by
+    // default (what the model writes naturally: $env:, ;, 2>$null), with a cmd.exe
+    // fallback when PowerShell can't run (resolveWindowsShell). This removes the
+    // "wrote PowerShell, ran under cmd" failures that produced junk like a literal
+    // "$null" file. The active shell is announced in the system prompt.
+    let child: ChildProcess
+    if (platform() === 'win32') {
+      child = resolveWindowsShell() === 'powershell'
+        ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
+        : spawn(command, { shell: true, windowsHide: true, detached })
+    } else {
+      child = spawn(command, { shell: true, detached })
+    }
 
     let stdout = ''
     let stderr = ''

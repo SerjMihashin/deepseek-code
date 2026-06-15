@@ -1,6 +1,7 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
+import { getMcpToolDefinitions } from './mcp-tools.js'
 import { resolveWindowsShell } from '../tools/shell.js'
 import { contextWindowFor, type DeepSeekConfig, type ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
@@ -210,6 +211,27 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): s
     ...toolListLines,
   ].join('\n')
 
+  // Shared Context Hub / external MCP tools. Plan mode is read-only and does not
+  // expose them, so only advertise when they are actually active.
+  let mcpSection = ''
+  if (mode !== 'plan') {
+    const mcpTools = getMcpToolDefinitions()
+    if (mcpTools.length > 0) {
+      const mcpToolLines = mcpTools.map(def => `  - \`${def.tool.name}\` — ${def.tool.description}`)
+      const orientation = mcpTools.some(def => def.tool.name === 'workspace_resume')
+        ? '\n- If a `workspace_resume` tool is available, call it ONCE at the start of a new task to load project memory, open/handed-off tasks, and recent sessions in a single token-budgeted call — prefer it over reading many files just to get oriented.'
+        : ''
+      mcpSection = [
+        '\n## Shared Context Hub (MCP)',
+        'External MCP tools are connected — shared memory and a task queue used by other agents working on the same projects.' + orientation,
+        '- Use `task_list`/`task_claim` to pick up work handed off by another agent, and `session_log`/`memory_write` to record durable outcomes for the next agent.',
+        '- These tools are real and callable like any other; do not claim you used them without an actual tool call.',
+        'Connected MCP tools:',
+        ...mcpToolLines,
+      ].join('\n')
+    }
+  }
+
   let responseLanguage = 'English'
   if (locale === 'ru') responseLanguage = 'Russian'
   if (locale === 'zh') responseLanguage = 'Chinese'
@@ -220,7 +242,7 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): s
 
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
-You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${languageSection}
+You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}
 
 ## Guidelines
 1. **Plan first** — Before making changes, explore the codebase to understand the context.
@@ -451,6 +473,20 @@ export class AgentLoop extends EventEmitter {
   }
 
   /**
+   * Built-in tools for the current mode plus any connected MCP tools.
+   * MCP servers connect asynchronously at startup, so this is recomputed at the
+   * start of each loop. Plan mode stays read-only and excludes MCP tools; a
+   * name clash resolves in favor of the built-in tool.
+   */
+  private buildActiveTools (): ToolDefinition[] {
+    const base = getToolsForMode(this.options.approvalMode)
+    if (this.options.approvalMode === 'plan') return base
+    const taken = new Set(base.map(t => t.tool.name))
+    const mcp = getMcpToolDefinitions().filter(t => !taken.has(t.tool.name))
+    return [...base, ...mcp]
+  }
+
+  /**
    * Run the agent loop with a user prompt.
    * Returns the final assistant response text.
    */
@@ -481,6 +517,14 @@ export class AgentLoop extends EventEmitter {
    * Uses streaming for real-time text output via onStreamChunk callback.
    */
   private async executeLoop (): Promise<string> {
+    // Refresh tools and system prompt so MCP servers that finished connecting
+    // after this loop was constructed are reflected in both.
+    this.tools = this.buildActiveTools()
+    const sysIdx = this.messages.findIndex(m => m.role === 'system')
+    if (sysIdx !== -1) {
+      this.options.systemPrompt = buildSystemPrompt(this.options.cwd, this.options.approvalMode)
+      this.messages[sysIdx] = { role: 'system', content: this.options.systemPrompt }
+    }
     const openAITools = toOpenAITools(this.tools)
 
     // Capture git baseline before session starts

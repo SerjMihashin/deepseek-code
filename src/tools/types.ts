@@ -14,6 +14,10 @@ export interface ToolParameter {
   type: 'string' | 'number' | 'boolean' | 'array' | 'object';
   description: string;
   required?: boolean;
+  /** For `array` params: element schema (OpenAI requires `items`). Defaults to string. */
+  items?: { type: 'string' | 'number' | 'boolean' | 'object' };
+  /** Allowed values (rendered into the OpenAI schema as `enum`). */
+  enum?: Array<string | number>;
 }
 
 export interface ToolResult {
@@ -126,10 +130,18 @@ export function toOpenAITools (definitions: ToolDefinition[]): OpenAITool[] {
     const required: string[] = []
 
     for (const param of def.tool.parameters) {
-      properties[param.name] = {
+      const property: Record<string, unknown> = {
         type: param.type,
         description: param.description,
       }
+      // OpenAI/DeepSeek function schema requires `items` for array params.
+      if (param.type === 'array') {
+        property.items = param.items ?? { type: 'string' }
+      }
+      if (param.enum && param.enum.length > 0) {
+        property.enum = param.enum
+      }
+      properties[param.name] = property
       if (param.required) {
         required.push(param.name)
       }

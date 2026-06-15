@@ -109,3 +109,15 @@ function toToolDefinition (mcpTool: MCPTool, manager: MCPManager): ToolDefinitio
 export function getMcpToolDefinitions (manager: MCPManager = mcpManager): ToolDefinition[] {
   return manager.getAllTools().map(tool => toToolDefinition(tool, manager))
 }
+
+/**
+ * Derive the ClaudePlus hub project id from an absolute working directory,
+ * matching the directory-slug scheme used under ~/.claude/projects
+ * (e.g. `D:\Projects\deepseek-code` → `D--Projects-deepseek-code`). Each path
+ * separator and the drive colon become a single dash, so `D:\` → `D--`.
+ */
+export function projectIdFromCwd (cwd: string): string {
+  return cwd
+    .replace(/[\\/]+$/, '') // drop trailing separators
+    .replace(/[\\/:]/g, '-')
+}

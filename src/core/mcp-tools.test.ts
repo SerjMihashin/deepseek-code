@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { jsonSchemaToParameters, mcpResultToText, getMcpToolDefinitions } from './mcp-tools.js'
+import { jsonSchemaToParameters, mcpResultToText, getMcpToolDefinitions, projectIdFromCwd } from './mcp-tools.js'
 import type { MCPManager, MCPTool } from './mcp.js'
 
 describe('jsonSchemaToParameters', () => {
@@ -25,6 +25,18 @@ describe('jsonSchemaToParameters', () => {
   it('tolerates a missing/empty schema', () => {
     expect(jsonSchemaToParameters(undefined)).toEqual([])
     expect(jsonSchemaToParameters({})).toEqual([])
+  })
+})
+
+describe('projectIdFromCwd', () => {
+  it('maps a Windows path to the ~/.claude/projects directory slug', () => {
+    expect(projectIdFromCwd('D:\\Projects\\deepseek-code')).toBe('D--Projects-deepseek-code')
+    expect(projectIdFromCwd('D:\\Projects\\ClaudePlus')).toBe('D--Projects-ClaudePlus')
+  })
+
+  it('ignores trailing separators and handles POSIX paths', () => {
+    expect(projectIdFromCwd('D:\\Projects\\deepseek-code\\')).toBe('D--Projects-deepseek-code')
+    expect(projectIdFromCwd('/home/user/proj')).toBe('-home-user-proj')
   })
 })
 

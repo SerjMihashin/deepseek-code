@@ -1,7 +1,7 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
-import { getMcpToolDefinitions } from './mcp-tools.js'
+import { getMcpToolDefinitions, projectIdFromCwd } from './mcp-tools.js'
 import { resolveWindowsShell } from '../tools/shell.js'
 import { contextWindowFor, type DeepSeekConfig, type ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
@@ -218,8 +218,9 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): s
     const mcpTools = getMcpToolDefinitions()
     if (mcpTools.length > 0) {
       const mcpToolLines = mcpTools.map(def => `  - \`${def.tool.name}\` — ${def.tool.description}`)
+      const hubProjectId = cwd ? projectIdFromCwd(cwd) : ''
       const orientation = mcpTools.some(def => def.tool.name === 'workspace_resume')
-        ? '\n- If a `workspace_resume` tool is available, call it ONCE at the start of a new task to load project memory, open/handed-off tasks, and recent sessions in a single token-budgeted call — prefer it over reading many files just to get oriented.'
+        ? `\n- If a \`workspace_resume\` tool is available, call it ONCE at the start of a new task to load project memory, open/handed-off tasks, and recent sessions in a single token-budgeted call — prefer it over reading many files just to get oriented.${hubProjectId ? ` This project's hub \`project_id\` is \`${hubProjectId}\` — pass it as the \`project_id\` argument (same id for memory/task tools).` : ''}`
         : ''
       mcpSection = [
         '\n## Shared Context Hub (MCP)',

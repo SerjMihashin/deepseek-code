@@ -144,7 +144,7 @@ ${NO_BRUTE_FORCE}
 ${NO_BROAD_KILL}`
 }
 
-export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): string {
+export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, model?: string): string {
   const osInfo = `${type()} ${release()} (${platform()})`
   let projectInfo = ''
 
@@ -222,10 +222,12 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode): s
       const orientation = mcpTools.some(def => def.tool.name === 'workspace_resume')
         ? `\n- If a \`workspace_resume\` tool is available, call it ONCE at the start of a new task to load project memory, open/handed-off tasks, and recent sessions in a single token-budgeted call — prefer it over reading many files just to get oriented.${hubProjectId ? ` This project's hub \`project_id\` is \`${hubProjectId}\` — pass it as the \`project_id\` argument (same id for memory/task tools).` : ''}`
         : ''
+      const identity = `provider="deepseek", client="dsc"${model ? `, model="${model}"` : ''}`
       mcpSection = [
         '\n## Shared Context Hub (MCP)',
         'External MCP tools are connected — shared memory and a task queue used by other agents working on the same projects.' + orientation,
         '- Use `task_list`/`task_claim` to pick up work handed off by another agent, and `session_log`/`memory_write` to record durable outcomes for the next agent.',
+        `- Identify yourself when writing to the hub so the shared history shows who did the work: call \`session_log\` with ${identity}; set \`surface="dsc"\` on \`memory_write\`.`,
         '- These tools are real and callable like any other; do not claim you used them without an actual tool call.',
         'Connected MCP tools:',
         ...mcpToolLines,
@@ -374,7 +376,7 @@ export class AgentLoop extends EventEmitter {
     this.api = new DeepSeekAPI(config)
     this.model = config.model
     this.metrics.setContextWindow(contextWindowFor(this.model))
-    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode)
+    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode, this.model)
     this.options = {
       maxIterations: DEFAULT_MAX_ITERATIONS,
       toolTimeout: 30000,
@@ -465,7 +467,7 @@ export class AgentLoop extends EventEmitter {
     this.options.approvalMode = mode
     this.tools = getToolsForMode(mode)
     // Rebuild system prompt with updated mode info
-    this.options.systemPrompt = buildSystemPrompt(this.options.cwd, mode)
+    this.options.systemPrompt = buildSystemPrompt(this.options.cwd, mode, this.model)
     // Update the system message if it exists
     const sysIdx = this.messages.findIndex(m => m.role === 'system')
     if (sysIdx !== -1) {
@@ -523,7 +525,7 @@ export class AgentLoop extends EventEmitter {
     this.tools = this.buildActiveTools()
     const sysIdx = this.messages.findIndex(m => m.role === 'system')
     if (sysIdx !== -1) {
-      this.options.systemPrompt = buildSystemPrompt(this.options.cwd, this.options.approvalMode)
+      this.options.systemPrompt = buildSystemPrompt(this.options.cwd, this.options.approvalMode, this.model)
       this.messages[sysIdx] = { role: 'system', content: this.options.systemPrompt }
     }
     const openAITools = toOpenAITools(this.tools)

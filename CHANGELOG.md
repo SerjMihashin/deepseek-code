@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.4.6 — Real-Project Agent Hardening
+
+Stabilization driven by running the agent on real, large Windows projects.
+
+### Fixed
+- **Windows shell is now consistent.** All commands run through one resolved shell — Windows PowerShell by default, with a cmd.exe fallback when PowerShell is unavailable (`DEEPSEEK_CODE_SHELL` overrides). This ends the "wrote PowerShell, ran under cmd.exe" failures that produced junk like a literal `$null` file, and the system prompt now states the exact active dialect so the agent stops brute-forcing command variants.
+- **Image content no longer bricks the session.** The DeepSeek API accepts only text; a single `image_url` block in history made every later request fail with `400 unknown variant image_url`. All message content is now flattened to text before sending; image paste is a no-op with a notice; `read_file` returns metadata for binary images (and SVG source / extracted PDF text) instead of inlining base64.
+- **Correct context window and pricing.** The context window is the real **1M tokens** for V4 models (was hardcoded 128k), so auto-compaction no longer fires ~8× too early; cost/token accounting verified against the official pricing page.
+- **Auto-compaction keeps the original task and recent messages** instead of collapsing history to a lone summary (a driver of the agent "remembering" planned work as done).
+- **Browser reuses a single tab** by default instead of opening a new tab per navigation; screenshots are saved for the user and clearly flagged as non-viewable by the model (verify via DOM/`eval`/console).
+
+### Added
+- **Background processes** for `run_shell_command` (`background`, `wait_for_port`, `stop_pid`): start a dev/preview server without hanging, wait for its port, then stop it (whole process tree). Orphans are killed on exit.
+- **Verified-state ledger**: a tool-derived summary of what was actually done (files changed, ok/failed counts) is injected at follow-ups and after compaction, plus a rule that an iteration counts as done only if this run contains its tool calls — guarding against narrating un-done work.
+- Honest-reporting rules: separate the final check result from earlier failed attempts; "could not run X" is reported as Not checked, not as a project defect.
+- MCP: connected MCP tools are callable by the agent; shared-hub project_id auto-derived from cwd; dsc identity stamped on hub writes.
+
+### Changed
+- **Ctrl+C** now exits only on a double press (with a hint on the first) and never aborts the running agent — aborting was what dropped the process to the shell on Windows. To steer the agent mid-run, type a follow-up (it is queued into the active run).
+
+### Known Issues
+- The agent does not always reach for `background:true` on the first try for a dev server (it may run it blocking once and hit a timeout before recovering).
+- This model has no vision: screenshots are saved for the user but verified by the agent via DOM/console, not visually.
+
 ## 0.4.5 — TUI Stabilization, Multimodal & Pipeline
 
 ### Added

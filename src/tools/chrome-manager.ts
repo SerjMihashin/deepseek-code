@@ -118,9 +118,12 @@ class ChromeManager extends EventEmitter {
     return this.browser
   }
 
-  async getPage (sameTab = false): Promise<Page> {
+  async getPage (sameTab = true): Promise<Page> {
     const browser = await this.getBrowser()
 
+    // Default: reuse the current tab. A fresh tab per navigation spawned dozens
+    // of tabs for what is usually the same site. Pass sameTab=false only when a
+    // genuinely separate tab is intended.
     if (sameTab && this.currentPage && !this.currentPage.isClosed()) {
       this.emitState()
       return this.currentPage
@@ -183,7 +186,7 @@ class ChromeManager extends EventEmitter {
     this.emitState()
   }
 
-  async navigate (url: string, sameTab = false): Promise<void> {
+  async navigate (url: string, sameTab = true): Promise<void> {
     const page = await this.getPage(sameTab)
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     this.currentPage = page

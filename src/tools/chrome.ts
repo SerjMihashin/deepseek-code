@@ -121,7 +121,7 @@ async function navigateIfNeeded (
   page: Page
 ): Promise<void> {
   if (args.url) {
-    await chromeManager.navigate(args.url, args.sameTab ?? false)
+    await chromeManager.navigate(args.url, args.sameTab ?? true)
     return
   }
 
@@ -313,7 +313,7 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
         })
         return {
           success: true,
-          output: `Screenshot saved: ${shotPath}\nPage: ${page.url()}`,
+          output: `Screenshot saved for the user to view: ${shotPath}\nPage: ${page.url()}\nNote: this model cannot see the image. To VERIFY rendered state yourself, use action 'read'/'eval' (DOM, computed styles, element counts) and 'console' (errors) — do not claim what the screenshot shows.`,
         }
       }
 
@@ -568,7 +568,7 @@ const chromeParameters: ToolParameter[] = [
   {
     name: 'sameTab',
     type: 'boolean',
-    description: 'Reuse the current tab for multi-step browser flows',
+    description: 'Reuse the current tab (DEFAULT true). Navigations and reloads stay in one tab. Set false ONLY to intentionally open a separate tab for a different site.',
     required: false,
   },
   {
@@ -1246,6 +1246,11 @@ Use it for UI validation, rendered DOM inspection, console and network debugging
 screenshots, and multi-step browser workflows when terminal tools are not enough.
 If the task mentions localhost pages, forms, browser bugs, screenshots, rendered state,
 console output, or network requests, this is the primary tool.
+This model has NO vision: a screenshot is saved for the user but you cannot read it.
+VERIFY rendered state with action 'read'/'eval' (DOM, text, computed styles, element
+counts) and 'console' (errors) — never claim what a screenshot "shows".
+Navigation reuses ONE tab by default (sameTab); do not reopen a new tab for the
+same site — navigate/refresh in place. Use sameTab:false only for a different site.
 
 Examples:
 - { "action": "open", "url": "https://example.com" }

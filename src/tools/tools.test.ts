@@ -77,7 +77,7 @@ describe('read_file tool', () => {
 
   // ── Image & Jupyter support ──────────────────────────────────────────
 
-  it('should read a PNG image as base64 data URL', async () => {
+  it('should read a PNG image as metadata only (no base64 — model has no vision)', async () => {
     // Minimal valid 1x1 pink PNG
     const pngBuf = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==',
@@ -87,14 +87,13 @@ describe('read_file tool', () => {
     writeFileSync(filePath, pngBuf)
     const result = await readTool.execute({ file_path: filePath })
     expect(result.success).toBe(true)
-    expect(result.output).toContain('[Image:')
-    expect(result.output).toContain('data:image/png;base64,')
-    expect(result.output).toContain('Size:')
-    expect(result.output).toContain('Type: image/png')
+    expect(result.output).toContain('Binary image not shown')
+    expect(result.output).toContain('image/png')
+    // base64 data URL must NOT be inlined (context bloat + broke the API)
+    expect(result.output).not.toContain('base64,')
   })
 
-  it('should read a JPG image as base64 data URL', async () => {
-    // Minimal valid JPEG (1x1)
+  it('should read a JPG image as metadata only (no base64)', async () => {
     const jpgBuf = Buffer.from(
       '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsM',
       'base64'
@@ -102,8 +101,17 @@ describe('read_file tool', () => {
     const filePath = join(tmpDir, 'photo.jpg')
     writeFileSync(filePath, jpgBuf)
     const result = await readTool.execute({ file_path: filePath })
-    // May fail validation but should still be detected as image
-    expect(result.output).toContain('data:image/jpeg;base64,')
+    expect(result.output).toContain('Binary image not shown')
+    expect(result.output).not.toContain('base64,')
+  })
+
+  it('should read an SVG as its text source', async () => {
+    const filePath = join(tmpDir, 'icon.svg')
+    writeFileSync(filePath, '<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>')
+    const result = await readTool.execute({ file_path: filePath })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('<svg')
+    expect(result.output).toContain('<circle')
   })
 
   it('should read a Jupyter notebook', async () => {
@@ -165,9 +173,10 @@ startxref
     const result = await readTool.execute({ file_path: filePath })
     expect(result.success).toBe(true)
     expect(result.output).toContain('[PDF:')
-    expect(result.output).toContain('data:application/pdf;base64,')
     expect(result.output).toContain('Extracted text:')
     expect(result.output).toContain('Hello PDF World')
+    // base64 must NOT be inlined
+    expect(result.output).not.toContain('base64,')
   })
 
   it('should read a PDF with no extractable text', async () => {
@@ -178,8 +187,7 @@ startxref
     const result = await readTool.execute({ file_path: filePath })
     expect(result.success).toBe(true)
     expect(result.output).toContain('[PDF:')
-    expect(result.output).toContain('data:application/pdf;base64,')
-    // With real binary PDF streams the text extraction is minimal; always has data URL
+    expect(result.output).not.toContain('base64,')
   })
 })
 

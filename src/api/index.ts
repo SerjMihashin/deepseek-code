@@ -346,41 +346,6 @@ export class DeepSeekAPI {
 // ─── Helper functions ────────────────────────────────────────────────────────
 
 /**
- * Convert a string that contains data: URLs into ContentBlock[] for vision models.
- * If no data: URLs found, returns the original string.
- * Used to upgrade read_file output (images/PDF as base64) into multimodal input.
- */
-export function dataUrlsToContentBlocks (text: string): string | ContentBlock[] {
-  const DATA_URL_RE = /!?\[.*?\]\(data:([^;]+);base64,([^)]+)\)/g
-  const blocks: ContentBlock[] = []
-  let lastIndex = 0
-  let match: RegExpExecArray | null
-
-  while ((match = DATA_URL_RE.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      blocks.push({ type: 'text', text: text.slice(lastIndex, match.index).trim() || '\n' })
-    }
-    const mime = match[1]
-    const b64 = match[2]
-    blocks.push({ type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } })
-    lastIndex = match.index + match[0].length
-  }
-
-  if (blocks.length === 0) return text
-
-  if (lastIndex < text.length) {
-    const remaining = text.slice(lastIndex).trim()
-    if (remaining) blocks.push({ type: 'text', text: remaining })
-  }
-
-  if (!blocks.some(b => b.type === 'text')) {
-    blocks.unshift({ type: 'text', text: 'Analyze the following image(s):' })
-  }
-
-  return blocks
-}
-
-/**
  * Build OpenAI-compatible message array from our internal ChatMessage format.
  * Handles both string content and ContentBlock[] (for vision/multimodal models).
  */
@@ -407,18 +372,24 @@ function buildMessages (messages: ChatMessage[]): OpenAI.Chat.ChatCompletionMess
         })),
       } satisfies OpenAI.Chat.ChatCompletionAssistantMessageParam
     }
-    // Content can be string or ContentBlock[] (for vision/multimodal messages)
-    if (typeof m.content === 'string') {
-      return {
-        role: m.role as 'system' | 'user' | 'assistant',
-        content: m.content,
-      } as OpenAI.Chat.ChatCompletionUserMessageParam
-    }
+    // The DeepSeek API only accepts text content — it rejects `image_url`
+    // content blocks ("unknown variant image_url"), and a single such block
+    // anywhere in history makes EVERY subsequent request fail with 400. So we
+    // always flatten content to a plain string here; image blocks become a text
+    // placeholder rather than bricking the conversation.
     return {
       role: m.role as 'system' | 'user' | 'assistant',
-      content: m.content as unknown as OpenAI.Chat.ChatCompletionContentPart[],
+      content: flattenContent(m.content),
     } as OpenAI.Chat.ChatCompletionUserMessageParam
   })
+}
+
+/** Flatten string|ContentBlock[] to a plain string (image blocks → placeholder). */
+export function flattenContent (content: string | ContentBlock[]): string {
+  if (typeof content === 'string') return content
+  return content
+    .map(b => b.type === 'text' ? b.text : '[image omitted — this model has no vision support]')
+    .join('\n')
 }
 
 /**

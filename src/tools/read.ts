@@ -16,14 +16,22 @@ const MIME_TYPES: Record<string, string> = {
 }
 
 async function readAsImage (filePath: string): Promise<ToolResult> {
-  const buffer = await readFile(filePath) // binary — no encoding
   const ext = extname(filePath).toLowerCase()
   const mime = MIME_TYPES[ext] ?? 'application/octet-stream'
-  const base64 = buffer.toString('base64')
-  const dataUrl = `data:${mime};base64,${base64}`
+
+  // SVG is XML text — return its source so the model can actually read/edit it.
+  if (ext === '.svg') {
+    const svg = await readFile(filePath, 'utf-8')
+    return { success: true, output: svg }
+  }
+
+  // Binary raster image: do NOT inline base64 — this model has no vision, and the
+  // data URL would bloat the context by megabytes (and historically broke the API
+  // when turned into an image_url block). Return metadata only.
+  const buffer = await readFile(filePath)
   return {
     success: true,
-    output: `[Image: ${filePath}](${dataUrl})\nSize: ${buffer.length} bytes, Type: ${mime}`,
+    output: `[Binary image not shown: ${filePath} — ${buffer.length} bytes, ${mime}. This model cannot view images; use the chrome tool for visual/rendered checks, or read a textual asset instead.]`,
   }
 }
 
@@ -41,24 +49,21 @@ async function readAsNotebook (filePath: string): Promise<ToolResult> {
 
 async function readAsPdf (filePath: string): Promise<ToolResult> {
   const buffer = await readFile(filePath) // binary
-  const mime = MIME_TYPES['.pdf']
-  const base64 = buffer.toString('base64')
-  const dataUrl = `data:${mime};base64,${base64}`
 
-  // Naive text extraction: collect printable ASCII runs from the binary content
+  // Naive text extraction: collect printable ASCII runs from the binary content.
+  // We do NOT inline base64 (no vision; it only bloats the context).
   const extracted = extractPrintableRuns(buffer)
   if (extracted.length > 0) {
     const text = extracted.join('\n')
     return {
       success: true,
-      output: `[PDF: ${filePath}](${dataUrl})\nSize: ${buffer.length} bytes\n\nExtracted text:\n${text}`,
+      output: `[PDF: ${filePath} — ${buffer.length} bytes]\n\nExtracted text:\n${text}`,
     }
   }
 
-  // Fallback: base64 data URL only
   return {
     success: true,
-    output: `[PDF: ${filePath}](${dataUrl})\nSize: ${buffer.length} bytes, Type: ${mime}`,
+    output: `[PDF: ${filePath} — ${buffer.length} bytes. No extractable text; this model cannot view the rendered PDF.]`,
   }
 }
 

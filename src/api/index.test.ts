@@ -1,6 +1,22 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DeepSeekAPI, StreamTimeoutError } from './index.js'
+import { DeepSeekAPI, StreamTimeoutError, flattenContent } from './index.js'
 import type { DeepSeekConfig } from '../config/defaults.js'
+
+describe('flattenContent (DeepSeek has no vision — never send image_url)', () => {
+  it('passes plain strings through', () => {
+    expect(flattenContent('hello')).toBe('hello')
+  })
+
+  it('replaces image_url blocks with a text placeholder (no base64, no 400)', () => {
+    const out = flattenContent([
+      { type: 'text', text: 'look at this' },
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } },
+    ])
+    expect(out).toContain('look at this')
+    expect(out).toContain('[image omitted')
+    expect(out).not.toContain('base64')
+  })
+})
 
 const TEST_CONFIG: DeepSeekConfig = {
   apiKey: 'test-key',

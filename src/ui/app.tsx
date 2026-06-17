@@ -131,7 +131,6 @@ export function App ({ config, options }: AppProps) {
   const [compactProgress, setCompactProgress] = useState(0)
   const [totalTokens, setTotalTokens] = useState(0)
   const [estimatedCost, setEstimatedCost] = useState(0)
-  const [pendingImage, setPendingImage] = useState<{ base64: string; mimeType: string } | null>(null)
   const [followUpCount, setFollowUpCount] = useState(0)
   const [themePicker, setThemePicker] = useState<{ themes: { name: string; description: string }[]; selectedIndex: number } | null>(null)
   const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
@@ -409,14 +408,10 @@ export function App ({ config, options }: AppProps) {
     proc.__agentAbortController = abortController
     logEvent('agent run: softCancel registered')
 
-    let userContent: ChatMessage['content'] = input
-    if (pendingImage) {
-      userContent = [
-        { type: 'text', text: input },
-        { type: 'image_url', image_url: { url: `data:${pendingImage.mimeType};base64,${pendingImage.base64}` } },
-      ]
-      setPendingImage(null)
-    }
+    // Images are not sent to the model: the DeepSeek API has no vision and
+    // rejects image_url content blocks (a single one bricks the whole session
+    // with a 400). Image paste shows a notice instead (see onImagePaste).
+    const userContent: ChatMessage['content'] = input
     // Show local diagnostic notice for large prompts (not sent to model)
     const charCount = input.length
     const lineCount = (input.match(/\r\n|\r|\n/g) || []).length + 1
@@ -954,7 +949,6 @@ export function App ({ config, options }: AppProps) {
     setMessages([])
     setToolCalls([])
     setPendingApproval(null)
-    setPendingImage(null)
     setChatEpoch(e => e + 1) // remount Static so the scrollback resets
     liveToolMessageIndexRef.current = -1
     setServiceNotice(null)
@@ -1132,7 +1126,7 @@ export function App ({ config, options }: AppProps) {
         isSetupMode={setupStep !== 'done'}
         blockInput={setupStep === 'done' && (pendingApproval !== null || pendingClear)}
         emptyHint={emptyInputHint}
-        onImagePaste={(base64, mimeType) => setPendingImage({ base64, mimeType })}
+        onImagePaste={() => addServiceNotice('[image] Эта модель не поддерживает изображения — вставка пропущена. Для проверки UI используйте /browser-test или опишите задачу текстом.')}
       />
       <StatusBar
         mode={approvalMode}

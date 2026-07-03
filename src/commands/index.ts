@@ -2,6 +2,7 @@ import { platform } from 'node:os'
 import type { ChatMessage } from '../api/index.js'
 import { DEEPSEEK_MODELS } from '../config/defaults.js'
 import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/memory.js'
+import { listMemorySources, getProjectMemoryPath, initProjectMemory } from '../core/project-memory.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
 import { mcpManager } from '../core/mcp.js'
 import { subAgentManager } from '../core/subagent.js'
@@ -90,8 +91,10 @@ const RU_DESCRIPTIONS: Record<string, string> = {
   '/setup': 'Настройки: язык, API-ключ, тема, режим',
   '/remember': 'Сохранить в память: /remember <текст>',
   '/forget': 'Удалить из памяти по поиску',
-  '/memory': 'Показать все сохранённые записи',
-  '/compress': 'Сжать историю чата',
+  '/init': 'Сгенерировать память проекта (DEEPSEEK.md): /init [force]',
+  '/memory': 'Показать файлы памяти, загружаемые в контекст',
+  '/compact': 'Сжать историю чата вручную',
+  '/compress': 'Псевдоним для /compact',
   '/checkpoint': 'Создать git-чекпоинт',
   '/restore': 'Список или восстановление чекпоинта: /restore [id]',
   '/mcp': 'MCP-серверы: /mcp list | connect',
@@ -227,59 +230,111 @@ async function cmdForget (ctx: SlashCommandContext, input: string): Promise<bool
   return true
 }
 
-async function cmdMemory (ctx: SlashCommandContext): Promise<boolean> {
-  const memories = await listMemories()
-  if (memories.length === 0) {
+async function cmdInit (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const force = input.slice('/init'.length).trim().toLowerCase() === 'force'
+  const cwd = process.cwd()
+  const path = await initProjectMemory(cwd, force)
+  if (!path) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: 'No memories saved yet. Use /remember <text> to save something.',
+      content: `\`DEEPSEEK.md\` уже существует: \`${getProjectMemoryPath(cwd)}\`\nОтредактируйте вручную или перегенерируйте: \`/init force\` (перезапишет файл).`,
     }])
     return true
   }
-  const memoryList = memories.map((m, i) =>
-    `${i + 1}. **${m.name}** — ${m.description}`
-  ).join('\n')
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
-    content: `**Memories** (${memories.length}):\n\n${memoryList}`,
+    content: [
+      `[ok] Создан \`${path}\` — память проекта на основе определённых фактов (стек, команды, структура).`,
+      '',
+      'Допишите разделы **Conventions** и **Notes for the agent** под себя — файл загружается в контекст каждой сессии.',
+      'Заметки на лету: `#текст` (проект) и `##текст` (глобально).',
+    ].join('\n'),
   }])
   return true
 }
 
+async function cmdMemory (ctx: SlashCommandContext): Promise<boolean> {
+  const cwd = process.cwd()
+  const sources = listMemorySources(cwd)
+  const fileLines = sources.map(s =>
+    `- ${s.exists ? '✓' : '·'} **${s.label}**: \`${s.path}\`${s.exists ? '' : ' (нет)'}`
+  ).join('\n')
+
+  const memories = await listMemories()
+  const factLines = memories.length > 0
+    ? memories.map((m, i) => `${i + 1}. **${m.name}** — ${m.description}`).join('\n')
+    : '_нет — добавьте через /remember <текст>_'
+
+  const projectPath = getProjectMemoryPath(cwd)
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: [
+      '**Память** загружается в контекст каждой сессии из этих файлов:',
+      '',
+      fileLines,
+      '',
+      'Команды: `#заметка` — в память проекта, `##заметка` — в глобальную память.',
+      `Отредактировать файл проекта вручную: \`${projectPath}\``,
+      '',
+      `**Сохранённые факты** (/remember), ${memories.length}:`,
+      '',
+      factLines,
+    ].join('\n'),
+  }])
+  return true
+}
+
+function messageText (content: ChatMessage['content']): string {
+  if (typeof content === 'string') return content
+  return content.filter(b => b.type === 'text').map(b => (b as { type: 'text'; text: string }).text).join('\n')
+}
+
 async function cmdCompress (ctx: SlashCommandContext): Promise<boolean> {
-  const totalLen = ctx.messages.reduce((sum, m) => {
-    const content = typeof m.content === 'string' ? m.content : ''
-    return sum + content.length
-  }, 0)
+  const totalLen = ctx.messages.reduce((sum, m) => sum + messageText(m.content).length, 0)
   const msgCount = ctx.messages.length
 
-  if (msgCount > 4 && totalLen > 2000) {
-    ctx.setStatusText('Compressing...')
-    try {
-      const api = new DeepSeekAPI({ ...ctx.config, apiKey: ctx.config.apiKey })
-      const result = await api.chat([
-        { role: 'system', content: 'Summarize the following conversation concisely. Keep all technical details, errors, decisions, and action items. Output in bullet points.' },
-        ...ctx.messages.slice(-10).filter(m => m.role !== 'system').map(m => ({
-          role: m.role as 'user' | 'assistant' | 'system' | 'tool',
-          content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-        })),
-      ])
-      const summary = result.content || 'Summary unavailable.'
-      const systemMsg = ctx.messages.find(m => m.role === 'system')
-      ctx.setMessages([
-        ...(systemMsg ? [systemMsg] : []),
-        { role: 'assistant', content: `**Context Compressed**\n\nOriginal: ${msgCount} messages (~${(totalLen / 1024).toFixed(1)}KB)\n\n**Summary:**\n${summary}` },
-      ])
-    } catch {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Context compression failed. Current size: ~${(totalLen / 1024).toFixed(1)}KB across ${msgCount} messages.`,
-      }])
-    }
-  } else {
+  if (msgCount <= 4 || totalLen < 2000) {
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `Context is small (~${(totalLen / 1024).toFixed(1)}KB, ${msgCount} messages). No compression needed.`,
+      content: `Контекст небольшой (~${(totalLen / 1024).toFixed(1)}KB, ${msgCount} сообщений). Сжимать нечего.`,
+    }])
+    return true
+  }
+
+  ctx.setStatusText('Compacting...')
+  try {
+    const api = new DeepSeekAPI({ ...ctx.config, apiKey: ctx.config.apiKey })
+    const result = await api.chat([
+      { role: 'system', content: 'Compress the conversation for continuation. Preserve concrete user goals, decisions, file paths, commands, failures, verification results, and pending work. Do not invent facts. Return concise bullet points.' },
+      ...ctx.messages.filter(m => m.role !== 'system').map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system' | 'tool',
+        content: messageText(m.content),
+      })),
+    ])
+    const summary = result.content || 'Summary unavailable.'
+
+    // Keep the same shape as the in-run auto-compact: system + original task
+    // verbatim + summary + recent tail (so we never collapse to a lone summary).
+    const systemMsg = ctx.messages.find(m => m.role === 'system')
+    const firstUserMsg = ctx.messages.find(m => m.role === 'user')
+    const taskText = firstUserMsg ? messageText(firstUserMsg.content) : ''
+    const taskMsg: ChatMessage | null = taskText
+      ? { role: 'user', content: `**Original task (verbatim, pre-compaction):**\n${taskText.length > 6000 ? taskText.slice(0, 6000) + '\n…[truncated]' : taskText}` }
+      : null
+
+    const tail = ctx.messages.slice(-6).filter(m => m.role !== 'system')
+    while (tail.length > 0 && tail[0].role === 'tool') tail.shift()
+
+    ctx.setMessages([
+      ...(systemMsg ? [systemMsg] : []),
+      ...(taskMsg ? [taskMsg] : []),
+      { role: 'assistant', content: `**Context Compacted**\n\nWas: ${msgCount} messages (~${(totalLen / 1024).toFixed(1)}KB)\n\n${summary}` },
+      ...tail,
+    ])
+  } catch {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `Сжатие не удалось. Текущий размер: ~${(totalLen / 1024).toFixed(1)}KB, ${msgCount} сообщений.`,
     }])
   }
   ctx.setStatusText('Ready')
@@ -1281,8 +1336,10 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/setup', description: 'Settings: language, API key, theme, mode', handler: cmdSetup },
   { name: '/remember', description: 'Save to memory: /remember <text>', handler: cmdRemember },
   { name: '/forget', description: 'Delete from memory by search', handler: cmdForget },
-  { name: '/memory', description: 'Show all saved memories', handler: cmdMemory },
-  { name: '/compress', description: 'Compress chat history', handler: cmdCompress },
+  { name: '/init', description: 'Generate project memory (DEEPSEEK.md): /init [force]', handler: cmdInit },
+  { name: '/memory', description: 'Show memory files loaded into context', handler: cmdMemory },
+  { name: '/compact', description: 'Manually compact chat history', handler: cmdCompress },
+  { name: '/compress', description: 'Alias for /compact', handler: cmdCompress },
   { name: '/checkpoint', description: 'Create git checkpoint', handler: cmdCheckpoint },
   { name: '/restore', description: 'List or restore checkpoint: /restore [id]', handler: cmdRestore },
   { name: '/mcp', description: 'MCP servers: /mcp list | connect', handler: cmdMcp },

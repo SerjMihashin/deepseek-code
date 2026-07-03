@@ -2,6 +2,7 @@ import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { getMcpToolDefinitions, projectIdFromCwd } from './mcp-tools.js'
+import { loadMemoryContext } from './project-memory.js'
 import { resolveWindowsShell } from '../tools/shell.js'
 import { contextWindowFor, type DeepSeekConfig, type ApprovalMode } from '../config/defaults.js'
 import { EventEmitter } from 'node:events'
@@ -95,11 +96,18 @@ export interface ToolResultEvent {
 
 const DEFAULT_MAX_ITERATIONS = 200
 const DEFAULT_AUTO_COMPACT: Required<AutoCompactOptions> = {
-  enabled: true,
+  // Auto-compaction is OFF by default — compaction is a manual action (`/compact`).
+  // A separate emergency safety net below still fires when the context is about
+  // to overflow, so a single huge turn cannot 400 with a context-length error.
+  enabled: false,
   thresholdPercent: 70,
   keepRecentMessages: 8,
   minMessages: 18,
 }
+
+// Hard safety net: even with auto-compaction disabled, compact when the context
+// is this close to the model window to avoid a context-overflow API error.
+const EMERGENCY_COMPACT_PERCENT = 92
 
 /**
  * Build a dynamic system prompt with project context.
@@ -241,11 +249,22 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, mo
 
   const languageSection = `\n## Language\n- Respond in ${responseLanguage} unless the user explicitly asks otherwise.`
 
+  const memorySection = cwd ? loadMemoryContext(cwd) : ''
+
+  const planModeSection = mode === 'plan'
+    ? `\n## Plan Mode (read-only — ACTIVE)
+- You are in **Plan Mode**. Mutating tools (\`write_file\`, \`edit\`, \`run_shell_command\`, and others) are BLOCKED — calling them will be rejected. Only read/search/browse tools work.
+- Your job: investigate with \`read_file\`, \`grep_search\`, \`glob\` (and \`chrome\` if a URL/UI matters), then present ONE clear, concrete, step-by-step PLAN for the requested work, and STOP.
+- The plan must be specific: exact files to change and how, commands to run, and how to verify. Call out risks, assumptions, and open questions.
+- Do NOT pretend to edit files or run commands. Do NOT claim work is done — nothing is executed in this mode.
+- After you present the plan, the user reviews it and switches to an execute mode (press Tab to cycle to default/auto-edit/turbo) to carry it out.`
+    : ''
+
   const shellPolicySection = buildShellPolicySection()
 
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
-You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}
+You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}${memorySection}${planModeSection}
 
 ## Guidelines
 1. **Plan first** — Before making changes, explore the codebase to understand the context.
@@ -882,11 +901,15 @@ export class AgentLoop extends EventEmitter {
 
   private async maybeAutoCompact (): Promise<void> {
     const compact = this.getAutoCompactOptions()
-    if (!compact.enabled) return
-
     const contextPercent = this.metrics.getCurrentWindowPercent()
     const beforeMessages = this.messages.length
-    if (contextPercent < compact.thresholdPercent) return
+
+    // Emergency: about to overflow the context window — compact even when the
+    // user has auto-compaction disabled (the default), to avoid a 400.
+    const emergency = contextPercent >= EMERGENCY_COMPACT_PERCENT
+
+    if (!compact.enabled && !emergency) return
+    if (compact.enabled && !emergency && contextPercent < compact.thresholdPercent) return
     if (beforeMessages < compact.minMessages) return
     if (beforeMessages <= this.lastCompactedAtMessageCount + compact.keepRecentMessages) return
 

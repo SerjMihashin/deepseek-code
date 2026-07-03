@@ -27,6 +27,22 @@ export function logCrash (label: string, err: unknown): void {
   }
 }
 
+/**
+ * Always-on lifecycle log (NOT debug-gated). Records process exit/signal/stdin
+ * events so a "silent drop to the shell" is diagnosable from the very next
+ * repro — written to crash.log next to real crashes. Never throws.
+ */
+export function logLifecycle (label: string, detail?: Record<string, unknown>): void {
+  try {
+    mkdirSync(LOG_DIR, { recursive: true })
+    const timestamp = new Date().toISOString()
+    const extra = detail ? ' ' + JSON.stringify(detail) : ''
+    appendFileSync(CRASH_LOG_PATH, `[${timestamp}] [lifecycle] ${label}${extra}\n`, 'utf-8')
+  } catch {
+    /* swallow — logging must never throw */
+  }
+}
+
 const EVENT_LOG_PATH = join(LOG_DIR, 'events.log')
 
 /**

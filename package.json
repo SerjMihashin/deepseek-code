@@ -1,6 +1,6 @@
 {
   "name": "@serjm/deepseek-code",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Terminal AI coding agent for real repository work, powered by the DeepSeek API",
   "bin": {
     "dsc": "dist/cli/index.js",

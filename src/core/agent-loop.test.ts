@@ -71,6 +71,15 @@ describe('AgentLoop', () => {
     expect(prompt).toContain('compose references it correctly')
   })
 
+  it('should include the Plan Mode behavioral section only in plan mode', () => {
+    const planPrompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'plan')
+    expect(planPrompt).toContain('## Plan Mode (read-only — ACTIVE)')
+    expect(planPrompt).toContain('present ONE clear, concrete, step-by-step PLAN')
+
+    const defaultPrompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
+    expect(defaultPrompt).not.toContain('Plan Mode (read-only — ACTIVE)')
+  })
+
   it('should include workspace boundary rules in the system prompt', () => {
     const prompt = buildSystemPrompt('D:\\Projects\\deepseek-code', 'default')
 

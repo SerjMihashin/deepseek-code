@@ -5,7 +5,7 @@ import net from 'node:net'
 import { readTool } from './read.js'
 import { writeTool } from './write.js'
 import { editTool } from './edit.js'
-import { bashTool } from './bash.js'
+import { bashTool, defaultTimeoutFor } from './bash.js'
 import { globTool } from './glob.js'
 import { grepTool } from './grep.js'
 
@@ -309,6 +309,19 @@ describe('bash tool', () => {
   it('should handle timeout', async () => {
     const result = await bashTool.execute({ command: 'echo quick', timeout: 1000 })
     expect(result.success).toBe(true)
+  })
+
+  it('gives dependency installs and builds a long default timeout', () => {
+    expect(defaultTimeoutFor('npm install')).toBe(600_000)
+    expect(defaultTimeoutFor('cd D:\\proj; npm install 2>&1')).toBe(600_000)
+    expect(defaultTimeoutFor('pnpm i')).toBe(600_000)
+    expect(defaultTimeoutFor('yarn add react')).toBe(600_000)
+    expect(defaultTimeoutFor('npm run build')).toBe(600_000)
+    expect(defaultTimeoutFor('npx nuxi build')).toBe(600_000)
+    // normal commands keep the short default
+    expect(defaultTimeoutFor('echo hi')).toBe(120_000)
+    expect(defaultTimeoutFor('git status')).toBe(120_000)
+    expect(defaultTimeoutFor(undefined)).toBe(120_000)
   })
 
   it('should reject dangerous commands', async () => {

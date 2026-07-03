@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.7 — Project & Global Memory, Manual Compaction
+
+### Added
+- **Memory loaded into context (project + global), like `CLAUDE.md` / `AGENTS.md`.** The agent now actually remembers notes across sessions. On every run dsc loads and injects a `## Memory` section built from:
+  - **Global** `~/.deepseek-code/DEEPSEEK.md` — applies to every project.
+  - **Project** `DEEPSEEK.md` / `DEEPSEEK.local.md`, walking up to the git root, plus `AGENTS.md` and `CLAUDE.md` for compatibility with repos already set up for Codex/Claude.
+  - Saved `/remember` notes (which were previously written but never read back — now they are visible to the agent).
+- **`#note` / `##note` quick-capture.** Type `#text` to append a note to project memory, `##text` for global memory. Not sent to the model — saved to the relevant `DEEPSEEK.md` so it loads into every future session.
+- **`/init`** — scaffold a `DEEPSEEK.md` for the current project from detected facts (stack, package-manager, build/test/lint commands from `package.json`, top-level structure). Deterministic — no model call, no invented details; you fill in the conventions. `/init force` regenerates over an existing file.
+- **`/compact`** — manually compact the chat history (alias `/compress`). Compaction now keeps the original task verbatim and the recent tail instead of collapsing to a lone summary.
+- **Plan Mode now behaves like a planner.** In the read-only plan mode (Tab to cycle) the agent is instructed to investigate, then present one concrete step-by-step plan (files, commands, verification, risks) and stop — instead of trying blocked edits. Approve by switching to an execute mode.
+
+### Fixed
+- **Dependency installs and builds no longer time out at 120s.** `npm/pnpm/yarn/bun install` (and `run build`, framework builds) get a 600s default timeout, so a slow real-project install no longer fails and sends the agent thrashing (delete `node_modules`, reinstall, repeat). Explicit `timeout` still overrides.
+
+### Changed
+- **`--continue` / `-c` now restores the actual conversation.** The full transcript is persisted after each turn and reloaded on continue, so the next request keeps the prior context (previously only the session id was reused — history was lost).
+- **Auto-compaction is OFF by default.** Compaction is now a manual action (`/compact`). A hard safety net still compacts automatically only when the context is about to overflow the model window (≥92%), so a single huge turn cannot fail with a context-length 400.
+- **`/memory`** now shows the memory files loaded into context (with paths and which exist) plus saved `/remember` notes, instead of only listing the fact store.
+
 ## 0.4.6 — Real-Project Agent Hardening
 
 Stabilization driven by running the agent on real, large Windows projects.

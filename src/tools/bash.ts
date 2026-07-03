@@ -185,6 +185,24 @@ function getPowerShellSyntaxPolicyError (command: string): string | null {
 
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 
+const DEFAULT_TIMEOUT_MS = 120_000
+const LONG_TIMEOUT_MS = 600_000
+
+/**
+ * Pick a default timeout for a command. Dependency installs and full builds on
+ * real projects routinely exceed the 120s default — timing them out made the
+ * agent thrash (delete node_modules, reinstall, repeat). Give those a long
+ * default; the caller can still override with an explicit `timeout`.
+ */
+export function defaultTimeoutFor (command: string | undefined): number {
+  if (!command) return DEFAULT_TIMEOUT_MS
+  // npm/pnpm/yarn/bun install|ci|add, and common build steps
+  if (/(?:^|[\s;&|(])(?:npm|pnpm|yarn|bun)\s+(?:install|ci|i|add|dedupe|rebuild)\b/i.test(command)) return LONG_TIMEOUT_MS
+  if (/(?:^|[\s;&|(])(?:npx\s+)?(?:nuxi|vite|next|nuxt|tsc|webpack|turbo)\b.*\bbuild\b/i.test(command)) return LONG_TIMEOUT_MS
+  if (/(?:^|[\s;&|(])(?:npm|pnpm|yarn)\s+run\s+build\b/i.test(command)) return LONG_TIMEOUT_MS
+  return DEFAULT_TIMEOUT_MS
+}
+
 interface CommandResult {
   stdout: string;
   stderr: string;
@@ -260,7 +278,7 @@ export const bashTool: Tool = {
     {
       name: 'timeout',
       type: 'number',
-      description: 'Timeout in ms (default 120000 for normal commands; 30000 for wait_for_port).',
+      description: 'Timeout in ms (default 120000; 600000 for dependency installs and builds; 30000 for wait_for_port). Override for unusually long commands.',
       required: false,
     },
     {
@@ -290,7 +308,7 @@ export const bashTool: Tool = {
   ],
   async execute (args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const command = args.command as string | undefined
-    const timeout = (args.timeout as number) ?? 120_000
+    const timeout = (args.timeout as number) ?? defaultTimeoutFor(command)
     const background = args.background === true
     const waitForPortNum = args.wait_for_port as number | undefined
     const stopPid = args.stop_pid as number | undefined

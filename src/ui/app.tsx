@@ -9,7 +9,7 @@ import { saveConfig } from '../config/loader.js'
 import type { SessionOptions } from '../cli/interactive.js'
 import { type ChatMessage } from '../api/index.js'
 import { AgentLoop, type ToolCallEvent } from '../core/agent-loop.js'
-import { saveSession, getLastSessionId, writeExecutionBundle, writeSessionHandoff } from '../core/session.js'
+import { saveSession, getLastSessionId, writeExecutionBundle, writeSessionHandoff, saveTranscript, loadTranscript } from '../core/session.js'
 import { hooksManager } from '../core/hooks.js'
 import { mcpManager } from '../core/mcp.js'
 import { subAgentManager } from '../core/subagent.js'
@@ -19,6 +19,7 @@ import { scheduler } from '../core/scheduler.js'
 import { chromeManager } from '../tools/chrome-manager.js'
 import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
+import { appendProjectMemory, appendGlobalMemory } from '../core/project-memory.js'
 import { Logo, SetupWizard, useSetupWizard, type SetupStep } from './setup-wizard.js'
 import { executeSlashCommand, type SlashCommandContext } from '../commands/index.js'
 import { checkLatestVersion } from '../commands/update-checker.js'
@@ -237,7 +238,20 @@ export function App ({ config, options }: AppProps) {
     (async () => {
       if (options.continue_) {
         const lastId = await getLastSessionId()
-        if (lastId) sessionIdRef.current = lastId
+        if (lastId) {
+          sessionIdRef.current = lastId
+          // Restore the actual conversation, not just the session id, so the
+          // next request continues with full prior context.
+          const transcript = await loadTranscript(lastId)
+          if (transcript && transcript.length > 0) {
+            setMessages(transcript)
+            addServiceNotice(`[continue] Восстановлено ${transcript.length} сообщений из прошлой сессии.`)
+          } else {
+            addServiceNotice('[continue] Прошлая сессия найдена, но сохранённого диалога нет.')
+          }
+        } else {
+          addServiceNotice('[continue] Прошлых сессий для этого проекта не найдено.')
+        }
       }
       if (!sessionIdRef.current) {
         sessionIdRef.current = await saveSession({})
@@ -285,6 +299,15 @@ export function App ({ config, options }: AppProps) {
       setStatusText(i18n.t('ready'))
     })()
   }, [])
+
+  // Persist the full transcript whenever a turn settles (not mid-stream) so
+  // `--continue` can restore the real conversation. Skipped while processing to
+  // avoid a disk write per streamed chunk.
+  useEffect(() => {
+    if (isProcessing) return
+    if (!sessionIdRef.current || messages.length === 0) return
+    saveTranscript(sessionIdRef.current, messages).catch(() => {})
+  }, [isProcessing, messages])
 
   // __agentSoftCancel is now set synchronously in handleSubmit (before agentLoop.run())
   // to eliminate the async useEffect race window on Windows where SIGINT fires
@@ -380,6 +403,25 @@ export function App ({ config, options }: AppProps) {
         role: 'assistant',
         content: `Неизвестная команда: \`${input.trim().split(/\s+/)[0]}\`. Введите \`/help\` для списка команд.`,
       }])
+      return
+    }
+
+    // Quick memory note: `#text` → project memory, `##text` → global memory.
+    // Not sent to the model; appended to the relevant DEEPSEEK.md so it loads
+    // into every future session's context.
+    if (input.startsWith('#')) {
+      const isGlobal = input.startsWith('##')
+      const note = input.replace(/^#+/, '').trim()
+      if (!note) {
+        addServiceNotice('Usage: #note (project memory) or ##note (global memory)')
+        return
+      }
+      try {
+        const path = isGlobal ? await appendGlobalMemory(note) : await appendProjectMemory(process.cwd(), note)
+        addServiceNotice(`[memory] Saved to ${isGlobal ? 'global' : 'project'} memory → ${path}`)
+      } catch (err) {
+        addServiceNotice(`[memory] Failed to save: ${(err as Error).message}`)
+      }
       return
     }
 

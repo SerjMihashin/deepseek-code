@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+import type { ChatMessage } from '../api/index.js'
 
 const SESSIONS_DIR = join(homedir(), '.deepseek-code', 'sessions')
 
@@ -159,6 +160,31 @@ export async function writeExecutionBundle (input: SessionExecutionBundleInput):
 
   await writeFile(bundleFile, JSON.stringify(bundle, null, 2), 'utf-8')
   return bundleFile
+}
+
+/**
+ * Persist the full UI message transcript so `--continue` can restore an actual
+ * conversation (saveSession only keeps truncated metadata). One file per
+ * session, overwritten with the latest committed messages.
+ */
+export async function saveTranscript (sessionId: string, messages: ChatMessage[]): Promise<void> {
+  if (!sessionId) return
+  const projectDir = await ensureProjectSessionDir()
+  const file = join(projectDir, `${sessionId}.transcript.json`)
+  await writeFile(file, JSON.stringify(messages), 'utf-8')
+}
+
+/** Load a previously saved transcript, or null if none / unreadable. */
+export async function loadTranscript (sessionId: string): Promise<ChatMessage[] | null> {
+  if (!sessionId) return null
+  const file = join(SESSIONS_DIR, getProjectHash(), `${sessionId}.transcript.json`)
+  if (!existsSync(file)) return null
+  try {
+    const data = JSON.parse(await readFile(file, 'utf-8'))
+    return Array.isArray(data) ? data as ChatMessage[] : null
+  } catch {
+    return null
+  }
 }
 
 export async function getLastSessionId (): Promise<string | null> {

@@ -5,7 +5,7 @@ import { ErrorBoundary } from '../ui/error-boundary.js'
 import { loadConfig } from '../config/loader.js'
 import { themeManager } from '../core/themes.js'
 import { i18n } from '../core/i18n.js'
-import { logCrash, logEvent, debug } from '../utils/logger.js'
+import { logCrash, logEvent, logLifecycle, debug } from '../utils/logger.js'
 
 export interface CliOptions {
   query?: string;
@@ -59,13 +59,29 @@ export async function startInteractiveSession (options: SessionOptions): Promise
   process.on('unhandledRejection', onUnhandledRejection)
   process.on('uncaughtException', onUncaughtException)
 
-  // Diagnostic: log every process exit so we can see WHY the TUI dropped to the
-  // shell (clean exit vs signal). Synchronous append survives the exit.
-  const onProcessExit = (code: number) => logEvent('process.exit event', { code })
-  const onBeforeExit = (code: number) => logEvent('beforeExit (event loop drained)', { code })
+  // Diagnostic (ALWAYS ON): log every process exit/signal/stdin event so a
+  // "silent drop to the shell" is diagnosable from the next repro. Written to
+  // crash.log via logLifecycle (synchronous append survives the exit).
+  const onProcessExit = (code: number) => logLifecycle('process.exit', { code })
+  const onBeforeExit = (code: number) => logLifecycle('beforeExit (event loop drained)', { code })
   process.on('exit', onProcessExit)
   process.on('beforeExit', onBeforeExit)
-  logEvent('session start', { platform: process.platform, isTTY: !!process.stdout.isTTY })
+
+  // stdin end/close is the prime suspect for the Windows drop-to-shell: when a
+  // child process or terminal quirk ends stdin, Ink unmounts and the session
+  // exits. Record it (and on Windows, swallow a stray 'end' so it cannot tear
+  // the session down — the keep-alive handle holds the loop regardless).
+  const stdin = process.stdin
+  const onStdinEnd = () => logLifecycle('stdin end')
+  const onStdinClose = () => logLifecycle('stdin close')
+  const onStdinError = (err: Error) => logLifecycle('stdin error', { message: err.message })
+  try {
+    stdin.on('end', onStdinEnd)
+    stdin.on('close', onStdinClose)
+    stdin.on('error', onStdinError)
+  } catch { /* stdin may not be a stream in some environments */ }
+
+  logLifecycle('session start', { platform: process.platform, isTTY: !!process.stdout.isTTY, ppid: process.ppid })
 
   // Keep-alive: hold one ref'd handle so the event loop never drains while the
   // TUI is mounted. Without this, on some Windows terminals the only thing
@@ -138,6 +154,7 @@ export async function startInteractiveSession (options: SessionOptions): Promise
 
   // SIGTERM: always exit gracefully regardless of agent state
   const onSIGTERM = () => {
+    logLifecycle('SIGTERM -> exit')
     if (cleanup) cleanup()
     process.exit(0)
   }
@@ -163,8 +180,14 @@ export async function startInteractiveSession (options: SessionOptions): Promise
     process.removeListener('uncaughtException', onUncaughtException)
     process.removeListener('exit', onProcessExit)
     process.removeListener('beforeExit', onBeforeExit)
+    try {
+      stdin.removeListener('end', onStdinEnd)
+      stdin.removeListener('close', onStdinClose)
+      stdin.removeListener('error', onStdinError)
+    } catch { /* ignore */ }
   }
 
   await waitUntilExit()
+  logLifecycle('waitUntilExit resolved — Ink unmounted')
   cleanup()
 }

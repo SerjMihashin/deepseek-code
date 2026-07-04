@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.8 — Browser Perception (unreleased)
+## 0.4.8 — Browser Perception & Command Cleanup (2026-07-05)
 
 ### Added
 - **The browser tool can now "see" without vision.** Two perception actions give the agent a structured, text view of a page instead of a screenshot it cannot read:

@@ -11,7 +11,6 @@ import { reviewCode, formatReviewReport } from '../core/review.js'
 import { sandbox } from '../core/sandbox.js'
 import { getSandboxUnsupportedCard } from '../ui/activity-cards.js'
 import { gitIntegration } from '../core/git.js'
-import { scheduler, Scheduler } from '../core/scheduler.js'
 import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { extensionManager } from '../core/extensions.js'
@@ -52,82 +51,11 @@ export interface SlashCommandContext {
   setBudget?: (budget: TaskBudget | undefined) => void
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function generateFollowups (lastContent: string): string[] {
-  const suggestions: string[] = []
-
-  if (/error|Error|failed/.test(lastContent)) {
-    suggestions.push('Fix the error and try again')
-    suggestions.push('Show me the full error trace')
-    suggestions.push('Debug this issue step by step')
-  }
-
-  if (/```|code/.test(lastContent)) {
-    suggestions.push('Explain this code in detail')
-    suggestions.push('Add tests for this code')
-    suggestions.push('Optimize this code')
-  }
-
-  if (/review|Review/.test(lastContent)) {
-    suggestions.push('Apply the suggested fixes')
-    suggestions.push('Run a deeper review')
-    suggestions.push('Check for security issues')
-  }
-
-  if (suggestions.length === 0) {
-    suggestions.push('Continue with the next step')
-    suggestions.push('Explain what was done')
-    suggestions.push('Show me alternative approaches')
-  }
-
-  return suggestions
-}
-
-// ─── Russian descriptions for commands ──────────────────────────────────────
-
-const RU_DESCRIPTIONS: Record<string, string> = {
-  '/help': 'Показать эту справку',
-  '/setup': 'Настройки: язык, API-ключ, тема, режим',
-  '/remember': 'Сохранить в память: /remember <текст>',
-  '/forget': 'Удалить из памяти по поиску',
-  '/init': 'Сгенерировать память проекта (DEEPSEEK.md): /init [force]',
-  '/memory': 'Показать файлы памяти, загружаемые в контекст',
-  '/compact': 'Сжать историю чата вручную',
-  '/compress': 'Псевдоним для /compact',
-  '/checkpoint': 'Создать git-чекпоинт',
-  '/restore': 'Список или восстановление чекпоинта: /restore [id]',
-  '/mcp': 'MCP-серверы: /mcp list | connect',
-  '/skills': 'Список или описание навыка',
-  '/agents': 'Список активных под-агентов',
-  '/review': 'Ревью кода: /review all|diff|auto',
-  '/sandbox': 'Запустить команду в sandbox',
-  '/git': 'Git: /git commit|branch|diff|status',
-  '/loop': 'Планировщик: /loop <интервал> <задача>',
-  '/stats': 'Статистика сессии с токенами',
-  '/theme': 'Сменить тему или открыть выбор',
-  '/model': 'Сменить модель или открыть выбор: /model [id]',
-  '/lang': 'Сменить язык: /lang en|ru|zh',
-  '/extensions': 'Список установленных расширений',
-  '/followup': 'Сгенерировать предложения продолжения',
-  '/logs': 'Показать последние логи',
-  '/plan': 'Обзор возможностей',
-  '/tools': 'Показать доступные инструменты и статус',
-  '/capabilities': 'Полная матрица возможностей',
-  '/browser-test': 'Запустить тест Chrome',
-  '/browser-real-test': 'Smoke-тест реальных сайтов',
-  '/last-browser-test': 'Показать последний отчёт browser-test',
-  '/chrome': 'Режим Chrome: --headed|--headless|-s',
-  '/budget': 'Бюджет: /budget status|off|audit|small|normal|large',
-  '/changelog': 'Показать изменения: /changelog [full|version]',
-  '/update-check': 'Проверить новую версию',
-}
-
 function getDescription (name: string): string {
-  if (i18n.getLocale() === 'ru') {
-    return RU_DESCRIPTIONS[name] ?? COMMANDS.find(c => c.name === name)?.description ?? ''
-  }
-  return COMMANDS.find(c => c.name === name)?.description ?? ''
+  const entry = COMMANDS.find(c => c.name === name)
+  if (!entry) return ''
+  if (i18n.getLocale() === 'ru') return entry.descriptionRu ?? entry.description
+  return entry.description
 }
 
 // ─── Command handlers ────────────────────────────────────────────────────────
@@ -137,7 +65,6 @@ async function cmdHelp (ctx: SlashCommandContext): Promise<boolean> {
   const helpLine = (left: string, right: string) => `${left}\n  ${right}`
   const lines: string[] = [`${i18n.t('helpCommands')}:`]
   for (const cmd of COMMANDS) {
-    if (cmd.name === '/language') continue
     lines.push('', helpLine(cmd.name, getDescription(cmd.name)))
   }
   lines.push('', helpLine('/clear', locale === 'ru' ? 'Очистить историю чата (с подтверждением)' : 'Clear chat history (with confirmation)'))
@@ -662,74 +589,51 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
   }
 }
 
-async function cmdLoop (ctx: SlashCommandContext, input: string): Promise<boolean> {
-  const sub = input.slice('/loop'.length).trim()
-
-  if (sub === 'list') {
-    const tasks = scheduler.listTasks()
-    if (tasks.length === 0) {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: 'No active tasks.',
-      }])
-    } else {
-      const list = tasks.map((t, i) =>
-        `${i + 1}. **${t.prompt.slice(0, 40)}** — every ${(t.interval / 1000).toFixed(0)}s (${t.runCount}/${t.maxRuns ?? '∞'})`
-      ).join('\n')
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `**Active Tasks:**\n${list}`,
-      }])
-    }
-  } else if (sub === 'clear') {
-    scheduler.clearAll()
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: '[ok] All tasks cleared.',
-    }])
-  } else if (sub) {
-    const parts = sub.split(/\s+/)
-    const intervalStr = parts[0]
-    const prompt = parts.slice(1).join(' ') || 'check status'
-    const intervalMs = Scheduler.parseInterval(intervalStr)
-    if (!intervalMs) {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Invalid interval: "${intervalStr}". Use format like "5m", "1h", "30s".`,
-      }])
-      return true
-    }
-    const task = scheduler.addTask(prompt, intervalMs)
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: `[ok] Task scheduled: "${prompt}" every ${intervalStr} (ID: ${task.id})`,
-    }])
-  } else {
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: 'Usage:\n  /loop <interval> <prompt> — schedule task\n  /loop list — list tasks\n  /loop clear — clear all tasks',
-    }])
-  }
-  return true
-}
-
 async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
   const mcpTools = mcpManager.getAllTools().length
   const skills = skillsManager.listSkills().length
   const agents = subAgentManager['agents'].size
-  const tasks = scheduler.count
   const exts = extensionManager.listExtensions().length
   const metrics = ctx.getMetrics?.()
   const usage = metrics?.getTokenUsage()
   const cost = metrics ? metrics.estimatedCostUSD(ctx.config.model) : 0
 
-  let content = `**Session Statistics:**\n- Messages: ${ctx.messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Scheduled Tasks: ${tasks}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${ctx.approvalMode}`
+  let content = `**Session Statistics:**\n- Messages: ${ctx.messages.length}\n- MCP Tools: ${mcpTools}\n- Skills: ${skills}\n- Subagents: ${agents}\n- Extensions: ${exts}\n- Theme: ${themeManager.theme.name}\n- Language: ${i18n.getLocale()}\n- Approval Mode: ${ctx.approvalMode}`
 
   if (usage && usage.total > 0) {
     content += `\n\n**Token Usage:**\n- Input: ${usage.input.toLocaleString()} tokens\n- Cache hit input: ${usage.cacheHitInput.toLocaleString()} tokens\n- Cache miss input: ${usage.cacheMissInput.toLocaleString()} tokens\n- Output: ${usage.output.toLocaleString()} tokens\n- Reasoning output: ${usage.reasoningOutput.toLocaleString()} tokens\n- Total: ${usage.total.toLocaleString()} tokens\n- Est. Cost: $${cost.toFixed(4)}`
   }
 
   ctx.setMessages(prev => [...prev, { role: 'assistant', content }])
+  return true
+}
+
+async function cmdCost (ctx: SlashCommandContext): Promise<boolean> {
+  const metrics = ctx.getMetrics?.()
+  const usage = metrics?.getTokenUsage()
+
+  if (!metrics || !usage || usage.total === 0) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'Пока нет данных о расходе токенов — начните диалог с агентом.',
+    }])
+    return true
+  }
+
+  const cost = metrics.estimatedCostUSD(ctx.config.model)
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: [
+      `**Стоимость сессии** (модель \`${ctx.config.model}\`)`,
+      '',
+      `- Входные токены: ${usage.input.toLocaleString()} (кэш-хит ${usage.cacheHitInput.toLocaleString()} / промах ${usage.cacheMissInput.toLocaleString()})`,
+      `- Выходные токены: ${usage.output.toLocaleString()} (reasoning ${usage.reasoningOutput.toLocaleString()})`,
+      `- Всего: ${usage.total.toLocaleString()} токенов`,
+      `- **Оценка стоимости: $${cost.toFixed(4)}**`,
+      '',
+      '_Оценка по прайсингу DeepSeek; полную статистику см. в_ `/stats`.',
+    ].join('\n'),
+  }])
   return true
 }
 
@@ -822,17 +726,6 @@ async function cmdExtensions (ctx: SlashCommandContext): Promise<boolean> {
   return true
 }
 
-async function cmdFollowup (ctx: SlashCommandContext): Promise<boolean> {
-  const lastMsg = ctx.messages.filter(m => m.role === 'assistant').pop()
-  const lastContent = lastMsg && typeof lastMsg.content === 'string' ? lastMsg.content : ''
-  const suggestions = generateFollowups(lastContent)
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: `**Follow-up suggestions:**\n${suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
-  }])
-  return true
-}
-
 async function cmdLogs (ctx: SlashCommandContext): Promise<boolean> {
   const { readdirSync, readFileSync } = await import('node:fs')
   const { join } = await import('node:path')
@@ -863,14 +756,6 @@ async function cmdLogs (ctx: SlashCommandContext): Promise<boolean> {
   return true
 }
 
-async function cmdPlan (ctx: SlashCommandContext): Promise<boolean> {
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: 'Use **/capabilities** to see all agent capabilities, or **/stats** for session statistics.',
-  }])
-  return true
-}
-
 async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
   const allTools = getDefaultTools()
   const modeTools = getToolsForMode(ctx.approvalMode)
@@ -898,6 +783,12 @@ async function cmdTools (ctx: SlashCommandContext): Promise<boolean> {
     ...(ctx.approvalMode === 'plan'
       ? ['> [warn] В PLAN mode доступны только read-only инструменты. Для записи используйте `/setup` и смените режим на default/auto-edit/turbo.']
       : []),
+    '',
+    '**Дополнительно:**',
+    '  - **MCP серверы** — подключаемые внешние инструменты (`/mcp`)',
+    '  - **Расширения** — плагины, добавляющие функциональность (`/extensions`)',
+    '  - **Навыки (Skills)** — предустановленные сценарии работы (`/skills`)',
+    '  - **Под-агенты** — дочерние агенты для параллельных задач (`/agents`)',
   ].filter(Boolean).join('\n')
 
   ctx.setMessages(prev => [...prev, {
@@ -1077,58 +968,6 @@ async function cmdLastBrowserTest (ctx: SlashCommandContext): Promise<boolean> {
 
   lines.push('')
   lines.push(`**Итого:** ${result.summary.passed} passed, ${result.summary.failed} failed, ${result.summary.skipped} skipped`)
-
-  ctx.setMessages(prev => [...prev, {
-    role: 'assistant',
-    content: lines.join('\n'),
-  }])
-  return true
-}
-
-async function cmdCapabilities (ctx: SlashCommandContext): Promise<boolean> {
-  const allTools = getDefaultTools()
-  const modeTools = getToolsForMode(ctx.approvalMode)
-
-  const readTools = allTools.filter(t => t.approval === 'never')
-  const writeTools = allTools.filter(t => t.approval !== 'never')
-
-  const modeReadTools = modeTools.filter(t => t.approval === 'never')
-  const modeWriteTools = modeTools.filter(t => t.approval !== 'never')
-
-  const lines: string[] = [
-    '## Возможности агента',
-    '',
-    `**Режим:** \`${ctx.approvalMode}\``,
-    '',
-    '### Чтение и поиск',
-    ...modeReadTools.map(t => `  - [on] \`${t.tool.name}\` — ${t.tool.description}`),
-    ...readTools
-      .filter(t => !modeReadTools.some(mt => mt.tool.name === t.tool.name))
-      .map(t => `  - [off] \`${t.tool.name}\` — заблокирован в PLAN mode`),
-    '',
-    '### Запись и исполнение',
-    ...modeWriteTools.map(t => `  - [on] \`${t.tool.name}\` — ${t.tool.description} (${t.approval === 'auto' ? 'авто-подтверждение' : 'требует подтверждения'})`),
-    ...writeTools
-      .filter(t => !modeWriteTools.some(mt => mt.tool.name === t.tool.name))
-      .map(t => `  - [off] \`${t.tool.name}\` — заблокирован в PLAN mode`),
-    '',
-  ]
-
-  if (ctx.approvalMode === 'plan') {
-    lines.push(
-      '> [warn] **Вы в PLAN mode.**',
-      '> У меня есть инструменты write_file и edit, но в этом режиме они отключены.',
-      '> Я могу предложить изменения, но не могу применить их напрямую.',
-      '> Используйте `/setup` и выберите другой режим (default, auto-edit, turbo) для включения записи.',
-      ''
-    )
-  }
-
-  lines.push('### Дополнительно')
-  lines.push('  - **MCP серверы** — подключаемые внешние инструменты')
-  lines.push('  - **Расширения** — плагины, добавляющие функциональность')
-  lines.push('  - **Навыки (Skills)** — предустановленные сценарии работы')
-  lines.push('  - **Под-агенты** — дочерние агенты для параллельных задач')
 
   ctx.setMessages(prev => [...prev, {
     role: 'assistant',
@@ -1329,45 +1168,42 @@ async function cmdUpdateCheck (ctx: SlashCommandContext): Promise<boolean> {
 export interface CommandEntry {
   name: string
   description: string
+  /** Russian description shown when the locale is `ru`; falls back to `description`. */
+  descriptionRu?: string
   handler: (ctx: SlashCommandContext, input: string) => Promise<boolean>
 }
 
 export const COMMANDS: CommandEntry[] = [
-  { name: '/help', description: 'Show this help', handler: cmdHelp },
-  { name: '/setup', description: 'Settings: language, API key, theme, mode', handler: cmdSetup },
-  { name: '/remember', description: 'Save to memory: /remember <text>', handler: cmdRemember },
-  { name: '/forget', description: 'Delete from memory by search', handler: cmdForget },
-  { name: '/init', description: 'Generate project memory (DEEPSEEK.md): /init [force]', handler: cmdInit },
-  { name: '/memory', description: 'Show memory files loaded into context', handler: cmdMemory },
-  { name: '/compact', description: 'Manually compact chat history', handler: cmdCompress },
-  { name: '/compress', description: 'Alias for /compact', handler: cmdCompress },
-  { name: '/checkpoint', description: 'Create git checkpoint', handler: cmdCheckpoint },
-  { name: '/restore', description: 'List or restore checkpoint: /restore [id]', handler: cmdRestore },
-  { name: '/mcp', description: 'MCP servers: /mcp list | connect', handler: cmdMcp },
-  { name: '/skills', description: 'List or describe an agent skill', handler: cmdSkills },
-  { name: '/agents', description: 'List active subagents', handler: cmdAgents },
-  { name: '/review', description: 'Code review: /review all|diff|auto', handler: cmdReview },
-  { name: '/sandbox', description: 'Run command in sandbox', handler: cmdSandbox },
-  { name: '/git', description: 'Git: /git commit|branch|diff|status', handler: cmdGit },
-  { name: '/loop', description: 'Schedule recurring task: /loop <interval> <prompt>', handler: cmdLoop },
-  { name: '/stats', description: 'Session statistics with token usage', handler: cmdStats },
-  { name: '/theme', description: 'Switch theme or open picker', handler: cmdTheme },
-  { name: '/model', description: 'Switch model or open picker: /model [id]', handler: cmdModel },
-  { name: '/lang', description: 'Change language: /lang en|ru|zh', handler: cmdLang },
-  { name: '/language', description: 'Alias for /lang', handler: cmdLang },
-  { name: '/extensions', description: 'List installed extensions', handler: cmdExtensions },
-  { name: '/followup', description: 'Generate follow-up suggestions', handler: cmdFollowup },
-  { name: '/logs', description: 'Show recent log files', handler: cmdLogs },
-  { name: '/plan', description: 'Show capabilities overview', handler: cmdPlan },
-  { name: '/tools', description: 'Show available tools and approval status', handler: cmdTools },
-  { name: '/capabilities', description: 'Show full capability matrix', handler: cmdCapabilities },
-  { name: '/browser-test', description: 'Run Chrome browser test suite', handler: cmdBrowserTest },
-  { name: '/browser-real-test', description: 'Smoke test on real websites', handler: cmdBrowserRealTest },
-  { name: '/last-browser-test', description: 'Show last browser test report', handler: cmdLastBrowserTest },
-  { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', handler: cmdChrome },
-  { name: '/budget', description: 'Budget: /budget status|off|audit|small|normal|large', handler: cmdBudget },
-  { name: '/changelog', description: 'Show changelog: /changelog [full|version]', handler: cmdChangelog },
-  { name: '/update-check', description: 'Check latest npm version', handler: cmdUpdateCheck },
+  { name: '/help', description: 'Show this help', descriptionRu: 'Показать эту справку', handler: cmdHelp },
+  { name: '/setup', description: 'Settings: language, API key, theme, mode', descriptionRu: 'Настройки: язык, API-ключ, тема, режим', handler: cmdSetup },
+  { name: '/remember', description: 'Save to memory: /remember <text>', descriptionRu: 'Сохранить в память: /remember <текст>', handler: cmdRemember },
+  { name: '/forget', description: 'Delete from memory by search', descriptionRu: 'Удалить из памяти по поиску', handler: cmdForget },
+  { name: '/init', description: 'Generate project memory (DEEPSEEK.md): /init [force]', descriptionRu: 'Сгенерировать память проекта (DEEPSEEK.md): /init [force]', handler: cmdInit },
+  { name: '/memory', description: 'Show memory files loaded into context', descriptionRu: 'Показать файлы памяти, загружаемые в контекст', handler: cmdMemory },
+  { name: '/compact', description: 'Manually compact chat history', descriptionRu: 'Сжать историю чата вручную', handler: cmdCompress },
+  { name: '/checkpoint', description: 'Create git checkpoint', descriptionRu: 'Создать git-чекпоинт', handler: cmdCheckpoint },
+  { name: '/restore', description: 'List or restore checkpoint: /restore [id]', descriptionRu: 'Список или восстановление чекпоинта: /restore [id]', handler: cmdRestore },
+  { name: '/mcp', description: 'MCP servers: /mcp list | connect', descriptionRu: 'MCP-серверы: /mcp list | connect', handler: cmdMcp },
+  { name: '/skills', description: 'List or describe an agent skill', descriptionRu: 'Список или описание навыка', handler: cmdSkills },
+  { name: '/agents', description: 'List active subagents', descriptionRu: 'Список активных под-агентов', handler: cmdAgents },
+  { name: '/review', description: 'Code review: /review all|diff|auto', descriptionRu: 'Ревью кода: /review all|diff|auto', handler: cmdReview },
+  { name: '/sandbox', description: 'Run command in sandbox (unavailable on Windows)', descriptionRu: 'Запустить команду в sandbox (недоступно на Windows)', handler: cmdSandbox },
+  { name: '/git', description: 'Git: /git commit|branch|diff|status', descriptionRu: 'Git: /git commit|branch|diff|status', handler: cmdGit },
+  { name: '/stats', description: 'Session statistics with token usage', descriptionRu: 'Статистика сессии с токенами', handler: cmdStats },
+  { name: '/cost', description: 'Show token cost of the session', descriptionRu: 'Показать стоимость сессии в токенах', handler: cmdCost },
+  { name: '/theme', description: 'Switch theme or open picker', descriptionRu: 'Сменить тему или открыть выбор', handler: cmdTheme },
+  { name: '/model', description: 'Switch model or open picker: /model [id]', descriptionRu: 'Сменить модель или открыть выбор: /model [id]', handler: cmdModel },
+  { name: '/lang', description: 'Change language: /lang en|ru|zh', descriptionRu: 'Сменить язык: /lang en|ru|zh', handler: cmdLang },
+  { name: '/extensions', description: 'List installed extensions', descriptionRu: 'Список установленных расширений', handler: cmdExtensions },
+  { name: '/logs', description: 'Show recent log files', descriptionRu: 'Показать последние логи', handler: cmdLogs },
+  { name: '/tools', description: 'Show available tools and approval status', descriptionRu: 'Показать доступные инструменты и статус', handler: cmdTools },
+  { name: '/browser-test', description: 'Run Chrome browser test suite', descriptionRu: 'Запустить тест Chrome', handler: cmdBrowserTest },
+  { name: '/browser-real-test', description: 'Smoke test on real websites', descriptionRu: 'Smoke-тест реальных сайтов', handler: cmdBrowserRealTest },
+  { name: '/last-browser-test', description: 'Show last browser test report', descriptionRu: 'Показать последний отчёт browser-test', handler: cmdLastBrowserTest },
+  { name: '/chrome', description: 'Chrome mode: --headed|--headless|-s', descriptionRu: 'Режим Chrome: --headed|--headless|-s', handler: cmdChrome },
+  { name: '/budget', description: 'Budget: /budget status|off|audit|small|normal|large', descriptionRu: 'Бюджет: /budget status|off|audit|small|normal|large', handler: cmdBudget },
+  { name: '/changelog', description: 'Show changelog: /changelog [full|version]', descriptionRu: 'Показать изменения: /changelog [full|version]', handler: cmdChangelog },
+  { name: '/update-check', description: 'Check latest npm version', descriptionRu: 'Проверить новую версию', handler: cmdUpdateCheck },
 ]
 
 export const COMMAND_NAMES: string[] = COMMANDS.map(c => c.name)
@@ -1386,6 +1222,9 @@ for (const cmd of COMMANDS) {
 const commandAliases = new Map<string, string>([
   ['/h', '/help'],
   ['/?', '/help'],
+  ['/compress', '/compact'],
+  ['/language', '/lang'],
+  ['/capabilities', '/tools'],
 ])
 
 // ─── Public API ──────────────────────────────────────────────────────────────

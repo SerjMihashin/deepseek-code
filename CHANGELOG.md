@@ -9,6 +9,13 @@
 - **Click/fill by visible text — no CSS selector needed.** `click`/`fill` accept `targetText` (+ optional `role`), with `near` to disambiguate duplicate controls (e.g. the `Select` button near `Site types`). Ported from the chrome-cli-tools approach.
 - **Inline diff for edits.** `write_file` and `edit` now show a compact coloured `+`/`-` line diff right in the tool activity card, so you can see exactly what changed instead of just "wrote N bytes". Large changes are summarised.
 - **Matrix theme startup intro.** With the `matrix` theme active, launch plays a one-time full-screen all-green digital-rain intro that pours down and drains away (press any key to skip), then hands off to a calm interface. The old always-on welcome rain (which jittered and disrupted typing) was removed — the rain is now only the intro.
+- **`/cost`** — a focused view of the session's token usage and estimated cost (a slice of `/stats`).
+
+### Changed
+- **Slash-command cleanup.** Audited the command registry and trimmed it from 33 to 28 live commands with no loss of function:
+  - Removed dead/underdeveloped commands: `/loop` (its scheduler was never wired to run the agent), `/followup` (canned regex suggestions), `/plan` (a one-line stub).
+  - Turned redundant twins into real aliases (no longer clutter help/autocomplete): `/compress` → `/compact`, `/language` → `/lang`, `/capabilities` → `/tools` (the tools view absorbed the extra "additional capabilities" section).
+  - `/sandbox` is now labelled "unavailable on Windows"; command descriptions have a single source of truth (removed the drift-prone parallel Russian description table).
 
 ### Fixed
 - **The selected theme is now saved and restored.** `/theme <name>` and the theme picker persist the choice to config, and the saved theme is applied on the next launch (previously the theme reset every restart, and the Matrix intro never triggered because the theme wasn't active at first render).

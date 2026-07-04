@@ -43,6 +43,17 @@ describe('slash commands', () => {
     await expect(executeSlashCommand('/does-not-exist', ctx)).resolves.toBe(false)
   })
 
+  it('should resolve aliases to their canonical command', async () => {
+    for (const alias of ['/h', '/?', '/compress', '/language', '/capabilities']) {
+      const { ctx } = createContext()
+      await expect(executeSlashCommand(alias, ctx), alias).resolves.toBe(true)
+    }
+    // Aliases must not pollute the visible command list / autocomplete.
+    expect(COMMAND_NAMES).not.toContain('/compress')
+    expect(COMMAND_NAMES).not.toContain('/language')
+    expect(COMMAND_NAMES).not.toContain('/capabilities')
+  })
+
   it('should document keyboard scroll controls without mouse capture', async () => {
     const { ctx, messages } = createContext()
 
@@ -82,14 +93,12 @@ describe('slash commands', () => {
       '/agents',
       '/sandbox',
       '/git unknown',
-      '/loop',
       '/stats',
+      '/cost',
       '/lang',
       '/language',
       '/extensions',
-      '/followup',
       '/logs',
-      '/plan',
       '/tools',
       '/capabilities',
       '/last-browser-test',

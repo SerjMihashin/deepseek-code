@@ -16,7 +16,6 @@ import { mcpManager } from '../core/mcp.js'
 import { subAgentManager } from '../core/subagent.js'
 import { skillsManager } from '../core/skills.js'
 import { lspManager } from '../core/lsp.js'
-import { scheduler } from '../core/scheduler.js'
 import { chromeManager } from '../tools/chrome-manager.js'
 import { themeManager } from '../core/themes.js'
 import { i18n, type Locale } from '../core/i18n.js'
@@ -269,7 +268,6 @@ export function App ({ config, options }: AppProps) {
         hooksManager.load(),
         lspManager.load().then(() => lspManager.initializeAll()),
         subAgentManager.loadFromDir(),
-        scheduler.load(),
       ])
 
       // Применяем сохранённый режим Chrome (headed/headless) из конфига.

@@ -83,6 +83,8 @@ export interface ToolCallEvent {
   verified?: boolean;
   /** List of files that were changed */
   changedFiles?: string[];
+  /** Compact +/- line diff of the change (write/edit), for TUI display. */
+  diff?: string;
 }
 
 export interface ToolResultEvent {
@@ -769,6 +771,7 @@ export class AgentLoop extends EventEmitter {
               toolCallEvent.changed = toolResult.changed
               toolCallEvent.verified = toolResult.verified
               toolCallEvent.changedFiles = toolResult.changedFiles
+              toolCallEvent.diff = toolResult.diff
               this.toolCallHistory.set(tc.id, toolCallEvent)
 
               this.options.onToolResult({
@@ -1160,7 +1163,7 @@ export class AgentLoop extends EventEmitter {
   private async executeTool (
     name: string,
     args: Record<string, unknown>
-  ): Promise<{ success: boolean; output: string; error?: string; changed?: boolean; verified?: boolean; changedFiles?: string[] }> {
+  ): Promise<{ success: boolean; output: string; error?: string; changed?: boolean; verified?: boolean; changedFiles?: string[]; diff?: string }> {
     const def = this.tools.find(t => t.tool.name === name)
     if (!def) {
       return { success: false, output: '', error: `Неизвестный инструмент: "${name}"` }
@@ -1186,6 +1189,7 @@ export class AgentLoop extends EventEmitter {
         changed: result.changed,
         verified: result.verified,
         changedFiles: result.changedFiles,
+        diff: result.diff,
       }
     } catch (err) {
       return {

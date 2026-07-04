@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { Box, Text, useInput, useApp } from 'ink'
 import { ChatView } from './chat-view.js'
+import { MatrixIntro } from './matrix-intro.js'
 import { InputBar } from './input-bar.js'
 import { StatusBar } from './status-bar.js'
 import type { DeepSeekConfig, ApprovalMode } from '../config/defaults.js'
@@ -137,6 +138,8 @@ export function App ({ config, options }: AppProps) {
   const [modelPicker, setModelPicker] = useState<{ selectedIndex: number } | null>(null)
   const [langPicker, setLangPicker] = useState<{ selectedIndex: number } | null>(null)
   const [serviceNotice, setServiceNotice] = useState<string | null>(null)
+  // Matrix theme plays a one-time full-screen "digital rain" intro on startup.
+  const [introDone, setIntroDone] = useState(() => themeManager.theme.name !== 'matrix')
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetRef = useRef<TaskBudget | undefined>(undefined)
   // Double Ctrl+C to exit when idle/paused (raw mode owns Ctrl+C on all platforms).
@@ -818,8 +821,9 @@ export function App ({ config, options }: AppProps) {
           const picker = themePicker
           const chosen = picker.themes[picker.selectedIndex]
           themeManager.setTheme(chosen.name)
+          saveConfig({ theme: chosen.name }).catch(() => {})
           setThemePicker(null)
-          addServiceNotice(`[theme] Тема изменена: ${chosen.name}`)
+          addServiceNotice(`[theme] Тема изменена: ${chosen.name} (сохранено)`)
           return
         }
         return
@@ -1011,6 +1015,11 @@ export function App ({ config, options }: AppProps) {
   }, [messages.length, toolCalls.length, executeClear])
   const handleExit = useCallback(() => { exit() }, [exit])
   const colors = themeManager.getColors()
+
+  // One-time Matrix intro animation (skippable) before the UI is shown.
+  if (!introDone) {
+    return <MatrixIntro onDone={() => setIntroDone(true)} />
+  }
 
   return (
     <Box flexDirection='column'>

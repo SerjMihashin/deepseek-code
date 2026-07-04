@@ -7,7 +7,6 @@ import { DeepSeekAPI } from '../api/index.js'
 import { i18n, type Locale } from '../core/i18n.js'
 import { themeManager } from '../core/themes.js'
 import type { ChatMessage } from '../api/index.js'
-import { MatrixRain } from './matrix-rain.js'
 
 // Logo — DEEPSEEK in ASCII art
 const D = [
@@ -56,10 +55,11 @@ const logoLines = [0, 1, 2, 3, 4, 5].map(i =>
 )
 
 export function Logo () {
+  const colors = themeManager.getColors()
   return (
     <Box flexDirection='column' alignItems='center'>
       {logoLines.map((line, i) => (
-        <Text key={i} bold color='blue'>{line}</Text>
+        <Text key={i} bold color={colors.primary}>{line}</Text>
       ))}
     </Box>
   )
@@ -110,7 +110,6 @@ function ThemeStep ({ cursor }: ThemeStepProps) {
   const themes = themeManager.listThemes()
   return (
     <Box flexDirection='column'>
-      <MatrixRain />
       <Box flexDirection='column' marginLeft={2} marginTop={1}>
         <Text bold>{i18n.t('selectTheme')}</Text>
         {themes.map((theme, i) => (

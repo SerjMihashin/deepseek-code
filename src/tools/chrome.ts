@@ -22,6 +22,8 @@ export type ChromeAction =
   | 'locator'
   | 'cookies'
   | 'storage'
+  | 'observe'
+  | 'dom'
   | 'quiz'
 
 export interface ChromeToolArgs {
@@ -52,6 +54,10 @@ export interface ChromeToolArgs {
   port?: number;
   headless?: boolean;
   quizStrategy?: 'first' | 'random';
+  /** Semantic targeting for click/fill when a CSS selector is not known. */
+  role?: string;
+  targetText?: string;
+  near?: string;
 }
 
 const CHROME_ACTIONS: ChromeAction[] = [
@@ -71,6 +77,8 @@ const CHROME_ACTIONS: ChromeAction[] = [
   'locator',
   'cookies',
   'storage',
+  'observe',
+  'dom',
   'quiz',
 ]
 
@@ -87,6 +95,54 @@ async function waitForElement (
     visible: true,
     timeout,
   })
+}
+
+// ─── In-page perception helpers ──────────────────────────────────────────────
+// Injected into the page (via page.evaluate string form). Because this model has
+// NO vision, these give the agent a structured, text-based view of the page so
+// it can verify rendered state and target elements without seeing a screenshot.
+
+const IN_PAGE_HELPERS = `
+  function __vis(el){try{const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'&&s.opacity!=='0';}catch(e){return false;}}
+  function __name(el){const a=el.getAttribute('aria-label');if(a)return a.trim();const lb=el.getAttribute('aria-labelledby');if(lb){const l=document.getElementById(lb);if(l)return (l.innerText||'').trim();}if(el.id){const lf=document.querySelector('label[for="'+el.id+'"]');if(lf)return (lf.innerText||'').trim();}const cl=el.closest&&el.closest('label');if(cl)return (cl.innerText||'').trim();const t=(el.innerText||'').trim();if(t)return t.slice(0,80);const p=el.getAttribute('placeholder');if(p)return p;const v=el.value;if(v)return String(v).slice(0,60);const ti=el.getAttribute('title');if(ti)return ti;return '';}
+  function __sel(el){if(el.id)return '#'+CSS.escape(el.id);const ti=el.getAttribute('data-testid');if(ti)return '[data-testid="'+ti+'"]';const nm=el.getAttribute('name');if(nm)return el.tagName.toLowerCase()+'[name="'+nm+'"]';const parts=[];let n=el;while(n&&n.nodeType===1&&parts.length<4){let p=n.tagName.toLowerCase();const par=n.parentElement;if(par){const same=Array.from(par.children).filter(function(c){return c.tagName===n.tagName;});if(same.length>1)p+=':nth-of-type('+(same.indexOf(n)+1)+')';}parts.unshift(p);n=n.parentElement;}return parts.join(' > ');}
+  var __ISEL='a,button,input,select,textarea,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[contenteditable=true]';
+`
+
+interface DomItem { i: number; tag: string; type: string; name: string; selector: string }
+
+/**
+ * Resolve a semantic target (role / visible text / nearest label) to a unique
+ * CSS selector, tagging the chosen element so click/fill can act on it. Returns
+ * null when nothing matches.
+ */
+async function resolveSemanticSelector (page: Page, args: ChromeToolArgs): Promise<string | null> {
+  const expr = `(()=>{${IN_PAGE_HELPERS}
+    var role=${JSON.stringify(args.role ?? '')}.toLowerCase();
+    var text=${JSON.stringify(args.targetText ?? '')}.toLowerCase();
+    var near=${JSON.stringify(args.near ?? '')}.toLowerCase();
+    var els=Array.from(document.querySelectorAll(__ISEL)).filter(__vis);
+    if(role)els=els.filter(function(el){var tg=el.tagName.toLowerCase();var r=(el.getAttribute('role')||'').toLowerCase();return r===role||tg===role||(role==='button'&&tg==='button')||(role==='link'&&tg==='a')||(role==='textbox'&&(tg==='input'||tg==='textarea'));});
+    var matches=text?els.filter(function(el){return __name(el).toLowerCase().indexOf(text)>=0;}):els;
+    if(!matches.length)return null;
+    var chosen=matches[0];
+    if(near&&matches.length>1){
+      var labels=Array.from(document.querySelectorAll('label,h1,h2,h3,h4,h5,legend,th,dt,strong,span,p')).filter(function(l){return (l.innerText||'').toLowerCase().indexOf(near)>=0;});
+      var best=null,bd=Infinity;
+      matches.forEach(function(m){var mr=m.getBoundingClientRect();labels.forEach(function(l){var lr=l.getBoundingClientRect();var d=Math.hypot(mr.left-lr.left,mr.top-lr.top);if(d<bd){bd=d;best=m;}});});
+      if(best)chosen=best;
+    }
+    document.querySelectorAll('[data-dsc-target]').forEach(function(e){e.removeAttribute('data-dsc-target');});
+    chosen.setAttribute('data-dsc-target','1');
+    return '[data-dsc-target="1"]';
+  })()`
+  const result = await page.evaluate(expr)
+  return typeof result === 'string' ? result : null
+}
+
+/** Best-effort removal of the temporary targeting attribute. */
+async function clearSemanticTag (page: Page): Promise<void> {
+  await page.evaluate('document.querySelectorAll("[data-dsc-target]").forEach(function(e){e.removeAttribute("data-dsc-target");})').catch(() => {})
 }
 
 function formatEvalResult (result: unknown): string {
@@ -251,27 +307,52 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
       }
 
       case 'click': {
-        if (!args.selector) return { success: false, output: '', error: 'Selector is required for click action' }
         await navigateIfNeeded(args, page)
-        await waitForElement(page, args.selector, timeout)
-        await page.click(args.selector)
-        await page.waitForNetworkIdle({ idleTime: 500, timeout }).catch(() => {})
-        return { success: true, output: `Clicked: ${args.selector}` }
+        let selector = args.selector
+        let matchedBy = selector ? `selector ${selector}` : ''
+        if (!selector && (args.targetText || args.role)) {
+          selector = await resolveSemanticSelector(page, args) ?? undefined
+          matchedBy = `text="${args.targetText ?? ''}" role="${args.role ?? ''}"${args.near ? ` near="${args.near}"` : ''}`
+        }
+        if (!selector) {
+          return { success: false, output: '', error: 'Provide `selector`, or `targetText`/`role` (optionally `near`) to click by visible text.' }
+        }
+        try {
+          await waitForElement(page, selector, timeout)
+          await page.click(selector)
+          await page.waitForNetworkIdle({ idleTime: 500, timeout }).catch(() => {})
+          return { success: true, output: `Clicked (${matchedBy}).` }
+        } finally {
+          await clearSemanticTag(page)
+        }
       }
 
       case 'fill': {
-        if (!args.selector || args.text === undefined) {
-          return { success: false, output: '', error: 'Selector and text are required for fill action' }
+        if (args.text === undefined) {
+          return { success: false, output: '', error: 'Text is required for fill action' }
         }
         await navigateIfNeeded(args, page)
-        await waitForElement(page, args.selector, timeout)
-        await page.click(args.selector)
-        await page.keyboard.down('Control')
-        await page.keyboard.press('a')
-        await page.keyboard.up('Control')
-        await page.keyboard.press('Backspace')
-        await page.type(args.selector, args.text, { delay: 10 })
-        return { success: true, output: `Filled "${args.text}" into: ${args.selector}` }
+        let selector = args.selector
+        let matchedBy = selector ? `selector ${selector}` : ''
+        if (!selector && (args.targetText || args.role)) {
+          selector = await resolveSemanticSelector(page, args) ?? undefined
+          matchedBy = `text="${args.targetText ?? ''}" role="${args.role ?? ''}"${args.near ? ` near="${args.near}"` : ''}`
+        }
+        if (!selector) {
+          return { success: false, output: '', error: 'Provide `selector`, or `targetText`/`role` (optionally `near`) to fill by nearby label.' }
+        }
+        try {
+          await waitForElement(page, selector, timeout)
+          await page.click(selector)
+          await page.keyboard.down('Control')
+          await page.keyboard.press('a')
+          await page.keyboard.up('Control')
+          await page.keyboard.press('Backspace')
+          await page.type(selector, args.text, { delay: 10 })
+          return { success: true, output: `Filled "${args.text}" (${matchedBy}).` }
+        } finally {
+          await clearSemanticTag(page)
+        }
       }
 
       case 'eval': {
@@ -476,6 +557,53 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
         }
       }
 
+      case 'observe': {
+        await navigateIfNeeded(args, page)
+        const info = await page.evaluate(`(()=>{
+          const q=(s)=>document.querySelectorAll(s).length;
+          const headings=Array.from(document.querySelectorAll('h1,h2')).slice(0,8).map(function(h){return (h.innerText||'').trim();}).filter(Boolean);
+          const landmarks=['header','nav','main','aside','footer'].filter(function(t){return document.querySelector(t);});
+          const bt=((document.body&&document.body.innerText)||'').trim();
+          return {url:location.href,title:document.title,counts:{headings:q('h1,h2,h3'),links:q('a'),buttons:q('button,[role=button]'),inputs:q('input,textarea,select'),images:q('img'),forms:q('form')},headings:headings,landmarks:landmarks,textLength:bt.length,looksEmpty:bt.length<40};
+        })()`) as {
+          url: string;
+          title: string;
+          counts: { headings: number; links: number; buttons: number; inputs: number; images: number; forms: number };
+          headings: string[];
+          landmarks: string[];
+          textLength: number;
+          looksEmpty: boolean;
+        }
+        const c = info.counts
+        const out = [
+          `URL: ${info.url}`,
+          `Title: ${info.title || '(none)'}`,
+          `Landmarks: ${info.landmarks.join(', ') || 'none'}`,
+          `Counts: ${c.headings} headings, ${c.links} links, ${c.buttons} buttons, ${c.inputs} inputs, ${c.images} images, ${c.forms} forms`,
+          info.headings.length ? `Headings: ${info.headings.map(h => `"${h}"`).join(', ')}` : 'Headings: none',
+          info.looksEmpty
+            ? '⚠ Page looks empty/blank (almost no text) — likely a render failure or content not loaded yet.'
+            : `Body text: ${info.textLength} chars`,
+        ].join('\n')
+        return { success: true, output: out }
+      }
+
+      case 'dom': {
+        await navigateIfNeeded(args, page)
+        const items = await page.evaluate(`(()=>{${IN_PAGE_HELPERS}
+          const els=Array.from(document.querySelectorAll(__ISEL)).filter(__vis);
+          return els.slice(0,60).map(function(el,i){return {i:i,tag:el.tagName.toLowerCase(),type:el.getAttribute('type')||el.getAttribute('role')||'',name:__name(el),selector:__sel(el)};});
+        })()`) as DomItem[]
+        if (!items.length) {
+          return { success: true, output: 'No visible interactive elements found on the page.' }
+        }
+        const lines = items.map(it => `[${it.i}] <${it.tag}${it.type ? ' ' + it.type : ''}> ${it.name || '(no label)'}  →  ${it.selector}`)
+        return {
+          success: true,
+          output: `Interactive elements (${items.length}${items.length >= 60 ? '+, capped' : ''}):\n${lines.join('\n')}`,
+        }
+      }
+
       case 'quiz': {
         if (!args.url) return { success: false, output: '', error: 'URL is required for quiz action' }
         await chromeManager.navigate(args.url, sameTab)
@@ -526,7 +654,7 @@ const chromeParameters: ToolParameter[] = [
   {
     name: 'action',
     type: 'string',
-    description: 'Browser action: open, click, fill, eval, text, html, console, network, state, shot, nav, wait, scroll, locator, cookies, storage, quiz',
+    description: "Browser action. Perception (this model has NO vision — use these to 'see' the page instead of screenshots): observe (page summary: title, counts, headings, empty-state check), dom (list visible interactive elements with ready selectors). Interaction: open, click, fill, eval, text, html, console, network, state, shot, nav, wait, scroll, locator, cookies, storage, quiz",
     required: true,
   },
   {
@@ -683,6 +811,24 @@ const chromeParameters: ToolParameter[] = [
     name: 'quizStrategy',
     type: 'string',
     description: 'Quiz answer strategy: first or random',
+    required: false,
+  },
+  {
+    name: 'targetText',
+    type: 'string',
+    description: 'For click/fill without a CSS selector: the visible text / accessible name of the target (e.g. the button label). Resolved against interactive elements from `dom`.',
+    required: false,
+  },
+  {
+    name: 'role',
+    type: 'string',
+    description: 'For click/fill without a CSS selector: restrict the target to a role/tag (button, link, textbox, tab, menuitem).',
+    required: false,
+  },
+  {
+    name: 'near',
+    type: 'string',
+    description: "For click/fill: disambiguate duplicate controls by the nearby label/heading text (e.g. click the 'Select' button near 'Site types').",
     required: false,
   },
 ]
@@ -1247,14 +1393,22 @@ screenshots, and multi-step browser workflows when terminal tools are not enough
 If the task mentions localhost pages, forms, browser bugs, screenshots, rendered state,
 console output, or network requests, this is the primary tool.
 This model has NO vision: a screenshot is saved for the user but you cannot read it.
-VERIFY rendered state with action 'read'/'eval' (DOM, text, computed styles, element
-counts) and 'console' (errors) — never claim what a screenshot "shows".
+To "see" a page, use 'observe' (title, element counts, headings, empty-state check)
+and 'dom' (list visible interactive elements with ready selectors). VERIFY rendered
+state with 'observe'/'dom'/'text'/'eval' and 'console' (errors) — never claim what a
+screenshot "shows". If 'observe' reports the page looks empty, the UI did not render.
+You can click/fill WITHOUT a CSS selector using targetText/role (and 'near' to
+disambiguate duplicates), resolved against the elements 'dom' lists.
 Navigation reuses ONE tab by default (sameTab); do not reopen a new tab for the
 same site — navigate/refresh in place. Use sameTab:false only for a different site.
 
 Examples:
+- { "action": "observe", "url": "http://localhost:3000" }
+- { "action": "dom" }
 - { "action": "open", "url": "https://example.com" }
 - { "action": "text", "url": "https://example.com", "selector": "h1" }
+- { "action": "click", "targetText": "Sign in", "role": "button" }
+- { "action": "click", "targetText": "Select", "near": "Site types" }
 - { "action": "click", "url": "https://example.com", "selector": ".submit-btn" }
 - { "action": "fill", "url": "https://example.com/login", "selector": "#email", "text": "user@example.com" }
 - { "action": "eval", "url": "https://example.com", "code": "document.title" }

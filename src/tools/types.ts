@@ -30,6 +30,8 @@ export interface ToolResult {
   verified?: boolean;
   /** List of files that were changed */
   changedFiles?: string[];
+  /** Compact +/- line diff of the change, for display in the TUI (write/edit). */
+  diff?: string;
 }
 
 export type ApprovalRequirement = 'always' | 'auto' | 'never'

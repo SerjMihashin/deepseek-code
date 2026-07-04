@@ -6,10 +6,12 @@ import type { ToolCallEvent } from '../core/agent-loop.js'
 import { i18n } from '../core/i18n.js'
 import { themeManager } from '../core/themes.js'
 import { MarkdownView } from './markdown-view.js'
-import { MatrixRain } from './matrix-rain.js'
 import { visualWidth, formatDuration } from '../utils/string-width.js'
 
 /** Concise target (file/command/pattern) for a tool call, for the history list. */
+// How many diff lines to show inline under a write/edit tool card before collapsing.
+const DIFF_PREVIEW_LINES = 16
+
 function toolTarget (tc: ToolCallEvent): string {
   const a = (tc.arguments ?? {}) as Record<string, unknown>
   const raw = a.path ?? a.file_path ?? a.filePath ?? a.command ?? a.cmd ?? a.pattern ?? a.query ?? a.url
@@ -71,10 +73,25 @@ export function MessageBubble ({ message }: { message: ChatMessage }) {
               const target = toolTarget(tc)
               const dur = tc.durationMs ? ` · ${formatDuration(tc.durationMs)}` : ''
               const err = failed && tc.error ? ` — ${tc.error.split('\n')[0].slice(0, 80)}` : ''
+              const diffLines = ok && tc.diff ? tc.diff.split('\n').slice(0, DIFF_PREVIEW_LINES) : []
+              const diffHidden = ok && tc.diff ? tc.diff.split('\n').length - diffLines.length : 0
               return (
-                <Text key={`${tc.id}-${i}`} color={failed ? colors.error : colors.textMuted}>
-                  {icon} {tc.name}{target ? ` ${target}` : ''}{dur}{err}
-                </Text>
+                <Box key={`${tc.id}-${i}`} flexDirection='column'>
+                  <Text color={failed ? colors.error : colors.textMuted}>
+                    {icon} {tc.name}{target ? ` ${target}` : ''}{dur}{err}
+                  </Text>
+                  {diffLines.map((line, di) => (
+                    <Text
+                      key={di}
+                      color={line[0] === '+' ? colors.success : line[0] === '-' ? colors.error : colors.textMuted}
+                    >
+                      {'    '}{line.length > 118 ? line.slice(0, 117) + '…' : line}
+                    </Text>
+                  ))}
+                  {diffHidden > 0 && (
+                    <Text color={colors.textMuted}>{'    '}… +{diffHidden} more diff lines</Text>
+                  )}
+                </Box>
               )
             })}
           </Box>
@@ -100,7 +117,7 @@ export function MessageBubble ({ message }: { message: ChatMessage }) {
       </Box>
       <Box marginLeft={2} flexDirection='column'>
         {isUser || isSystem
-          ? <Text wrap='wrap'>{textContent}</Text>
+          ? <Text wrap='wrap' color={colors.text}>{textContent}</Text>
           : <MarkdownView text={textContent} />}
         {hasImage && <Text color={colors.info}>[image attached]</Text>}
       </Box>
@@ -111,31 +128,19 @@ export function MessageBubble ({ message }: { message: ChatMessage }) {
 /** Empty-state welcome banner shown before the first message. */
 export function WelcomeScreen () {
   const colors = themeManager.getColors()
-  const isMatrix = themeManager.theme.name === 'matrix'
   const hint = `/help — помощь  |  /setup — настройки  |  Alt+V — изображение${process.platform === 'win32' ? ' (Win Terminal ≥1.14)' : ''}`
 
+  // The Matrix "digital rain" is a one-time startup intro (see matrix-intro.tsx);
+  // the welcome screen itself stays calm so typing is never disrupted by an
+  // animation re-rendering underneath it.
   return (
     <Box flexDirection='column' alignItems='center' marginTop={2}>
-      {isMatrix
-        ? (
-          <>
-            <MatrixRain />
-            <Box position='absolute' flexDirection='column' alignItems='center'>
-              <Text bold color={colors.primary}>deepseek-code</Text>
-              <Text color={colors.textMuted}>{hint}</Text>
-            </Box>
-          </>
-          )
-        : (
-          <>
-            <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
-            <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
-            <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
-            <Box marginTop={1}>
-              <Text color={colors.textMuted}>{hint}</Text>
-            </Box>
-          </>
-          )}
+      <Text bold color={colors.text}>{i18n.t('welcome')}</Text>
+      <Text color={colors.textMuted}>{i18n.t('welcomeSubtitle')}</Text>
+      <Text color={colors.textMuted}>{i18n.t('welcomeHint')}</Text>
+      <Box marginTop={1}>
+        <Text color={colors.textMuted}>{hint}</Text>
+      </Box>
     </Box>
   )
 }
@@ -203,7 +208,7 @@ function LiveTail ({ message, maxLines }: { message: ChatMessage; maxLines: numb
         </Box>
       )}
       <Box marginLeft={2}>
-        <Text wrap='wrap'>{shown.join('\n')}</Text>
+        <Text wrap='wrap' color={colors.text}>{shown.join('\n')}</Text>
       </Box>
     </Box>
   )

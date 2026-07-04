@@ -43,4 +43,14 @@ describe('chrome tool', () => {
   it('starts with no browser test result', () => {
     expect(getLastBrowserTestResult()).toBeNull()
   })
+
+  it('advertises perception + semantic-targeting in its metadata', () => {
+    const actionParam = chromeTool.parameters.find(p => p.name === 'action')
+    expect(actionParam?.description).toMatch(/observe/)
+    expect(actionParam?.description).toMatch(/dom/)
+    for (const name of ['targetText', 'role', 'near']) {
+      expect(chromeTool.parameters).toContainEqual(expect.objectContaining({ name }))
+    }
+    expect(chromeTool.description).toMatch(/NO vision/)
+  })
 })

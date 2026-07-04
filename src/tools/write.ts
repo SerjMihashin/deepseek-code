@@ -1,7 +1,9 @@
 import { writeFile, readFile, mkdir } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 import { assertPathInWorkspace } from './path-safety.js'
+import { lineDiff } from './diff.js'
 
 const MAX_FILE_SIZE = 1_048_576 // 1MB limit
 
@@ -40,6 +42,14 @@ export const writeTool: Tool = {
 
     try {
       assertPathInWorkspace(filePath)
+
+      // Read the previous content (if any) BEFORE overwriting, to show a diff.
+      const isNew = !existsSync(filePath)
+      let previous = ''
+      if (!isNew) {
+        try { previous = await readFile(filePath, 'utf-8') } catch { /* unreadable — treat as empty */ }
+      }
+
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, content, 'utf-8')
 
@@ -49,10 +59,11 @@ export const writeTool: Tool = {
 
       return {
         success: true,
-        output: `Successfully wrote ${content.length} bytes to ${filePath}`,
+        output: `Successfully wrote ${content.length} bytes to ${filePath}${isNew ? ' (new file)' : ''}`,
         changed: true,
         verified,
         changedFiles: [filePath],
+        diff: lineDiff(previous, content),
       }
     } catch (err) {
       return {

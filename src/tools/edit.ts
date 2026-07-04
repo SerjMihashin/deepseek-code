@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { type Tool, type ToolResult } from './types.js'
 import { assertPathInWorkspace } from './path-safety.js'
+import { lineDiff } from './diff.js'
 
 export const editTool: Tool = {
   name: 'edit',
@@ -76,6 +77,7 @@ export const editTool: Tool = {
           changed: true,
           verified,
           changedFiles: [filePath],
+          diff: lineDiff(oldString, newString),
         }
       } else {
         const replaced = content.replace(oldString, newString)
@@ -89,6 +91,7 @@ export const editTool: Tool = {
           changed: true,
           verified,
           changedFiles: [filePath],
+          diff: lineDiff(oldString, newString),
         }
       }
     } catch (err) {

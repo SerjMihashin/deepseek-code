@@ -98,7 +98,7 @@ function renderTableAsList (lines: string[], headerIdx: number, colors: Colors):
     rows.push(
       <Box key={rows.length} marginLeft={1}>
         <Text color={colors.primary}>• </Text>
-        <Text wrap='wrap'>{pairs.join(' · ')}</Text>
+        <Text wrap='wrap' color={colors.text}>{pairs.join(' · ')}</Text>
       </Box>
     )
   }
@@ -110,16 +110,16 @@ function renderTableRow (line: string, isHeader: boolean, colors: Colors, widths
 
   return (
     <Box flexDirection='row'>
-      <Text>{'| '}</Text>
+      <Text color={colors.border}>{'| '}</Text>
       {cells.map((cell, i) => {
         const trimmed = cell.trim()
         const padded = `${padVisual(trimmed, widths[i] ?? visualWidth(trimmed))} `
         return (
           <React.Fragment key={i}>
-            <Text bold={isHeader} color={isHeader ? colors.primary : undefined}>
+            <Text bold={isHeader} color={isHeader ? colors.primary : colors.text}>
               {padded}
             </Text>
-            <Text>|</Text>
+            <Text color={colors.border}>|</Text>
           </React.Fragment>
         )
       })}
@@ -247,7 +247,7 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
       rendered.push(
         <Box key={rendered.length} marginLeft={indent * 2}>
           <Text color={colors.primary}>• </Text>
-          <Text wrap='wrap'>{renderInline(ulMatch[2], colors)}</Text>
+          <Text wrap='wrap' color={colors.text}>{renderInline(ulMatch[2], colors)}</Text>
         </Box>
       )
       i++
@@ -261,7 +261,7 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
       rendered.push(
         <Box key={rendered.length} marginLeft={indent * 2}>
           <Text color={colors.primary}>{olMatch[2]}. </Text>
-          <Text wrap='wrap'>{renderInline(olMatch[3], colors)}</Text>
+          <Text wrap='wrap' color={colors.text}>{renderInline(olMatch[3], colors)}</Text>
         </Box>
       )
       i++
@@ -289,7 +289,7 @@ function TextSegment ({ content, colors }: { content: string; colors: Colors }) 
 
     // Regular text with inline formatting
     rendered.push(
-      <Text key={rendered.length} wrap='wrap'>{renderInline(line, colors)}</Text>
+      <Text key={rendered.length} wrap='wrap' color={colors.text}>{renderInline(line, colors)}</Text>
     )
     i++
   }

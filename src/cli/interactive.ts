@@ -28,7 +28,13 @@ export type SessionOptions = CliOptions
 export async function startInteractiveSession (options: SessionOptions): Promise<void> {
   const config = await loadConfig()
 
-  // Apply CLI theme/lang overrides
+  // Apply the saved theme from config, then let a CLI flag override it. Without
+  // this the persisted theme was never restored on launch (and the Matrix intro
+  // never triggered because the theme wasn't active yet at first render).
+  await themeManager.loadCustomThemes()
+  if (config.theme) {
+    themeManager.setTheme(config.theme)
+  }
   if (options.theme) {
     themeManager.setTheme(options.theme)
   }

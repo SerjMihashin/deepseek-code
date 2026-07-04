@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.8 — Browser Perception (unreleased)
+
+### Added
+- **The browser tool can now "see" without vision.** Two perception actions give the agent a structured, text view of a page instead of a screenshot it cannot read:
+  - `observe` — page summary: title, element counts (headings/links/buttons/inputs/images/forms), top headings, landmarks, and an explicit **empty/blank-page check** (catches "the UI did not render").
+  - `dom` — a list of the visible interactive elements with their role/label and a ready-to-use selector.
+- **Click/fill by visible text — no CSS selector needed.** `click`/`fill` accept `targetText` (+ optional `role`), with `near` to disambiguate duplicate controls (e.g. the `Select` button near `Site types`). Ported from the chrome-cli-tools approach.
+- **Inline diff for edits.** `write_file` and `edit` now show a compact coloured `+`/`-` line diff right in the tool activity card, so you can see exactly what changed instead of just "wrote N bytes". Large changes are summarised.
+- **Matrix theme startup intro.** With the `matrix` theme active, launch plays a one-time full-screen all-green digital-rain intro that pours down and drains away (press any key to skip), then hands off to a calm interface. The old always-on welcome rain (which jittered and disrupted typing) was removed — the rain is now only the intro.
+
+### Fixed
+- **The selected theme is now saved and restored.** `/theme <name>` and the theme picker persist the choice to config, and the saved theme is applied on the next launch (previously the theme reset every restart, and the Matrix intro never triggered because the theme wasn't active at first render).
+- The DEEPSEEK logo now follows the active theme's accent colour (green in Matrix) instead of a hardcoded blue.
+
 ## 0.4.7 — Project & Global Memory, Manual Compaction
 
 ### Added

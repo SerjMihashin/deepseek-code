@@ -750,7 +750,8 @@ async function cmdTheme (ctx: SlashCommandContext, input: string): Promise<boole
   }
   const success = themeManager.setTheme(themeName)
   if (success) {
-    ctx.addServiceNotice?.(`[theme] Тема изменена: ${themeName}`)
+    await saveConfig({ theme: themeName })
+    ctx.addServiceNotice?.(`[theme] Тема изменена: ${themeName} (сохранено)`)
     ctx.setStatusText(`Тема: ${themeName}`)
   } else {
     ctx.addServiceNotice?.(`[err] Тема "${themeName}" не найдена`)

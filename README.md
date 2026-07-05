@@ -56,16 +56,16 @@ npx @serjm/deepseek-code
 
 Requires Node.js 20+ and a DeepSeek API key.
 
-## What Is New In 0.4.4
+## What Is New In 0.4.8
 
-- More stable TUI streaming with batched output and live follow-up input.
-- Slash-command editing fixes for `/model`, Backspace/Delete, Esc, and Ctrl+U.
-- Clear `VIEW:FOLLOW` / `VIEW:PAUSED` status for reading long sessions.
-- Failed tool call details in Execution Summary.
-- Explicit stream timeout errors instead of silent aborts.
-- Windows-friendly `grep_search` fallback when `rg` is unavailable.
-- Windows shell policy and guardrails for Unix-only commands such as `head`.
-- Explicit `/budget normal` and `/budget large` modes; default interactive budget remains off.
+- **The browser tool can now "see" without vision.** `observe` gives a structured text summary of a page (title, element counts, landmarks, and an explicit blank-page check); `dom` lists the visible interactive elements with ready-to-use selectors.
+- **Click and fill by visible text** — `click`/`fill` accept `targetText` (+ optional `role`, `near`), no CSS selector required.
+- **Inline coloured diff** for `write_file` / `edit`, shown right in the tool activity card.
+- **Matrix theme startup intro** — a one-time full-screen digital-rain that drains away, plus a persisted theme selection that survives restarts.
+- **`/cost`** — focused token-usage and estimated-cost view of the session.
+- **Slash-command cleanup: 33 → 28 live commands.** Removed dead commands (`/loop`, `/followup`, `/plan`), turned redundant twins into aliases (`/compress` → `/compact`, `/language` → `/lang`, `/capabilities` → `/tools`).
+
+Earlier (0.4.5–0.4.7): project + global memory loaded into context (`DEEPSEEK.md`, `#`/`##` quick-capture, `/init`), manual compaction (`/compact`, auto-compaction off by default), `--continue` restores the full transcript, and a 600s timeout for dependency installs/builds.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.9 — Background Process Control (unreleased)
+
+### Added
+- **The agent can now read a background process's logs without stopping it.** `run_shell_command` gained `read_pid` (output tail + running/exited state of a dev server started with `background: true`) and `list_processes` (all background processes of the session). Closes the gap where checking dev-server logs after a failed page load required killing the server.
+- **`/ps`** — list background processes from the UI; `/ps stop <pid>` stops one. All background processes are still killed automatically when dsc exits.
+
 ## 0.4.8 — Browser Perception & Command Cleanup (2026-07-05)
 
 ### Added

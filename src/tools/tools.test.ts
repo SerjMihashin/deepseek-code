@@ -488,8 +488,24 @@ describe('bash tool', () => {
     const pid = Number(start.output.match(/pid=(\d+)/)?.[1])
     expect(Number.isInteger(pid)).toBe(true)
 
+    // read logs WITHOUT stopping the process
+    const read = await bashTool.execute({ read_pid: pid })
+    expect(read.success).toBe(true)
+    expect(read.output).toContain(`pid=${pid} is running`)
+
+    // listing shows the process as running
+    const list = await bashTool.execute({ list_processes: true })
+    expect(list.success).toBe(true)
+    expect(list.output).toContain(`pid=${pid}`)
+    expect(list.output).toContain('running')
+
     const stop = await bashTool.execute({ stop_pid: pid })
     expect(stop.success).toBe(true)
+
+    // after stop the pid is gone from the registry
+    const readGone = await bashTool.execute({ read_pid: pid })
+    expect(readGone.success).toBe(false)
+    expect(readGone.error).toContain('No background process')
   }, 20000)
 
   it('reports an error when no command and no action is given', async () => {

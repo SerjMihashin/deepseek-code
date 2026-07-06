@@ -21,6 +21,7 @@ import { saveConfig } from '../config/loader.js'
 import type { SetupStep } from '../ui/setup-wizard.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { browserTest, getLastBrowserTestResult, browserRealTest } from '../tools/chrome.js'
+import { listBackground, stopBackground } from '../tools/process-manager.js'
 import { chromeManager } from '../tools/chrome-manager.js'
 import type { TaskBudget } from '../tools/types.js'
 import { AUDIT_BUDGET_PRESET, LARGE_BUDGET_PRESET, NORMAL_BUDGET_PRESET } from '../tools/types.js'
@@ -608,6 +609,40 @@ async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
   return true
 }
 
+async function cmdPs (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const sub = input.slice('/ps'.length).trim()
+
+  // /ps stop <pid> — stop a background process from the UI
+  const stopMatch = sub.match(/^stop\s+(\d+)$/)
+  if (stopMatch) {
+    const pid = parseInt(stopMatch[1], 10)
+    const result = stopBackground(pid)
+    ctx.addServiceNotice?.(result.stopped
+      ? `[ps] Остановлен фоновый процесс pid=${pid}`
+      : `[err] ${result.error}`)
+    return true
+  }
+
+  if (sub) {
+    ctx.addServiceNotice?.('Usage: /ps — список фоновых процессов, /ps stop <pid> — остановить')
+    return true
+  }
+
+  const procs = listBackground()
+  if (procs.length === 0) {
+    ctx.addServiceNotice?.('[ps] Нет фоновых процессов в этой сессии')
+    return true
+  }
+  const lines = procs.map(p =>
+    `- pid=${p.pid} ${p.running ? '🟢 running' : `⚪ ${p.exitInfo ?? 'exited'}`} — \`${p.command.length > 70 ? p.command.slice(0, 69) + '…' : p.command}\``
+  )
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: `**Фоновые процессы (${procs.length}):**\n${lines.join('\n')}\n\nОстановить: \`/ps stop <pid>\`. Все процессы будут остановлены при выходе из dsc.`,
+  }])
+  return true
+}
+
 async function cmdCost (ctx: SlashCommandContext): Promise<boolean> {
   const metrics = ctx.getMetrics?.()
   const usage = metrics?.getTokenUsage()
@@ -1191,6 +1226,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/git', description: 'Git: /git commit|branch|diff|status', descriptionRu: 'Git: /git commit|branch|diff|status', handler: cmdGit },
   { name: '/stats', description: 'Session statistics with token usage', descriptionRu: 'Статистика сессии с токенами', handler: cmdStats },
   { name: '/cost', description: 'Show token cost of the session', descriptionRu: 'Показать стоимость сессии в токенах', handler: cmdCost },
+  { name: '/ps', description: 'Background processes: /ps [stop <pid>]', descriptionRu: 'Фоновые процессы: /ps [stop <pid>]', handler: cmdPs },
   { name: '/theme', description: 'Switch theme or open picker', descriptionRu: 'Сменить тему или открыть выбор', handler: cmdTheme },
   { name: '/model', description: 'Switch model or open picker: /model [id]', descriptionRu: 'Сменить модель или открыть выбор: /model [id]', handler: cmdModel },
   { name: '/lang', description: 'Change language: /lang en|ru|zh', descriptionRu: 'Сменить язык: /lang en|ru|zh', handler: cmdLang },

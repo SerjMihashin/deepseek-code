@@ -95,6 +95,7 @@ describe('slash commands', () => {
       '/git unknown',
       '/stats',
       '/cost',
+      '/ps',
       '/lang',
       '/language',
       '/extensions',

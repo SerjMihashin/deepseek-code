@@ -1,7 +1,7 @@
 import { type ChildProcess } from 'node:child_process'
 import { platform } from 'node:os'
 import { spawnShellCommand, killProcessTree, resolveWindowsShell } from './shell.js'
-import { startBackground, stopBackground, getBackgroundOutput, isBackgroundRunning, getBackgroundExitInfo, waitForPort } from './process-manager.js'
+import { startBackground, stopBackground, getBackgroundOutput, isBackgroundRunning, getBackgroundExitInfo, listBackground, hasBackground, waitForPort } from './process-manager.js'
 import { isAbsolute, relative } from 'node:path'
 import { type Tool, type ToolResult } from './types.js'
 
@@ -267,7 +267,7 @@ function executeCommand (command: string, timeout: number, signal?: AbortSignal)
 
 export const bashTool: Tool = {
   name: 'run_shell_command',
-  description: 'Execute an OS-compatible shell command (build/test/git). Prefer read_file, grep_search, glob for inspection. For long-running processes like dev/preview servers, set background:true (optionally with wait_for_port) so the call returns instead of hanging; later stop it with stop_pid. The active shell dialect is described in the system prompt.',
+  description: 'Execute an OS-compatible shell command (build/test/git). Prefer read_file, grep_search, glob for inspection. For long-running processes like dev/preview servers, set background:true (optionally with wait_for_port) so the call returns instead of hanging; check its logs anytime with read_pid (does not stop it), see all with list_processes, stop it with stop_pid. The active shell dialect is described in the system prompt.',
   parameters: [
     {
       name: 'command',
@@ -300,6 +300,18 @@ export const bashTool: Tool = {
       required: false,
     },
     {
+      name: 'read_pid',
+      type: 'number',
+      description: 'Read the captured output (stdout+stderr tail) of a background process by pid WITHOUT stopping it. Use to check dev-server logs after a failed page load. No command needed.',
+      required: false,
+    },
+    {
+      name: 'list_processes',
+      type: 'boolean',
+      description: 'List background processes started this session (pid, command, running/exited). No command needed.',
+      required: false,
+    },
+    {
       name: 'description',
       type: 'string',
       description: 'Brief description of what the command does',
@@ -312,6 +324,7 @@ export const bashTool: Tool = {
     const background = args.background === true
     const waitForPortNum = args.wait_for_port as number | undefined
     const stopPid = args.stop_pid as number | undefined
+    const readPid = args.read_pid as number | undefined
 
     // ── Stop a background process ──────────────────────────────────────────
     if (typeof stopPid === 'number') {
@@ -319,6 +332,30 @@ export const bashTool: Tool = {
       if (!result.stopped) return { success: false, output: '', error: result.error }
       const tail = result.output ? `\n--- last output ---\n${result.output.slice(-4000)}` : ''
       return { success: true, output: `Stopped background process pid=${stopPid}.${tail}` }
+    }
+
+    // ── Read output of a background process without stopping it ────────────
+    if (typeof readPid === 'number') {
+      if (!hasBackground(readPid)) {
+        return { success: false, output: '', error: `No background process with pid ${readPid}. Use list_processes to see active ones.` }
+      }
+      const running = isBackgroundRunning(readPid)
+      const state = running ? 'running' : `not running — ${getBackgroundExitInfo(readPid) ?? 'exited'}`
+      const out = getBackgroundOutput(readPid)
+      return {
+        success: true,
+        output: `Background process pid=${readPid} is ${state}.${out ? `\n--- output tail ---\n${out.slice(-6000)}` : '\n(no output captured yet)'}`,
+      }
+    }
+
+    // ── List background processes ───────────────────────────────────────────
+    if (args.list_processes === true) {
+      const procs = listBackground()
+      if (procs.length === 0) return { success: true, output: 'No background processes in this session.' }
+      const lines = procs.map(p =>
+        `pid=${p.pid} [${p.running ? 'running' : p.exitInfo ?? 'exited'}] ${p.command.length > 80 ? p.command.slice(0, 79) + '…' : p.command}`
+      )
+      return { success: true, output: `Background processes (${procs.length}):\n${lines.join('\n')}` }
     }
 
     // ── Wait for a port with no command (server already started elsewhere) ──

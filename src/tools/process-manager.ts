@@ -57,6 +57,28 @@ export function getBackgroundOutput (pid: number): string {
   return registry.get(pid)?.output ?? ''
 }
 
+export interface BackgroundProcessInfo {
+  pid: number;
+  command: string;
+  running: boolean;
+  exitInfo?: string;
+}
+
+/** List all background processes started this session (running and exited). */
+export function listBackground (): BackgroundProcessInfo[] {
+  return Array.from(registry.values()).map(p => ({
+    pid: p.pid,
+    command: p.command,
+    running: !p.exited,
+    exitInfo: p.exitInfo,
+  }))
+}
+
+/** Whether a pid belongs to this session's background registry. */
+export function hasBackground (pid: number): boolean {
+  return registry.has(pid)
+}
+
 export function isBackgroundRunning (pid: number): boolean {
   const proc = registry.get(pid)
   return !!proc && !proc.exited

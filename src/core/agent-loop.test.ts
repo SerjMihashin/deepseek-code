@@ -596,6 +596,46 @@ describe('AgentLoop subagents (run_agent)', () => {
       ['read_file', 'glob', 'grep_search', 'write_file', 'edit', 'run_shell_command'])
   })
 
+  it('runs a batch of run_agent calls in parallel', async () => {
+    const agent = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+
+    let apiCallCount = 0
+    ;(agent as any).api.streamChat = async function * () {
+      apiCallCount++
+      if (apiCallCount === 1) {
+        yield toolUseChunk('run_agent', 'call_a', { task: 'explore src/ui', mode: 'read-only' })
+        yield toolUseChunk('run_agent', 'call_b', { task: 'explore src/tools', mode: 'read-only' })
+        return
+      }
+      yield textChunk('Both areas explored.')
+    }
+
+    const windows: Array<{ start: number; end: number }> = []
+    ;(agent as any).createSubagentLoop = (cfg: DeepSeekConfig, opts: Record<string, unknown>) => {
+      const sub = new AgentLoop(cfg, opts)
+      ;(sub as any).api.streamChat = async function * () {
+        const window = { start: Date.now(), end: 0 }
+        windows.push(window)
+        await new Promise(resolve => setTimeout(resolve, 120))
+        window.end = Date.now()
+        yield textChunk('area report')
+      }
+      return sub
+    }
+
+    const result = await agent.run('explore both')
+
+    expect(result).toBe('Both areas explored.')
+    const calls = agent.getToolCallHistory()
+    expect(calls).toHaveLength(2)
+    expect(calls.every(c => c.status === 'completed')).toBe(true)
+    expect(calls.every(c => (c.result ?? '').includes('area report'))).toBe(true)
+    // Parallel proof: the second subagent started before the first finished.
+    expect(windows).toHaveLength(2)
+    const [first, second] = windows
+    expect(second.start).toBeLessThan(first.end)
+  })
+
   it('errors clearly when a named agent does not exist', async () => {
     const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
     const result = await (main as any).executeSubagent({ task: 'x', agent: 'ghost' })

@@ -21,6 +21,8 @@ export interface DeepSeekConfig {
   chromeHeadless?: boolean;
   /** Timestamp of last npm update check (ms since epoch) */
   lastUpdateCheckAt?: number;
+  /** Ring the terminal bell when a run longer than ~20s finishes (default true). */
+  notifyOnComplete?: boolean;
 }
 
 export type ApprovalMode = 'plan' | 'default' | 'auto-edit' | 'turbo'

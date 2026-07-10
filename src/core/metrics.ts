@@ -180,12 +180,13 @@ export class MetricsCollector {
     return this.toolCallLog.filter(t => nameSet.has(t.tool)).length
   }
 
-  recordToolCallStart (toolName: string): void {
-    this.toolTimings.set(toolName, { start: Date.now() })
+  /** `key` disambiguates concurrent calls of the same tool (e.g. parallel run_agent). */
+  recordToolCallStart (toolName: string, key?: string): void {
+    this.toolTimings.set(key ?? toolName, { start: Date.now() })
   }
 
-  recordToolCallEnd (toolName: string, success: boolean = true, label?: string, error?: string): void {
-    const entry = this.toolTimings.get(toolName)
+  recordToolCallEnd (toolName: string, success: boolean = true, label?: string, error?: string, key?: string): void {
+    const entry = this.toolTimings.get(key ?? toolName)
     if (entry) {
       const duration = Date.now() - entry.start
       entry.duration = duration

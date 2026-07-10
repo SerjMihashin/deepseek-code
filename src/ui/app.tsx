@@ -140,6 +140,7 @@ export function App ({ config, options }: AppProps) {
   const [introDone, setIntroDone] = useState(() => themeManager.theme.name !== 'matrix')
   const serviceNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const budgetRef = useRef<TaskBudget | undefined>(undefined)
+  const handleSubmitRef = useRef<((input: string) => Promise<void> | void) | null>(null)
   // Double Ctrl+C to exit when idle/paused (raw mode owns Ctrl+C on all platforms).
   const ctrlCExitArmedRef = useRef(false)
   const ctrlCExitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -330,6 +331,9 @@ export function App ({ config, options }: AppProps) {
       setStatusText,
       setSetupStep,
       addServiceNotice,
+      // Deferred so the current slash-command turn fully settles before the
+      // agent run starts (handleSubmit is defined later; ref avoids the cycle).
+      submitPrompt: (prompt: string) => { setTimeout(() => handleSubmitRef.current?.(prompt), 0) },
       getMetrics: () => agentLoopRef.current?.getMetrics(),
       getBudget: () => budgetRef.current,
       setBudget: (budget) => { budgetRef.current = budget },
@@ -471,6 +475,8 @@ export function App ({ config, options }: AppProps) {
     setToolCalls([])
     liveToolMessageIndexRef.current = -1
     currentCardToolsRef.current = []
+
+    const runStartedAt = Date.now()
 
     try {
       await hooksManager.execute('UserPromptSubmit', {
@@ -681,6 +687,13 @@ export function App ({ config, options }: AppProps) {
       // Safety net: ensure UI is always reset regardless of exit path
       flushPending()
       setIsProcessing(false)
+
+      // Long-run completion notification: terminal bell. Windows Terminal /
+      // most emulators surface it as a taskbar flash / tab badge when the
+      // window is unfocused — exactly the "task finished" ping we want.
+      if ((config.notifyOnComplete ?? true) && Date.now() - runStartedAt > 20_000) {
+        try { process.stdout.write('\x07') } catch { /* not fatal */ }
+      }
       // Don't overwrite status if user paused the agent
       if (!isPausedRef.current) {
         setStatusText(i18n.t('ready'))
@@ -701,6 +714,10 @@ export function App ({ config, options }: AppProps) {
       if (proc2.__agentAbortController === abortController) proc2.__agentAbortController = undefined
     }
   }, [messages, isProcessing, setupStep, handleApiKeySubmit, handleSlashCommand, approvalMode, config, localApiKey])
+
+  // Keep a stable pointer to the latest handleSubmit for deferred invocations
+  // (slash commands like /skills submit a prompt after their own turn ends).
+  handleSubmitRef.current = handleSubmit
 
   useInput((_input, key) => {
     const step = setupStepRef.current

@@ -50,6 +50,8 @@ export interface SlashCommandContext {
   getBudget?: () => TaskBudget | undefined
   /** Sets the budget for the next agent run */
   setBudget?: (budget: TaskBudget | undefined) => void
+  /** Submit a prompt to the agent as if the user typed it (used by /skills). */
+  submitPrompt?: (prompt: string) => void
 }
 
 function getDescription (name: string): string {
@@ -373,30 +375,56 @@ async function cmdMcp (ctx: SlashCommandContext, input: string): Promise<boolean
 }
 
 async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<boolean> {
-  const name = input.slice('/skills'.length).trim()
-  if (name) {
-    const skill = skillsManager.getSkill(name)
-    if (!skill) {
-      ctx.setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: `Skill "${name}" not found.`,
-      }])
-      return true
-    }
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: `**Skill: ${skill.name}**\n\n${skill.description || ''}`,
-    }])
-  } else {
+  const rest = input.slice('/skills'.length).trim()
+
+  if (!rest) {
     const skills = skillsManager.listSkills()
     const list = skills.length === 0
-      ? 'No skills available. Create one in `.deepseek-code/skills/<name>/SKILL.md`.'
-      : skills.map(s => `- **${s.name}**: ${s.description}`).join('\n')
+      ? 'No skills available. Create one in `.deepseek-code/skills/<name>/SKILL.md`:\n```markdown\n---\nname: release-check\ndescription: Pre-release checklist for this repo\n---\nRun lint, typecheck, build and tests. Then verify CHANGELOG.md mentions the current package.json version...\n```'
+      : skills.map(s => `- **${s.name}**: ${s.description}${s.sourcePath ? `\n  \`${s.sourcePath}\`` : ''}`).join('\n')
     ctx.setMessages(prev => [...prev, {
       role: 'assistant',
-      content: `**Available Skills**\n\n${list}`,
+      content: `**Available Skills**\n\nRun one with \`/skills <name> [extra input]\`, inspect with \`/skills show <name>\`. The agent also applies skills on its own when a task matches.\n\n${list}`,
     }])
+    return true
   }
+
+  // /skills show <name> — print the skill prompt without running it
+  const showMatch = rest.match(/^show\s+(\S+)/)
+  if (showMatch) {
+    const skill = skillsManager.getSkill(showMatch[1])
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: skill
+        ? `**Skill: ${skill.name}**\n\n${skill.description || ''}\n\n\`\`\`\n${skill.prompt}\n\`\`\``
+        : `Skill "${showMatch[1]}" not found.`,
+    }])
+    return true
+  }
+
+  // /skills <name> [extra input] — run the skill as a task
+  const [name, ...extraParts] = rest.split(/\s+/)
+  const skill = skillsManager.getSkill(name)
+  if (!skill) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `Skill "${name}" not found. Use \`/skills\` to list available skills.`,
+    }])
+    return true
+  }
+  if (!ctx.submitPrompt) {
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: 'Skills cannot be executed in this mode.',
+    }])
+    return true
+  }
+  const extra = extraParts.join(' ').trim()
+  const prompt = extra
+    ? `${skill.prompt}\n\nAdditional input from the user:\n${extra}`
+    : skill.prompt
+  ctx.addServiceNotice?.(`[skill] Running "${skill.name}"...`)
+  ctx.submitPrompt(prompt)
   return true
 }
 
@@ -411,6 +439,18 @@ async function cmdAgents (ctx: SlashCommandContext): Promise<boolean> {
     role: 'assistant',
     content: `**Subagents**\n\n${header}\n\n${list}`,
   }])
+  return true
+}
+
+async function cmdDoctor (ctx: SlashCommandContext): Promise<boolean> {
+  ctx.setStatusText('Running diagnostics...')
+  const { runDoctor, formatDoctorReport } = await import('../core/doctor.js')
+  const checks = await runDoctor(ctx.config)
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: formatDoctorReport(checks),
+  }])
+  ctx.setStatusText(i18n.t('ready'))
   return true
 }
 
@@ -1236,6 +1276,7 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/skills', description: 'List or describe an agent skill', descriptionRu: 'Список или описание навыка', handler: cmdSkills },
   { name: '/agents', description: 'Subagents: how run_agent works + named agents', descriptionRu: 'Сабагенты: как работает run_agent + именованные агенты', handler: cmdAgents },
   { name: '/hooks', description: 'List loaded lifecycle hooks (hooks.json)', descriptionRu: 'Список загруженных хуков (hooks.json)', handler: cmdHooks },
+  { name: '/doctor', description: 'Diagnose environment: node, shell, git, API, Chrome', descriptionRu: 'Диагностика окружения: node, shell, git, API, Chrome', handler: cmdDoctor },
   { name: '/review', description: 'Code review: /review all|diff|auto', descriptionRu: 'Ревью кода: /review all|diff|auto', handler: cmdReview },
   { name: '/sandbox', description: 'Run command in sandbox (unavailable on Windows)', descriptionRu: 'Запустить команду в sandbox (недоступно на Windows)', handler: cmdSandbox },
   { name: '/git', description: 'Git: /git commit|branch|diff|status', descriptionRu: 'Git: /git commit|branch|diff|status', handler: cmdGit },

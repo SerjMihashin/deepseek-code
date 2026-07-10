@@ -12,6 +12,8 @@ export interface SkillDefinition {
   requiresTools?: string[];
   /** Optional: model override */
   model?: string;
+  /** Where the SKILL.md was loaded from. */
+  sourcePath?: string;
 }
 
 export interface SkillResult {
@@ -33,16 +35,16 @@ export interface SkillResult {
 export class SkillsManager {
   private skills: Map<string, SkillDefinition> = new Map()
 
-  async loadAll (): Promise<void> {
+  async loadAll (locations?: string[]): Promise<void> {
     this.skills.clear()
 
-    // Load from all locations
-    const locations = [
+    // Load from all locations (project overrides global)
+    const dirs = locations ?? [
       join(process.cwd(), '.deepseek-code', 'skills'),
       join(homedir(), '.deepseek-code', 'skills'),
     ]
 
-    for (const baseDir of locations) {
+    for (const baseDir of dirs) {
       await this.loadFromDir(baseDir)
     }
   }
@@ -94,6 +96,7 @@ export class SkillsManager {
         prompt: frontmatterMatch[2].trim(),
         requiresTools: frontmatter.tools ? frontmatter.tools.split(',').map(t => t.trim()) : undefined,
         model: frontmatter.model,
+        sourcePath: filePath,
       }
     } catch {
       return null
@@ -114,6 +117,22 @@ export class SkillsManager {
       s => s.name.toLowerCase().includes(lower) || s.description.toLowerCase().includes(lower)
     )
   }
+}
+
+/**
+ * Compact system-prompt section listing the available skills, so the agent
+ * knows they exist and applies them when a task matches. Empty string when no
+ * skills are defined.
+ */
+export function buildSkillsPromptSection (skills: SkillDefinition[]): string {
+  if (skills.length === 0) return ''
+  const lines = skills.slice(0, 40).map(s => {
+    const desc = s.description ? ` — ${s.description}` : ''
+    return `- **${s.name}**${desc}${s.sourcePath ? ` (SKILL.md: ${s.sourcePath})` : ''}`
+  })
+  return `\n## Skills
+User-defined reusable procedures. When the current task matches a skill, read its SKILL.md with read_file and FOLLOW its instructions. The user can also invoke one directly via /skills <name>.
+${lines.join('\n')}`
 }
 
 // Singleton

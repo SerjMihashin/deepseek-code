@@ -1,6 +1,7 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
 import { type Tool, type ToolResult, type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
 import { loadAgentConfig, listAgentConfigs } from './subagent.js'
+import { skillsManager, buildSkillsPromptSection } from './skills.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { getMcpToolDefinitions, projectIdFromCwd } from './mcp-tools.js'
 import { loadMemoryContext } from './project-memory.js'
@@ -270,6 +271,8 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, mo
 
   const memorySection = cwd ? loadMemoryContext(cwd) : ''
 
+  const skillsSection = buildSkillsPromptSection(skillsManager.listSkills())
+
   const planModeSection = mode === 'plan'
     ? `\n## Plan Mode (read-only — ACTIVE)
 - You are in **Plan Mode**. Mutating tools (\`write_file\`, \`edit\`, \`run_shell_command\`, and others) are BLOCKED — calling them will be rejected. Only read/search/browse tools work.
@@ -283,7 +286,7 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, mo
 
   return `You are DeepSeek Code, an AI-powered CLI agent for software development.
 
-You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}${memorySection}${planModeSection}
+You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}${memorySection}${skillsSection}${planModeSection}
 
 ## Guidelines
 0. **@-file mentions** — When the user writes \`@path/to/file\`, it is a reference to that file in the workspace; read it when relevant to the task.
@@ -562,7 +565,7 @@ export class AgentLoop extends EventEmitter {
   private buildRunAgentToolDef (): ToolDefinition {
     const tool: Tool = {
       name: 'run_agent',
-      description: 'Delegate a self-contained subtask to a subagent — a separate AI agent with its OWN fresh context and a restricted toolset. Use it to: (1) explore/analyze a large part of the codebase without flooding your own context, (2) run an independent verification/review pass, (3) execute a well-scoped implementation subtask. The subagent CANNOT see your conversation: put ALL required context into `task` (paths, goal, constraints, and what the final report must contain). It works autonomously and returns one final text report. Prefer mode "read-only" unless the subtask must change files or run commands. For named agents defined in .deepseek-code/agents/, pass `agent`.',
+      description: 'Delegate a self-contained subtask to a subagent — a separate AI agent with its OWN fresh context and a restricted toolset. Use it to: (1) explore/analyze a large part of the codebase without flooding your own context, (2) run an independent verification/review pass, (3) execute a well-scoped implementation subtask. The subagent CANNOT see your conversation: put ALL required context into `task` (paths, goal, constraints, and what the final report must contain). It works autonomously and returns one final text report. Prefer mode "read-only" unless the subtask must change files or run commands. For named agents defined in .deepseek-code/agents/, pass `agent`. TIP: several run_agent calls issued in ONE message run in PARALLEL — fan out independent explorations (different directories/questions) for big speedups; do not parallelize edit-mode agents touching the same files.',
       parameters: [
         { name: 'task', type: 'string', required: true, description: 'Full self-contained assignment for the subagent, including every path/detail it needs and the expected report format.' },
         { name: 'mode', type: 'string', enum: ['read-only', 'edit'], description: 'read-only (default): can read/search files only. edit: can also write/edit files and run shell commands.' },
@@ -580,6 +583,110 @@ export class AgentLoop extends EventEmitter {
   /** Factory for nested loops — separated so tests can stub the child's API. */
   protected createSubagentLoop (config: DeepSeekConfig, options: AgentLoopOptions): AgentLoop {
     return new AgentLoop(config, options)
+  }
+
+  /**
+   * Run a batch of run_agent tool calls concurrently. Approvals stay sequential
+   * (one dialog at a time); execution fans out. Results are pushed as each
+   * subagent finishes — every tool_call_id gets exactly one tool message.
+   */
+  private async executeParallelSubagents (toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>): Promise<void> {
+    const approved: Array<{ id: string; args: Record<string, unknown>; event: ToolCallEvent }> = []
+
+    for (const tc of toolCalls) {
+      const args = this.parseArguments(tc.function.arguments)
+      const toolCallEvent: ToolCallEvent = {
+        id: tc.id,
+        name: tc.function.name,
+        arguments: args,
+        status: 'pending',
+      }
+      this.toolCallHistory.set(tc.id, toolCallEvent)
+      this.options.onToolCall(toolCallEvent)
+
+      const approvalRequirement = this.getToolApproval(tc.function.name)
+      if (approvalRequirement !== 'never') {
+        if (this.options.signal?.aborted) {
+          toolCallEvent.status = 'rejected'
+          this.toolCallHistory.set(tc.id, toolCallEvent)
+          this.messages.push({
+            role: 'tool',
+            content: `Tool call "${tc.function.name}" aborted (cancellation signal).`,
+            tool_call_id: tc.id,
+          })
+          continue
+        }
+        const isApproved = await this.options.onApprovalRequest(tc.function.name, args, approvalRequirement)
+        if (!isApproved) {
+          toolCallEvent.status = 'rejected'
+          this.toolCallHistory.set(tc.id, toolCallEvent)
+          this.messages.push({
+            role: 'tool',
+            content: `Tool call "${tc.function.name}" rejected by user.`,
+            tool_call_id: tc.id,
+          })
+          continue
+        }
+      }
+      approved.push({ id: tc.id, args, event: toolCallEvent })
+    }
+
+    await Promise.all(approved.map(async ({ id, args, event }) => {
+      event.status = 'running'
+      event.startedAt = Date.now()
+      this.toolCallHistory.set(id, event)
+      this.metrics.recordToolCallStart('run_agent', id)
+      const startTime = event.startedAt
+      const toolLabel = this.buildToolCallLabel('run_agent', args)
+      try {
+        const toolResult = await this.executeTool('run_agent', args)
+        const duration = Date.now() - startTime
+        this.metrics.recordToolCallEnd('run_agent', toolResult.success, toolLabel, toolResult.success ? undefined : toolResult.error, id)
+
+        event.status = toolResult.success ? 'completed' : 'failed'
+        event.result = toolResult.output
+        event.error = toolResult.error
+        event.durationMs = duration
+        event.changed = toolResult.changed
+        event.changedFiles = toolResult.changedFiles
+        this.toolCallHistory.set(id, event)
+
+        this.options.onToolResult({
+          toolCallId: id,
+          toolName: 'run_agent',
+          success: toolResult.success,
+          output: toolResult.output,
+          durationMs: duration,
+          error: toolResult.error,
+        })
+        this.messages.push({
+          role: 'tool',
+          content: this.formatToolResult(toolResult, duration),
+          tool_call_id: id,
+        })
+      } catch (err) {
+        const duration = Date.now() - startTime
+        const errorMsg = (err as Error).message
+        this.metrics.recordToolCallEnd('run_agent', false, toolLabel, errorMsg, id)
+        event.status = 'failed'
+        event.error = errorMsg
+        event.durationMs = duration
+        this.toolCallHistory.set(id, event)
+        this.options.onToolResult({
+          toolCallId: id,
+          toolName: 'run_agent',
+          success: false,
+          output: '',
+          durationMs: duration,
+          error: errorMsg,
+        })
+        this.messages.push({
+          role: 'tool',
+          content: `Tool "run_agent" execution error: ${errorMsg}`,
+          tool_call_id: id,
+        })
+      }
+    }))
   }
 
   private async executeSubagent (args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
@@ -862,6 +969,20 @@ export class AgentLoop extends EventEmitter {
             content: responseContent,
             tool_calls: toolCalls,
           })
+
+          // A batch of ONLY run_agent calls runs concurrently (subagent swarm) —
+          // each has its own context/budget, so there is nothing to serialize.
+          // Skipped when the remaining tool budget cannot cover the whole batch;
+          // the sequential path then applies its usual mid-batch halting.
+          const remainingToolBudget = this.options.budget?.maxToolCalls
+            ? this.options.budget.maxToolCalls - this.metrics.toolCalls
+            : Infinity
+          if (toolCalls.length > 1 &&
+              toolCalls.every(tc => tc.function.name === 'run_agent') &&
+              remainingToolBudget >= toolCalls.length) {
+            await this.executeParallelSubagents(toolCalls)
+            continue
+          }
 
           // Execute each tool call
           for (const tc of toolCalls) {

@@ -62,6 +62,9 @@ Requires Node.js 20+ and a DeepSeek API key.
 - **Hooks that actually work.** `PreToolUse`/`PostToolUse` fire around every tool call, async execution, global + project `hooks.json`. A `blocking` PreToolUse hook can veto a tool call; an `addOutput` PostToolUse hook feeds its stdout back to the model — e.g. auto-lint after every edit (`/hooks`).
 - **`@`-file mentions.** Type `@` for a live, gitignore-aware file picker; Tab/Enter inserts the path.
 - **Windows desktop automation (`windows_ui`).** Any accessible desktop app (Explorer, Photoshop, ...) becomes a text tree of named elements via UI Automation — the agent inspects windows, clicks buttons/menus by name, fills fields and sends keys. No vision, no dependencies.
+- **Subagent swarm**: several `run_agent` calls in one message run in parallel — wide codebase research at the wall-clock cost of the slowest branch.
+- **Skills that run.** SKILL.md procedures are listed in the system prompt and `/skills <name>` executes them as tasks (previously they were parsed and ignored).
+- **`/doctor`** — environment diagnostics (Node, shell, git, API key, Chrome, UIA) with a verdict; **completion bell** after runs longer than 20s.
 - **Background-process control**: `read_pid`/`list_processes` on `run_shell_command` + `/ps` — read a dev server's logs without killing it.
 
 Earlier (0.4.5–0.4.8): browser perception without vision (`observe`/`dom`, click/fill by visible text), inline coloured diffs, Matrix startup intro, project + global memory (`DEEPSEEK.md`, `/init`), manual compaction, `--continue` transcript restore.

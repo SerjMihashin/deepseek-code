@@ -13,6 +13,11 @@
 - **The agent can now read a background process's logs without stopping it.** `run_shell_command` gained `read_pid` (output tail + running/exited state of a dev server started with `background: true`) and `list_processes` (all background processes of the session). Closes the gap where checking dev-server logs after a failed page load required killing the server.
 - **`/ps`** — list background processes from the UI; `/ps stop <pid>` stops one. All background processes are still killed automatically when dsc exits.
 
+- **Subagent swarm — parallel `run_agent` batches.** When the model issues several `run_agent` calls in one message, they execute CONCURRENTLY (approvals stay sequential). Fan out independent explorations of a big codebase and pay wall-clock for only the slowest one — with DeepSeek pricing this makes wide parallel research practically free.
+- **Skills are now real.** Previously SKILL.md files were parsed and then ignored. Now the available skills (`.deepseek-code/skills/<name>/SKILL.md`, project + global) are listed in the system prompt so the agent applies them when a task matches, and `/skills <name> [extra input]` actually RUNS the skill as a task (`/skills show <name>` prints it without running).
+- **`/doctor`** — one-shot environment diagnostics: Node version, shell (PowerShell vs cmd fallback), git, DeepSeek API key reachability (real request), Chrome/puppeteer presence, UIA availability, memory files and loaded extensions. Ends with a verdict.
+- **Long-run completion bell.** When a run longer than 20s finishes, dsc rings the terminal bell — Windows Terminal flashes the taskbar if you switched away. Disable with `"notifyOnComplete": false` in the config.
+
 ### Changed
 - `/agents` now explains `run_agent` and lists named agent definitions from disk (project + global); `/stats` counts them instead of the removed in-memory registry.
 - Subagent activity is shown live in the status bar (`[agent] read_file: src/...`), and the main session's cost/API-call counters include subagent usage.

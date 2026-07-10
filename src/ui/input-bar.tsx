@@ -3,6 +3,7 @@ import { Box, Text, useInput, useStdin } from 'ink'
 import { themeManager } from '../core/themes.js'
 import { COMMAND_NAMES, COMMAND_MAP } from '../commands/index.js'
 import { visualWidth } from '../utils/string-width.js'
+import { listProjectFiles, filterFilesForMention } from '../utils/file-index.js'
 
 interface InputBarProps {
   onSubmit: (input: string) => void;
@@ -20,6 +21,38 @@ interface InputBarProps {
 export function resolveCommandSubmission (currentInput: string, currentSuggestions: string[], suggestionIndex: number): string {
   if (currentSuggestions.length === 0) return currentInput.trim()
   return suggestionIndex >= 0 ? currentSuggestions[suggestionIndex] ?? currentSuggestions[0] : currentSuggestions[0]
+}
+
+// ── @-file mentions ──────────────────────────────────────────────────────────
+
+export interface AtToken {
+  /** Index of the `@` character in the text. */
+  start: number
+  /** Query typed after the `@` (up to the cursor). */
+  query: string
+}
+
+/**
+ * Find an active @-file token at the cursor: an `@` at the start of the text or
+ * preceded by whitespace, with no whitespace between it and the cursor.
+ */
+export function findAtToken (text: string, cursorIndex: number): AtToken | null {
+  for (let i = cursorIndex - 1; i >= 0; i--) {
+    const ch = text[i]
+    if (ch === '@') {
+      if (i > 0 && !/\s/.test(text[i - 1])) return null
+      return { start: i, query: text.slice(i + 1, cursorIndex) }
+    }
+    if (/\s/.test(ch)) return null
+  }
+  return null
+}
+
+/** Replace the active @-token with the chosen file path (plus a trailing space). */
+export function applyFileCompletion (text: string, cursorIndex: number, token: AtToken, filePath: string): { text: string; cursorIndex: number } {
+  const inserted = `@${filePath} `
+  const newText = text.slice(0, token.start) + inserted + text.slice(cursorIndex)
+  return { text: newText, cursorIndex: token.start + inserted.length }
 }
 
 /** Max visible rows for the input area before internal scroll kicks in */
@@ -127,6 +160,9 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   const [pendingImageLabel, setPendingImageLabel] = useState<string | null>(null)
   const [pendingPaste, setPendingPaste] = useState<string | null>(null)
   const [inputScrollOffset, setInputScrollOffset] = useState(0)
+  const [projectFiles, setProjectFiles] = useState<string[] | null>(null)
+  const [fileSuggestionIndex, setFileSuggestionIndex] = useState(0)
+  const [fileSuggestionsHidden, setFileSuggestionsHidden] = useState(false)
 
   // eslint-disable-next-line camelcase
   const { internal_eventEmitter } = useStdin()
@@ -159,6 +195,8 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
   useEffect(() => {
     setSuggestionsScrollOffset(0)
     setSuggestionsHidden(false)
+    setFileSuggestionIndex(0)
+    setFileSuggestionsHidden(false)
   }, [input])
 
   const handleImagePaste = async () => {
@@ -187,6 +225,26 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
 
   const getSuggestions = (text: string) =>
     text.startsWith('/') ? COMMAND_NAMES.filter(cmd => cmd.startsWith(text.toLowerCase())) : []
+
+  // ── @-file mention suggestions ─────────────────────────────────────────────
+
+  const atToken = !isMasked && !isSetupMode ? findAtToken(input, cursorIndex) : null
+  const hasAtToken = atToken !== null
+
+  // Load (and periodically refresh via the util's cache) the project file list
+  // the first moment an @-token appears.
+  useEffect(() => {
+    if (!hasAtToken) return
+    let alive = true
+    listProjectFiles()
+      .then(files => { if (alive) setProjectFiles(files) })
+      .catch(() => { if (alive) setProjectFiles([]) })
+    return () => { alive = false }
+  }, [hasAtToken])
+
+  const fileSuggestions = atToken && projectFiles
+    ? filterFilesForMention(projectFiles, atToken.query, SUGGESTIONS_MAX_VISIBLE)
+    : []
 
   // ── Visual line computation (for both rendering and cursor navigation) ────
 
@@ -296,6 +354,31 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
     const currentSuggestions = getSuggestions(currentInput)
     const hasSuggestions = currentSuggestions.length > 0
     const showSuggestions = hasSuggestions && !suggestionsHidden
+
+    // ── @-file mention completion ─────────────────────────────────────────
+    const atTokenNow = !isMasked ? findAtToken(currentInput, currentCursor) : null
+    if (atTokenNow && fileSuggestions.length > 0 && !fileSuggestionsHidden) {
+      if (key.downArrow) {
+        setFileSuggestionIndex(prev => (prev + 1) % fileSuggestions.length)
+        return
+      }
+      if (key.upArrow) {
+        setFileSuggestionIndex(prev => (prev <= 0 ? fileSuggestions.length - 1 : prev - 1))
+        return
+      }
+      if (key.tab || key.return) {
+        const chosen = fileSuggestions[Math.max(0, Math.min(fileSuggestionIndex, fileSuggestions.length - 1))]
+        const completed = applyFileCompletion(currentInput, currentCursor, atTokenNow, chosen)
+        setInput(completed.text)
+        setCursorIndex(completed.cursorIndex)
+        setFileSuggestionIndex(0)
+        return
+      }
+      if (key.escape) {
+        setFileSuggestionsHidden(true)
+        return
+      }
+    }
 
     // ── Suggestion navigation ─────────────────────────────────────────────
     if (showSuggestions) {
@@ -560,6 +643,25 @@ export function InputBar ({ onSubmit, disabled, onClear, onExit, isMasked, isSet
           {suggestions.length > suggestionsScrollOffset + SUGGESTIONS_MAX_VISIBLE && (
             <Text color={colors.textMuted}>  ...and {suggestions.length - suggestionsScrollOffset - SUGGESTIONS_MAX_VISIBLE} more</Text>
           )}
+        </Box>
+      )}
+      {/* @-file mention suggestions */}
+      {atToken && fileSuggestions.length > 0 && !fileSuggestionsHidden && (
+        <Box flexDirection='column' marginLeft={1} marginBottom={0}>
+          {fileSuggestions.map((file, i) => {
+            const isActive = i === fileSuggestionIndex
+            const maxWidth = Math.max(10, (process.stdout.columns || 80) - 6)
+            const shown = file.length > maxWidth ? '…' + file.slice(file.length - maxWidth + 1) : file
+            return (
+              <Text key={file}>
+                {isActive
+                  ? <Text bold color={colors.primary}>▸ </Text>
+                  : <Text>  </Text>}
+                <Text color={isActive ? colors.primary : colors.textMuted}>@{shown}</Text>
+              </Text>
+            )
+          })}
+          <Text dimColor>  Tab/Enter — вставить путь, Esc — закрыть</Text>
         </Box>
       )}
       {/* Big paste preview */}

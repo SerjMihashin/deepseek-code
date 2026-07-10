@@ -43,13 +43,14 @@ export function resolveWindowsShell (): WindowsShell {
  * process group can be killed later. Shared by run_shell_command and the
  * background process manager.
  */
-export function spawnShellCommand (command: string, detached: boolean): ChildProcess {
+export function spawnShellCommand (command: string, detached: boolean, extraEnv?: Record<string, string>): ChildProcess {
+  const env = extraEnv ? { ...process.env, ...extraEnv } : undefined
   if (platform() === 'win32') {
     return resolveWindowsShell() === 'powershell'
-      ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached })
-      : spawn(command, { shell: true, windowsHide: true, detached })
+      ? spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], { windowsHide: true, detached, env })
+      : spawn(command, { shell: true, windowsHide: true, detached, env })
   }
-  return spawn(command, { shell: true, detached })
+  return spawn(command, { shell: true, detached, env })
 }
 
 /**

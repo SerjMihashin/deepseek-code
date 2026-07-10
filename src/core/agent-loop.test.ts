@@ -506,3 +506,119 @@ describe('AgentLoop', () => {
     expect(result).toBe('Continued response')
   })
 })
+
+describe('AgentLoop subagents (run_agent)', () => {
+  const noopCallbacks = {
+    onStreamChunk: () => {},
+    onResponse: () => {},
+    onReasoningChunk: () => {},
+    onToolCall: () => {},
+    onToolResult: () => {},
+    onError: () => {},
+  }
+
+  it('exposes run_agent at depth 0 and hides it for subagents', () => {
+    const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+    const mainTools = (main as any).buildActiveTools() as Array<{ tool: { name: string } }>
+    expect(mainTools.map(t => t.tool.name)).toContain('run_agent')
+
+    const sub = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', subagentDepth: 1, ...noopCallbacks })
+    const subTools = (sub as any).buildActiveTools() as Array<{ tool: { name: string } }>
+    expect(subTools.map(t => t.tool.name)).not.toContain('run_agent')
+  })
+
+  it('filters tools via allowedTools', () => {
+    const agent = new AgentLoop(TEST_CONFIG, {
+      approvalMode: 'turbo',
+      subagentDepth: 1,
+      allowedTools: ['read_file', 'glob', 'grep_search'],
+      ...noopCallbacks,
+    })
+    const names = ((agent as any).buildActiveTools() as Array<{ tool: { name: string } }>).map(t => t.tool.name)
+    expect(names.sort()).toEqual(['glob', 'grep_search', 'read_file'])
+  })
+
+  it('rejects run_agent without a task and beyond depth 1', async () => {
+    const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+    await expect((main as any).executeSubagent({})).resolves.toMatchObject({ success: false })
+
+    const sub = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', subagentDepth: 1, ...noopCallbacks })
+    const result = await (sub as any).executeSubagent({ task: 'do something' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('cannot spawn')
+  })
+
+  it('runs a nested loop, returns its report with a ledger and absorbs its cost', async () => {
+    const events: Array<{ phase: string; agent: string }> = []
+    const main = new AgentLoop(TEST_CONFIG, {
+      approvalMode: 'turbo',
+      ...noopCallbacks,
+      onSubagentEvent: e => events.push({ phase: e.phase, agent: e.agent }),
+    })
+    let capturedOptions: Record<string, unknown> | null = null
+
+    ;(main as any).createSubagentLoop = (cfg: DeepSeekConfig, opts: Record<string, unknown>) => {
+      capturedOptions = opts
+      const sub = new AgentLoop(cfg, opts)
+      ;(sub as any).api.streamChat = async function * () {
+        yield textChunk('Report: found 3 usages in src/foo.ts')
+        yield usageChunk(1000, 200)
+      }
+      return sub
+    }
+
+    const result = await (main as any).executeSubagent({ task: 'find usages of foo', mode: 'read-only' })
+
+    expect(result.success).toBe(true)
+    expect(result.output).toContain('Report: found 3 usages')
+    expect(result.output).toContain('[subagent subagent:')
+    expect(capturedOptions).toMatchObject({ subagentDepth: 1, approvalMode: 'turbo' })
+    expect((capturedOptions as any).allowedTools).toEqual(['read_file', 'glob', 'grep_search'])
+    // Cost accounting: the child's 1200 tokens landed in the parent collector.
+    expect(main.getMetrics().totalTokens).toBe(1200)
+    expect(events.map(e => e.phase)).toEqual(['start', 'done'])
+  })
+
+  it('gives edit-mode subagents write/shell tools', async () => {
+    const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+    let capturedOptions: Record<string, unknown> | null = null
+    ;(main as any).createSubagentLoop = (cfg: DeepSeekConfig, opts: Record<string, unknown>) => {
+      capturedOptions = opts
+      const sub = new AgentLoop(cfg, opts)
+      ;(sub as any).api.streamChat = async function * () {
+        yield textChunk('done')
+      }
+      return sub
+    }
+
+    await (main as any).executeSubagent({ task: 'fix the bug', mode: 'edit' })
+    expect((capturedOptions as any).allowedTools).toEqual(
+      ['read_file', 'glob', 'grep_search', 'write_file', 'edit', 'run_shell_command'])
+  })
+
+  it('errors clearly when a named agent does not exist', async () => {
+    const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+    const result = await (main as any).executeSubagent({ task: 'x', agent: 'ghost' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('"ghost" not found')
+  })
+
+  it('appends the subagent contract to the child system prompt', async () => {
+    const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
+    let capturedOptions: Record<string, unknown> | null = null
+    ;(main as any).createSubagentLoop = (cfg: DeepSeekConfig, opts: Record<string, unknown>) => {
+      capturedOptions = opts
+      const sub = new AgentLoop(cfg, opts)
+      ;(sub as any).api.streamChat = async function * () {
+        yield textChunk('ok')
+      }
+      return sub
+    }
+
+    await (main as any).executeSubagent({ task: 'inspect', max_tool_calls: 10 })
+    const appendix = (capturedOptions as any).systemPromptAppendix as string
+    expect(appendix).toContain('## Subagent Contract')
+    expect(appendix).toContain('at most 10 tool calls')
+    expect(appendix).toContain('READ-ONLY')
+  })
+})

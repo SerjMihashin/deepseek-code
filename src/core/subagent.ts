@@ -1,151 +1,50 @@
-import { EventEmitter } from 'node:events'
-import { readFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
-import type { DeepSeekConfig } from '../config/defaults.js'
+import { homedir } from 'node:os'
 
+/**
+ * Named subagent definitions.
+ *
+ * A subagent is a REAL nested agent loop (spawned via the `run_agent` tool in
+ * agent-loop.ts) with its own fresh context, restricted tools and budget.
+ * This module only handles the optional named-agent definition files:
+ *
+ *   .deepseek-code/agents/<name>.md   (project)
+ *   ~/.deepseek-code/agents/<name>.md (global)
+ *
+ * File format — YAML-ish frontmatter + markdown body used as the agent's
+ * extra system-prompt instructions:
+ *
+ *   ---
+ *   name: security-reviewer
+ *   description: Reviews code for security issues
+ *   tools: read_file, grep_search, glob
+ *   model: deepseek-chat
+ *   temperature: 0.2
+ *   ---
+ *   You are a security reviewer. Look for ...
+ */
 export interface SubAgentConfig {
   name: string;
   description: string;
+  /** Markdown body — appended to the subagent's system prompt. */
   systemPrompt?: string;
-  /** Allowlist of tool names (empty = all allowed) */
+  /** Allowlist of tool names (undefined = mode default). */
   allowedTools?: string[];
-  /** Blocklist of tool names */
-  disallowedTools?: string[];
   /** Model override */
   model?: string;
   /** Temperature override */
   temperature?: number;
-}
-
-export interface SubAgentResult {
-  name: string;
-  success: boolean;
-  output: string;
-  error?: string;
-  durationMs: number;
-}
-
-export class SubAgent extends EventEmitter {
-  private api: DeepSeekAPI
-  private config: SubAgentConfig
-
-  constructor (config: SubAgentConfig, apiConfig: DeepSeekConfig) {
-    super()
-    this.config = config
-    this.api = new DeepSeekAPI({
-      ...apiConfig,
-      model: config.model ?? apiConfig.model,
-      temperature: config.temperature ?? apiConfig.temperature,
-      systemPrompt: config.systemPrompt ?? apiConfig.systemPrompt,
-    })
-  }
-
-  async run (task: string, context?: ChatMessage[]): Promise<SubAgentResult> {
-    const startTime = Date.now()
-    this.emit('start', { name: this.config.name, task })
-
-    try {
-      const messages: ChatMessage[] = [
-        { role: 'system', content: this.config.systemPrompt ?? `You are a specialized sub-agent: ${this.config.description}. Focus on your specific task and provide clear, actionable results.` },
-        ...(context ?? []),
-        { role: 'user', content: task },
-      ]
-
-      const response = await this.api.chat(messages)
-
-      const result: SubAgentResult = {
-        name: this.config.name,
-        success: true,
-        output: response.content,
-        durationMs: Date.now() - startTime,
-      }
-
-      this.emit('complete', result)
-      return result
-    } catch (err) {
-      const result: SubAgentResult = {
-        name: this.config.name,
-        success: false,
-        output: '',
-        error: (err as Error).message,
-        durationMs: Date.now() - startTime,
-      }
-
-      if (this.listenerCount('error') > 0) {
-        this.emit('error', result)
-      }
-      return result
-    }
-  }
-}
-
-export class SubAgentManager {
-  private agents: Map<string, SubAgent> = new Map()
-  private apiConfig: DeepSeekConfig | null = null
-
-  setApiConfig (apiConfig: DeepSeekConfig): void {
-    this.apiConfig = apiConfig
-  }
-
-  registerAgent (config: SubAgentConfig, apiConfig: DeepSeekConfig): SubAgent {
-    this.setApiConfig(apiConfig)
-    const agent = new SubAgent(config, apiConfig)
-    this.agents.set(config.name, agent)
-    return agent
-  }
-
-  getAgent (name: string): SubAgent | undefined {
-    return this.agents.get(name)
-  }
-
-  async runAll (task: string, context?: ChatMessage[]): Promise<SubAgentResult[]> {
-    const promises: Promise<SubAgentResult>[] = []
-    for (const agent of this.agents.values()) {
-      promises.push(agent.run(task, context))
-    }
-    return Promise.all(promises)
-  }
-
-  async runNamed (names: string[], task: string, context?: ChatMessage[]): Promise<SubAgentResult[]> {
-    const promises: Promise<SubAgentResult>[] = []
-    for (const name of names) {
-      const agent = this.agents.get(name)
-      if (agent) {
-        promises.push(agent.run(task, context))
-      }
-    }
-    return Promise.all(promises)
-  }
-
-  /**
-   * Load subagent configs from .deepseek-code/agents/ directory
-   */
-  async loadFromDir (dir?: string): Promise<void> {
-    const agentsDir = dir ?? join(process.cwd(), '.deepseek-code', 'agents')
-
-    if (!existsSync(agentsDir)) return
-
-    const files = await (await import('node:fs/promises')).readdir(agentsDir)
-    for (const file of files.filter(f => f.endsWith('.md'))) {
-      try {
-        const content = await readFile(join(agentsDir, file), 'utf-8')
-        const config = parseAgentConfig(content)
-        if (config && this.apiConfig) {
-          this.agents.set(config.name, new SubAgent(config, this.apiConfig))
-        }
-      } catch { /* ignore */ }
-    }
-  }
+  /** Where the definition was loaded from (project/global path). */
+  sourcePath?: string;
 }
 
 export function parseAgentConfig (content: string): SubAgentConfig | null {
-  const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/)
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
   if (!frontmatterMatch) return null
 
   const frontmatter: Record<string, string> = {}
-  for (const line of frontmatterMatch[1].split('\n')) {
+  for (const line of frontmatterMatch[1].split(/\r?\n/)) {
     const [key, ...rest] = line.split(':')
     if (key && rest.length > 0) {
       frontmatter[key.trim()] = rest.join(':').trim()
@@ -157,13 +56,47 @@ export function parseAgentConfig (content: string): SubAgentConfig | null {
   return {
     name: frontmatter.name,
     description: frontmatter.description ?? '',
-    systemPrompt: frontmatterMatch[2].trim(),
-    allowedTools: frontmatter.tools ? frontmatter.tools.split(',').map(t => t.trim()) : undefined,
-    disallowedTools: frontmatter.disallowedTools ? frontmatter.disallowedTools.split(',').map(t => t.trim()) : undefined,
+    systemPrompt: frontmatterMatch[2].trim() || undefined,
+    allowedTools: frontmatter.tools ? frontmatter.tools.split(',').map(t => t.trim()).filter(Boolean) : undefined,
     model: frontmatter.model,
     temperature: frontmatter.temperature ? parseFloat(frontmatter.temperature) : undefined,
   }
 }
 
-// Singleton
-export const subAgentManager = new SubAgentManager()
+function agentDirs (cwd: string): string[] {
+  return [
+    join(cwd, '.deepseek-code', 'agents'),
+    join(homedir(), '.deepseek-code', 'agents'),
+  ]
+}
+
+/**
+ * List all named agent definitions visible from `cwd`.
+ * Project definitions shadow global ones with the same name.
+ */
+export function listAgentConfigs (cwd: string): SubAgentConfig[] {
+  const seen = new Map<string, SubAgentConfig>()
+  for (const dir of agentDirs(cwd)) {
+    if (!existsSync(dir)) continue
+    let files: string[] = []
+    try {
+      files = readdirSync(dir).filter(f => f.endsWith('.md'))
+    } catch { continue }
+    for (const file of files) {
+      try {
+        const path = join(dir, file)
+        const config = parseAgentConfig(readFileSync(path, 'utf-8'))
+        if (config && !seen.has(config.name)) {
+          config.sourcePath = path
+          seen.set(config.name, config)
+        }
+      } catch { /* skip unreadable/invalid definitions */ }
+    }
+  }
+  return [...seen.values()]
+}
+
+/** Load a single named agent definition, or null if not found. */
+export function loadAgentConfig (name: string, cwd: string): SubAgentConfig | null {
+  return listAgentConfigs(cwd).find(a => a.name === name) ?? null
+}

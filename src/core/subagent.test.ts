@@ -1,40 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_CONFIG } from '../config/defaults.js'
+import { parseAgentConfig, listAgentConfigs, loadAgentConfig } from './subagent.js'
 
-const apiMock = vi.hoisted(() => ({
-  chat: vi.fn(),
-  configs: [] as unknown[],
-}))
-
-vi.mock('../api/index.js', () => ({
-  DeepSeekAPI: class {
-    constructor (config: unknown) {
-      apiMock.configs.push(config)
-    }
-
-    async chat (messages: unknown): Promise<{ content: string }> {
-      return apiMock.chat(messages)
-    }
-  },
-}))
-
-const { SubAgent, SubAgentManager, parseAgentConfig } = await import('./subagent.js')
-
-describe('SubAgent', () => {
-  beforeEach(() => {
-    apiMock.chat.mockReset()
-    apiMock.configs.length = 0
-  })
-
+describe('parseAgentConfig', () => {
   it('parses markdown agent configs', () => {
     expect(parseAgentConfig(`---
 name: reviewer
 description: Reviews code
 tools: read_file, grep_search
-disallowedTools: bash
 model: deepseek-reasoner
 temperature: 0.2
 ---
@@ -44,74 +19,36 @@ Focus on bugs.
       description: 'Reviews code',
       systemPrompt: 'Focus on bugs.',
       allowedTools: ['read_file', 'grep_search'],
-      disallowedTools: ['bash'],
       model: 'deepseek-reasoner',
       temperature: 0.2,
     })
+  })
+
+  it('parses CRLF files and empty bodies', () => {
+    const config = parseAgentConfig('---\r\nname: win\r\ndescription: CRLF file\r\n---\r\n')
+    expect(config).toMatchObject({ name: 'win', description: 'CRLF file' })
+    expect(config?.systemPrompt).toBeUndefined()
   })
 
   it('returns null for invalid agent configs', () => {
     expect(parseAgentConfig('plain text')).toBeNull()
     expect(parseAgentConfig('---\ndescription: missing name\n---\nbody')).toBeNull()
   })
-
-  it('runs a sub-agent with config overrides and emits lifecycle events', async () => {
-    apiMock.chat.mockResolvedValue({ content: 'done' })
-    const agent = new SubAgent({
-      name: 'worker',
-      description: 'Does work',
-      systemPrompt: 'System override',
-      model: 'deepseek-reasoner',
-      temperature: 0.1,
-    }, DEFAULT_CONFIG)
-    const events: string[] = []
-    agent.on('start', () => events.push('start'))
-    agent.on('complete', () => events.push('complete'))
-
-    const result = await agent.run('task', [{ role: 'user', content: 'context' }])
-
-    expect(apiMock.configs[0]).toMatchObject({
-      model: 'deepseek-reasoner',
-      temperature: 0.1,
-      systemPrompt: 'System override',
-    })
-    expect(apiMock.chat).toHaveBeenCalledWith([
-      { role: 'system', content: 'System override' },
-      { role: 'user', content: 'context' },
-      { role: 'user', content: 'task' },
-    ])
-    expect(result).toMatchObject({ name: 'worker', success: true, output: 'done' })
-    expect(events).toEqual(['start', 'complete'])
-  })
-
-  it('returns failed results without throwing when API fails and no error listener exists', async () => {
-    apiMock.chat.mockRejectedValue(new Error('api down'))
-    const agent = new SubAgent({ name: 'worker', description: 'Does work' }, DEFAULT_CONFIG)
-
-    await expect(agent.run('task')).resolves.toMatchObject({
-      name: 'worker',
-      success: false,
-      output: '',
-      error: 'api down',
-    })
-  })
 })
 
-describe('SubAgentManager', () => {
+describe('listAgentConfigs / loadAgentConfig', () => {
   let tempDir: string
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(process.cwd(), '.tmp-subagent-'))
-    apiMock.chat.mockReset()
-    apiMock.configs.length = 0
   })
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('loads agents from markdown files after API config is set', async () => {
-    const agentsDir = join(tempDir, 'agents')
+  it('lists agent definitions from .deepseek-code/agents', async () => {
+    const agentsDir = join(tempDir, '.deepseek-code', 'agents')
     await mkdir(agentsDir, { recursive: true })
     await writeFile(join(agentsDir, 'reviewer.md'), `---
 name: reviewer
@@ -119,25 +56,33 @@ description: Reviews code
 ---
 Review carefully.
 `, 'utf-8')
+    await writeFile(join(agentsDir, 'broken.md'), 'no frontmatter here', 'utf-8')
 
-    const manager = new SubAgentManager()
-    await manager.loadFromDir(agentsDir)
-    expect(manager.getAgent('reviewer')).toBeUndefined()
-
-    manager.setApiConfig(DEFAULT_CONFIG)
-    await manager.loadFromDir(agentsDir)
-    expect(manager.getAgent('reviewer')).toBeDefined()
+    const agents = listAgentConfigs(tempDir)
+    expect(agents).toHaveLength(1)
+    expect(agents[0]).toMatchObject({ name: 'reviewer', description: 'Reviews code' })
+    expect(agents[0].sourcePath).toContain('reviewer.md')
   })
 
-  it('runs named agents and ignores missing names', async () => {
-    apiMock.chat.mockResolvedValue({ content: 'ok' })
-    const manager = new SubAgentManager()
-    manager.registerAgent({ name: 'a', description: 'A' }, DEFAULT_CONFIG)
-    manager.registerAgent({ name: 'b', description: 'B' }, DEFAULT_CONFIG)
+  it('loads a named agent and returns null for missing ones', async () => {
+    const agentsDir = join(tempDir, '.deepseek-code', 'agents')
+    await mkdir(agentsDir, { recursive: true })
+    await writeFile(join(agentsDir, 'tester.md'), `---
+name: tester
+description: Runs tests
+tools: read_file
+---
+Run the suite.
+`, 'utf-8')
 
-    const results = await manager.runNamed(['b', 'missing'], 'task')
+    expect(loadAgentConfig('tester', tempDir)).toMatchObject({
+      name: 'tester',
+      allowedTools: ['read_file'],
+    })
+    expect(loadAgentConfig('missing', tempDir)).toBeNull()
+  })
 
-    expect(results).toHaveLength(1)
-    expect(results[0]).toMatchObject({ name: 'b', success: true, output: 'ok' })
+  it('returns an empty list when no agents dir exists', () => {
+    expect(listAgentConfigs(tempDir)).toEqual([])
   })
 })

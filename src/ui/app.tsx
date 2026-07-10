@@ -13,7 +13,6 @@ import { AgentLoop, type ToolCallEvent } from '../core/agent-loop.js'
 import { saveSession, getLastSessionId, writeExecutionBundle, writeSessionHandoff, saveTranscript, loadTranscript } from '../core/session.js'
 import { hooksManager } from '../core/hooks.js'
 import { mcpManager } from '../core/mcp.js'
-import { subAgentManager } from '../core/subagent.js'
 import { skillsManager } from '../core/skills.js'
 import { lspManager } from '../core/lsp.js'
 import { chromeManager } from '../tools/chrome-manager.js'
@@ -259,16 +258,18 @@ export function App ({ config, options }: AppProps) {
         sessionIdRef.current = await saveSession({})
       }
 
-      subAgentManager.setApiConfig({ ...config, apiKey: localApiKey || config.apiKey })
-
       // Initialize services in background
       await Promise.allSettled([
         mcpManager.loadConfig().then(() => mcpManager.connectAll()),
         skillsManager.loadAll(),
         hooksManager.load(),
         lspManager.load().then(() => lspManager.initializeAll()),
-        subAgentManager.loadFromDir(),
       ])
+
+      hooksManager.execute('SessionStart', {
+        event: 'SessionStart',
+        projectDir: process.cwd(),
+      }).catch(() => {})
 
       // Применяем сохранённый режим Chrome (headed/headless) из конфига.
       // Только обновляет headlessMode в chrome-manager, НЕ запускает браузер.
@@ -509,6 +510,14 @@ export function App ({ config, options }: AppProps) {
           },
           onToolResult: (result) => {
             setStatusText(result.success ? `[ok] ${result.toolName} ${i18n.t('toolDone')}` : `[err] ${result.toolName} ${i18n.t('toolError')}`)
+          },
+          onSubagentEvent: (event) => {
+            // The run_agent card stays "running" for the whole nested loop, so
+            // the status line is where the user sees the subagent working.
+            if (event.phase === 'start') setStatusText(`[agent] started: ${event.detail}`)
+            else if (event.phase === 'tool') setStatusText(`[agent] ${event.detail}`)
+            else if (event.phase === 'failed') setStatusText(`[agent] failed: ${event.detail}`)
+            else setStatusText('[agent] finished, main agent resuming...')
           },
           onReasoningChunk: () => {},
           onStreamChunk: (chunk) => {

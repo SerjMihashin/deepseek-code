@@ -5,7 +5,7 @@ import { saveMemory, listMemories, deleteMemory, searchMemories } from '../core/
 import { listMemorySources, getProjectMemoryPath, initProjectMemory } from '../core/project-memory.js'
 import { createCheckpoint, listCheckpoints, restoreCheckpoint } from '../core/checkpoint.js'
 import { mcpManager } from '../core/mcp.js'
-import { subAgentManager } from '../core/subagent.js'
+import { listAgentConfigs } from '../core/subagent.js'
 import { skillsManager } from '../core/skills.js'
 import { reviewCode, formatReviewReport } from '../core/review.js'
 import { sandbox } from '../core/sandbox.js'
@@ -401,19 +401,33 @@ async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<bool
 }
 
 async function cmdAgents (ctx: SlashCommandContext): Promise<boolean> {
-  const allAgents = subAgentManager['agents']
-  if (allAgents.size === 0) {
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: 'No subagents configured. Create them in `.deepseek-code/agents/`.',
-    }])
-  } else {
-    const list = Array.from(allAgents.keys()).map(name => `- **${name}**`).join('\n')
-    ctx.setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: `**Registered Subagents:**\n${list}`,
-    }])
-  }
+  const agents = listAgentConfigs(process.cwd())
+  const header = 'The agent can delegate subtasks via the `run_agent` tool (fresh context, restricted tools, own budget). ' +
+    'Named agents are markdown files in `.deepseek-code/agents/` (project) or `~/.deepseek-code/agents/` (global).'
+  const list = agents.length > 0
+    ? agents.map(a => `- **${a.name}** — ${a.description || 'no description'}${a.sourcePath ? `\n  \`${a.sourcePath}\`` : ''}`).join('\n')
+    : '_No named agents defined yet._'
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: `**Subagents**\n\n${header}\n\n${list}`,
+  }])
+  return true
+}
+
+async function cmdHooks (ctx: SlashCommandContext): Promise<boolean> {
+  const { hooksManager } = await import('../core/hooks.js')
+  const hooks = hooksManager.listHooks()
+  const header = 'Lifecycle hooks run your shell commands on agent events (PreToolUse, PostToolUse, SessionStart, ...). ' +
+    'Configure them in `.deepseek-code/hooks.json` (project) or `~/.deepseek-code/hooks.json` (global).\n\n' +
+    'Example — auto-lint after every edit, output fed back to the model:\n' +
+    '```json\n[{ "name": "lint-after-edit", "event": "PostToolUse",\n   "matcher": "^(edit|write_file)$",\n   "command": "npx eslint {{filePath}}",\n   "addOutput": true }]\n```'
+  const list = hooks.length > 0
+    ? hooks.map(h => `- **${h.name}** — ${h.event}${h.matcher ? ` (matcher: \`${h.matcher}\`)` : ''}${h.blocking ? ' [blocking]' : ''}${h.addOutput ? ' [addOutput]' : ''}${h.async ? ' [async]' : ''}\n  \`${h.command ?? h.url ?? ''}\``).join('\n')
+    : '_No hooks loaded._'
+  ctx.setMessages(prev => [...prev, {
+    role: 'assistant',
+    content: `**Hooks**\n\n${header}\n\n**Loaded hooks:**\n${list}`,
+  }])
   return true
 }
 
@@ -593,7 +607,7 @@ async function cmdGit (ctx: SlashCommandContext, input: string): Promise<boolean
 async function cmdStats (ctx: SlashCommandContext): Promise<boolean> {
   const mcpTools = mcpManager.getAllTools().length
   const skills = skillsManager.listSkills().length
-  const agents = subAgentManager['agents'].size
+  const agents = listAgentConfigs(process.cwd()).length
   const exts = extensionManager.listExtensions().length
   const metrics = ctx.getMetrics?.()
   const usage = metrics?.getTokenUsage()
@@ -1220,7 +1234,8 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/restore', description: 'List or restore checkpoint: /restore [id]', descriptionRu: 'Список или восстановление чекпоинта: /restore [id]', handler: cmdRestore },
   { name: '/mcp', description: 'MCP servers: /mcp list | connect', descriptionRu: 'MCP-серверы: /mcp list | connect', handler: cmdMcp },
   { name: '/skills', description: 'List or describe an agent skill', descriptionRu: 'Список или описание навыка', handler: cmdSkills },
-  { name: '/agents', description: 'List active subagents', descriptionRu: 'Список активных под-агентов', handler: cmdAgents },
+  { name: '/agents', description: 'Subagents: how run_agent works + named agents', descriptionRu: 'Сабагенты: как работает run_agent + именованные агенты', handler: cmdAgents },
+  { name: '/hooks', description: 'List loaded lifecycle hooks (hooks.json)', descriptionRu: 'Список загруженных хуков (hooks.json)', handler: cmdHooks },
   { name: '/review', description: 'Code review: /review all|diff|auto', descriptionRu: 'Ревью кода: /review all|diff|auto', handler: cmdReview },
   { name: '/sandbox', description: 'Run command in sandbox (unavailable on Windows)', descriptionRu: 'Запустить команду в sandbox (недоступно на Windows)', handler: cmdSandbox },
   { name: '/git', description: 'Git: /git commit|branch|diff|status', descriptionRu: 'Git: /git commit|branch|diff|status', handler: cmdGit },

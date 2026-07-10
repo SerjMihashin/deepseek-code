@@ -56,16 +56,15 @@ npx @serjm/deepseek-code
 
 Requires Node.js 20+ and a DeepSeek API key.
 
-## What Is New In 0.4.8
+## What Is New In 0.5.0
 
-- **The browser tool can now "see" without vision.** `observe` gives a structured text summary of a page (title, element counts, landmarks, and an explicit blank-page check); `dom` lists the visible interactive elements with ready-to-use selectors.
-- **Click and fill by visible text** — `click`/`fill` accept `targetText` (+ optional `role`, `near`), no CSS selector required.
-- **Inline coloured diff** for `write_file` / `edit`, shown right in the tool activity card.
-- **Matrix theme startup intro** — a one-time full-screen digital-rain that drains away, plus a persisted theme selection that survives restarts.
-- **`/cost`** — focused token-usage and estimated-cost view of the session.
-- **Slash-command cleanup: 33 → 28 live commands.** Removed dead commands (`/loop`, `/followup`, `/plan`), turned redundant twins into aliases (`/compress` → `/compact`, `/language` → `/lang`, `/capabilities` → `/tools`).
+- **Real subagents (`run_agent`).** The agent delegates self-contained subtasks to nested agents with their own fresh context, restricted tools and budget — big explorations no longer flood the main context, and verification passes are independent. Named agents live in `.deepseek-code/agents/*.md` (`/agents`).
+- **Hooks that actually work.** `PreToolUse`/`PostToolUse` fire around every tool call, async execution, global + project `hooks.json`. A `blocking` PreToolUse hook can veto a tool call; an `addOutput` PostToolUse hook feeds its stdout back to the model — e.g. auto-lint after every edit (`/hooks`).
+- **`@`-file mentions.** Type `@` for a live, gitignore-aware file picker; Tab/Enter inserts the path.
+- **Windows desktop automation (`windows_ui`).** Any accessible desktop app (Explorer, Photoshop, ...) becomes a text tree of named elements via UI Automation — the agent inspects windows, clicks buttons/menus by name, fills fields and sends keys. No vision, no dependencies.
+- **Background-process control**: `read_pid`/`list_processes` on `run_shell_command` + `/ps` — read a dev server's logs without killing it.
 
-Earlier (0.4.5–0.4.7): project + global memory loaded into context (`DEEPSEEK.md`, `#`/`##` quick-capture, `/init`), manual compaction (`/compact`, auto-compaction off by default), `--continue` restores the full transcript, and a 600s timeout for dependency installs/builds.
+Earlier (0.4.5–0.4.8): browser perception without vision (`observe`/`dom`, click/fill by visible text), inline coloured diffs, Matrix startup intro, project + global memory (`DEEPSEEK.md`, `/init`), manual compaction, `--continue` transcript restore.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full release history.
 

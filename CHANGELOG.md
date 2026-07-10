@@ -1,10 +1,21 @@
 # Changelog
 
-## 0.4.9 — Background Process Control (unreleased)
+## 0.5.0 — Subagents, Working Hooks, @-Mentions, Desktop Automation (unreleased)
 
 ### Added
+- **Real subagents (`run_agent` tool).** The agent can delegate a self-contained subtask to a nested agent with its OWN fresh context, restricted toolset and tool-call budget — explore a large codebase area without flooding the main context, run an independent verification pass, or execute a scoped implementation subtask. `mode: "read-only"` (default) gives read/search tools only; `mode: "edit"` adds write/edit/shell. Subagents cannot spawn subagents, their token spend is folded into the session cost report, and their result comes back as a report plus a tool-verified ledger (`N calls ok, M failed; files changed: ...`). Named agents with custom instructions/tools/model live in `.deepseek-code/agents/<name>.md` (project) or `~/.deepseek-code/agents/` (global) — see `/agents`. The old "subagent" module (a single chat call with no tools) was removed.
+- **Hooks now actually work.** Previously only 2 of 9 documented events ever fired and hooks ran through a blocking `execSync`. Now: `PreToolUse` / `PostToolUse` / `PostToolUseFailure` fire around every tool call, `SessionStart` / `SubagentStart` / `SubagentStop` are wired, execution is async through the same shell as the agent's tools (PowerShell 5.1 on Windows), and global `~/.deepseek-code/hooks.json` is loaded alongside the project file. Two new powers:
+  - `"blocking": true` on a `PreToolUse` hook — non-zero exit vetoes the tool call (e.g. freeze writes to a directory).
+  - `"addOutput": true` on a `PostToolUse` hook — the hook's stdout is appended to the tool result the model sees. **Auto-lint recipe:** run `npx eslint {{filePath}}` after every `edit`/`write_file` and the agent fixes lint errors immediately.
+  - Context variables: `{{toolName}}`, `{{filePath}}`, `{{event}}`, `{{error}}`, `{{projectDir}}` plus env vars `DSC_TOOL`, `DSC_FILE`, `DSC_TOOL_ARGS`, `DSC_ERROR`. New `/hooks` command lists what's loaded.
+- **`@`-file mentions.** Type `@` in the input bar to get a live file picker (git-aware — respects `.gitignore`; ranked: exact name > basename prefix > basename substring > path substring). Tab/Enter inserts the path, arrows navigate, Esc closes. The agent is instructed to treat `@path` as a workspace file reference.
+- **Windows desktop automation (`windows_ui` tool) — the agent gets hands for desktop apps.** Built on UI Automation: the UI of any accessible Win32/WPF/WinForms/UWP application (Explorer, Photoshop, VS Code, ...) is exposed to the model as a TEXT tree of named elements — no vision needed, same idea as browser perception in 0.4.8. Actions: `list_windows`, `tree` (the "eyes"), `find`, `invoke` (click buttons/menu items by name), `set_value` (fill fields), `send_keys`, `focus`. Zero dependencies — each action is a self-contained PowerShell 5.1 + UIAutomationClient script. Windows only.
 - **The agent can now read a background process's logs without stopping it.** `run_shell_command` gained `read_pid` (output tail + running/exited state of a dev server started with `background: true`) and `list_processes` (all background processes of the session). Closes the gap where checking dev-server logs after a failed page load required killing the server.
 - **`/ps`** — list background processes from the UI; `/ps stop <pid>` stops one. All background processes are still killed automatically when dsc exits.
+
+### Changed
+- `/agents` now explains `run_agent` and lists named agent definitions from disk (project + global); `/stats` counts them instead of the removed in-memory registry.
+- Subagent activity is shown live in the status bar (`[agent] read_file: src/...`), and the main session's cost/API-call counters include subagent usage.
 
 ## 0.4.8 — Browser Perception & Command Cleanup (2026-07-05)
 

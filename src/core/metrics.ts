@@ -215,6 +215,20 @@ export class MetricsCollector {
     this._apiCalls++
   }
 
+  /**
+   * Merge a nested agent's token/API spend into this collector so the session
+   * cost report includes subagent usage. Tool-call counts stay separate — the
+   * parent's own `run_agent` call is the one that counts against its budget.
+   */
+  absorb (child: MetricsCollector): void {
+    this._inputTokens += child._inputTokens
+    this._cacheHitInputTokens += child._cacheHitInputTokens
+    this._cacheMissInputTokens += child._cacheMissInputTokens
+    this._outputTokens += child._outputTokens
+    this._reasoningOutputTokens += child._reasoningOutputTokens
+    this._apiCalls += child._apiCalls
+  }
+
   /** Set the context window of the active model (tokens). */
   setContextWindow (tokens: number): void {
     if (tokens > 0) this._contextWindow = tokens

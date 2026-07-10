@@ -1,5 +1,6 @@
 import { DeepSeekAPI, type ChatMessage } from '../api/index.js'
-import { type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
+import { type Tool, type ToolResult, type ToolDefinition, type ApprovalRequirement, type TaskBudget, toOpenAITools, sanitizeArgs } from '../tools/types.js'
+import { loadAgentConfig, listAgentConfigs } from './subagent.js'
 import { getDefaultTools, getToolsForMode } from '../tools/registry.js'
 import { getMcpToolDefinitions, projectIdFromCwd } from './mcp-tools.js'
 import { loadMemoryContext } from './project-memory.js'
@@ -50,6 +51,22 @@ export interface AgentLoopOptions {
   onCompactProgress?: (details: AutoCompactEvent) => void;
   /** Callback when automatic context compression finishes */
   onCompactEnd?: (details: AutoCompactEvent) => void;
+  /** Restrict the loop to these tool names (subagents; undefined = all for mode). */
+  allowedTools?: string[];
+  /** Nesting level: 0 = main agent (default). Subagents (>0) cannot spawn further subagents. */
+  subagentDepth?: number;
+  /** Extra instructions appended to the (auto-rebuilt) default system prompt. */
+  systemPromptAppendix?: string;
+  /** Callback for subagent lifecycle/progress events (main loop only). */
+  onSubagentEvent?: (event: SubagentProgressEvent) => void;
+}
+
+export interface SubagentProgressEvent {
+  phase: 'start' | 'tool' | 'done' | 'failed';
+  /** Named agent (if any) or 'subagent'. */
+  agent: string;
+  /** Short description: task on start, tool label on tool, summary on done. */
+  detail: string;
 }
 
 export interface AutoCompactOptions {
@@ -269,6 +286,7 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, mo
 You have access to a set of tools that allow you to read, write, and edit files, run shell commands, search code, and use a real browser when rendered UI or web behavior matters.${projectInfo}${capabilitiesSection}${mcpSection}${languageSection}${memorySection}${planModeSection}
 
 ## Guidelines
+0. **@-file mentions** — When the user writes \`@path/to/file\`, it is a reference to that file in the workspace; read it when relevant to the task.
 1. **Plan first** — Before making changes, explore the codebase to understand the context.
 2. **Use the right tool** — Choose the most appropriate tool for each task.
 3. **Be precise** — When editing files, provide exact text matches.
@@ -382,6 +400,7 @@ ${shellPolicySection}
  */
 export class AgentLoop extends EventEmitter {
   private api: DeepSeekAPI
+  private config: DeepSeekConfig
   private model: string
   private tools: ToolDefinition[]
   private options: Required<Omit<AgentLoopOptions, 'signal'>> & { signal?: AbortSignal }
@@ -395,6 +414,7 @@ export class AgentLoop extends EventEmitter {
   constructor (config: DeepSeekConfig, options: AgentLoopOptions = {}) {
     super()
     this.api = new DeepSeekAPI(config)
+    this.config = config
     this.model = config.model
     this.metrics.setContextWindow(contextWindowFor(this.model))
     const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode, this.model)
@@ -416,9 +436,16 @@ export class AgentLoop extends EventEmitter {
       systemPrompt: defaultSystemPrompt,
       signal: undefined,
       autoCompact: DEFAULT_AUTO_COMPACT,
+      allowedTools: undefined,
+      subagentDepth: 0,
+      systemPromptAppendix: '',
+      onSubagentEvent: () => {},
       ...options,
     } as Required<AgentLoopOptions>
-    this.tools = getToolsForMode(this.options.approvalMode)
+    if (this.options.systemPromptAppendix && this.options.systemPrompt === defaultSystemPrompt) {
+      this.options.systemPrompt = `${defaultSystemPrompt}\n\n${this.options.systemPromptAppendix}`
+    }
+    this.tools = this.buildActiveTools()
   }
 
   /** Get the current message history */
@@ -486,14 +513,22 @@ export class AgentLoop extends EventEmitter {
    */
   setApprovalMode (mode: ApprovalMode): void {
     this.options.approvalMode = mode
-    this.tools = getToolsForMode(mode)
+    this.tools = this.buildActiveTools()
     // Rebuild system prompt with updated mode info
-    this.options.systemPrompt = buildSystemPrompt(this.options.cwd, mode, this.model)
+    this.options.systemPrompt = this.composeSystemPrompt()
     // Update the system message if it exists
     const sysIdx = this.messages.findIndex(m => m.role === 'system')
     if (sysIdx !== -1) {
       this.messages[sysIdx] = { role: 'system', content: this.options.systemPrompt }
     }
+  }
+
+  /** Default system prompt for the current mode plus the optional appendix. */
+  private composeSystemPrompt (): string {
+    const base = buildSystemPrompt(this.options.cwd, this.options.approvalMode, this.model)
+    return this.options.systemPromptAppendix
+      ? `${base}\n\n${this.options.systemPromptAppendix}`
+      : base
   }
 
   /**
@@ -503,11 +538,165 @@ export class AgentLoop extends EventEmitter {
    * name clash resolves in favor of the built-in tool.
    */
   private buildActiveTools (): ToolDefinition[] {
-    const base = getToolsForMode(this.options.approvalMode)
+    let base = getToolsForMode(this.options.approvalMode)
+    if (this.options.allowedTools && this.options.allowedTools.length > 0) {
+      const allowed = new Set(this.options.allowedTools)
+      base = base.filter(t => allowed.has(t.tool.name))
+    }
     if (this.options.approvalMode === 'plan') return base
     const taken = new Set(base.map(t => t.tool.name))
     const mcp = getMcpToolDefinitions().filter(t => !taken.has(t.tool.name))
-    return [...base, ...mcp]
+    const result = [...base, ...mcp]
+    // The main loop (depth 0) can delegate to subagents; nested loops cannot.
+    if ((this.options.subagentDepth ?? 0) === 0) {
+      result.push(this.buildRunAgentToolDef())
+    }
+    return result
+  }
+
+  /**
+   * `run_agent` — delegate a self-contained subtask to a nested agent loop with
+   * its own fresh context, restricted tools and budget. This keeps the main
+   * context clean on big explorations and enables independent verification.
+   */
+  private buildRunAgentToolDef (): ToolDefinition {
+    const tool: Tool = {
+      name: 'run_agent',
+      description: 'Delegate a self-contained subtask to a subagent — a separate AI agent with its OWN fresh context and a restricted toolset. Use it to: (1) explore/analyze a large part of the codebase without flooding your own context, (2) run an independent verification/review pass, (3) execute a well-scoped implementation subtask. The subagent CANNOT see your conversation: put ALL required context into `task` (paths, goal, constraints, and what the final report must contain). It works autonomously and returns one final text report. Prefer mode "read-only" unless the subtask must change files or run commands. For named agents defined in .deepseek-code/agents/, pass `agent`.',
+      parameters: [
+        { name: 'task', type: 'string', required: true, description: 'Full self-contained assignment for the subagent, including every path/detail it needs and the expected report format.' },
+        { name: 'mode', type: 'string', enum: ['read-only', 'edit'], description: 'read-only (default): can read/search files only. edit: can also write/edit files and run shell commands.' },
+        { name: 'agent', type: 'string', description: 'Optional named agent from .deepseek-code/agents/<name>.md (adds its instructions/tool limits).' },
+        { name: 'max_tool_calls', type: 'number', description: 'Tool-call budget for the subagent (default 40, max 120).' },
+      ],
+      execute: (args, signal) => this.executeSubagent(args, signal),
+    }
+    // Launching an edit-capable nested agent is a real action — ask in default
+    // mode, auto-approve in turbo like every other tool.
+    const approval: ApprovalRequirement = this.options.approvalMode === 'turbo' ? 'auto' : 'always'
+    return { tool, approval }
+  }
+
+  /** Factory for nested loops — separated so tests can stub the child's API. */
+  protected createSubagentLoop (config: DeepSeekConfig, options: AgentLoopOptions): AgentLoop {
+    return new AgentLoop(config, options)
+  }
+
+  private async executeSubagent (args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if ((this.options.subagentDepth ?? 0) > 0) {
+      return { success: false, output: '', error: 'Subagents cannot spawn further subagents.' }
+    }
+    const task = typeof args.task === 'string' ? args.task.trim() : ''
+    if (!task) {
+      return { success: false, output: '', error: 'run_agent: "task" is required.' }
+    }
+    const mode = args.mode === 'edit' ? 'edit' : 'read-only'
+
+    const READ_ONLY_TOOLS = ['read_file', 'glob', 'grep_search']
+    const EDIT_TOOLS = [...READ_ONLY_TOOLS, 'write_file', 'edit', 'run_shell_command']
+    let allowedTools = mode === 'edit' ? EDIT_TOOLS : READ_ONLY_TOOLS
+
+    let agentName = 'subagent'
+    let agentInstructions = ''
+    let subConfig = this.config
+    if (typeof args.agent === 'string' && args.agent.trim()) {
+      const named = loadAgentConfig(args.agent.trim(), this.options.cwd)
+      if (!named) {
+        const available = listAgentConfigs(this.options.cwd).map(a => a.name)
+        return {
+          success: false,
+          output: '',
+          error: `run_agent: named agent "${args.agent}" not found.` +
+            (available.length > 0 ? ` Available: ${available.join(', ')}.` : ' No agents defined in .deepseek-code/agents/.'),
+        }
+      }
+      agentName = named.name
+      agentInstructions = named.systemPrompt ?? ''
+      if (named.allowedTools && named.allowedTools.length > 0) {
+        // Named agent may narrow the toolset further, never widen past the mode.
+        const modeSet = new Set(allowedTools)
+        allowedTools = named.allowedTools.filter(t => modeSet.has(t))
+      }
+      subConfig = {
+        ...this.config,
+        model: named.model ?? this.config.model,
+        temperature: named.temperature ?? this.config.temperature,
+      }
+    }
+
+    const rawBudget = typeof args.max_tool_calls === 'number' ? args.max_tool_calls : 40
+    const maxToolCalls = Math.min(Math.max(Math.floor(rawBudget), 5), 120)
+
+    const appendix = [
+      '## Subagent Contract',
+      'You are a SUBAGENT spawned by a main agent for ONE focused task. Work autonomously — you cannot ask the user or the main agent questions.',
+      mode === 'read-only'
+        ? '- You have READ-ONLY tools (read/search). Do not attempt to modify anything; report what you found instead.'
+        : '- You may read, search, write/edit files and run shell commands, but ONLY within the scope of your task.',
+      `- Budget: at most ${maxToolCalls} tool calls. Be economical; stop exploring once you can answer.`,
+      '- Your final text reply is your ONLY channel back to the main agent. Make it a complete, honest report: what you did/found (with file paths and line references), what failed, and what you did NOT check.',
+      agentInstructions ? `\n## Agent Instructions (${agentName})\n${agentInstructions}` : '',
+    ].filter(Boolean).join('\n')
+
+    this.options.onSubagentEvent({ phase: 'start', agent: agentName, detail: task.slice(0, 160) })
+    hooksManager.execute('SubagentStart', {
+      event: 'SubagentStart',
+      toolName: agentName,
+      projectDir: this.options.cwd,
+    }).catch(() => {})
+
+    const sub = this.createSubagentLoop(subConfig, {
+      cwd: this.options.cwd,
+      // Tools are already narrowed via allowedTools; the nested loop has no UI,
+      // so everything it is allowed to have must be auto-approved.
+      approvalMode: 'turbo',
+      allowedTools,
+      subagentDepth: (this.options.subagentDepth ?? 0) + 1,
+      maxIterations: 60,
+      budget: { maxToolCalls },
+      signal: signal ?? this.options.signal,
+      systemPromptAppendix: appendix,
+      onToolCall: e => {
+        this.options.onSubagentEvent({
+          phase: 'tool',
+          agent: agentName,
+          detail: `${e.name}: ${this.buildToolCallLabel(e.name, e.arguments)}`,
+        })
+      },
+    })
+
+    try {
+      const report = await sub.run(task)
+      // Fold the subagent's token spend into this session's cost accounting.
+      this.metrics.absorb(sub.getMetrics())
+
+      const calls = sub.getToolCallHistory()
+      const ok = calls.filter(c => c.status === 'completed').length
+      const failed = calls.filter(c => c.status === 'failed' || c.status === 'rejected').length
+      const changedFiles = new Set<string>()
+      for (const c of calls) {
+        if (c.changed && c.changedFiles) for (const f of c.changedFiles) changedFiles.add(f)
+      }
+      const ledger = `[subagent ${agentName}: ${ok} tool calls ok, ${failed} failed; files changed: ${changedFiles.size > 0 ? [...changedFiles].join(', ') : 'none'}]`
+      this.options.onSubagentEvent({ phase: 'done', agent: agentName, detail: ledger })
+      hooksManager.execute('SubagentStop', {
+        event: 'SubagentStop',
+        toolName: agentName,
+        projectDir: this.options.cwd,
+      }).catch(() => {})
+
+      return {
+        success: true,
+        output: `${report}\n\n${ledger}`,
+        changed: changedFiles.size > 0,
+        changedFiles: changedFiles.size > 0 ? [...changedFiles] : undefined,
+      }
+    } catch (err) {
+      this.metrics.absorb(sub.getMetrics())
+      const message = (err as Error).message
+      this.options.onSubagentEvent({ phase: 'failed', agent: agentName, detail: message })
+      return { success: false, output: '', error: `Subagent "${agentName}" failed: ${message}` }
+    }
   }
 
   /**
@@ -546,7 +735,7 @@ export class AgentLoop extends EventEmitter {
     this.tools = this.buildActiveTools()
     const sysIdx = this.messages.findIndex(m => m.role === 'system')
     if (sysIdx !== -1) {
-      this.options.systemPrompt = buildSystemPrompt(this.options.cwd, this.options.approvalMode, this.model)
+      this.options.systemPrompt = this.composeSystemPrompt()
       this.messages[sysIdx] = { role: 'system', content: this.options.systemPrompt }
     }
     const openAITools = toOpenAITools(this.tools)
@@ -1180,11 +1369,39 @@ export class AgentLoop extends EventEmitter {
       }
     }
 
+    // PreToolUse hooks may veto the call (blocking: true + non-zero exit).
+    try {
+      const pre = await hooksManager.execute('PreToolUse', {
+        event: 'PreToolUse',
+        toolName: name,
+        toolInput: args,
+        projectDir: this.options.cwd,
+      })
+      if (pre.blocked) {
+        return { success: false, output: '', error: pre.blockReason ?? 'Blocked by a PreToolUse hook.' }
+      }
+    } catch { /* hooks must never break tool execution */ }
+
     try {
       const result = await def.tool.execute(args, this.options.signal)
+      let output = result.output
+      try {
+        const post = await hooksManager.execute(result.success ? 'PostToolUse' : 'PostToolUseFailure', {
+          event: result.success ? 'PostToolUse' : 'PostToolUseFailure',
+          toolName: name,
+          toolInput: args,
+          error: result.error,
+          projectDir: this.options.cwd,
+        })
+        // Hooks with addOutput feed their stdout back to the model — e.g. an
+        // auto-lint hook surfacing errors right after an edit.
+        for (const hookOutput of post.outputs) {
+          output += `\n\n[hook ${hookOutput.name}]\n${hookOutput.output}`
+        }
+      } catch { /* hooks must never break tool execution */ }
       return {
         success: result.success,
-        output: result.output,
+        output,
         error: result.error,
         changed: result.changed,
         verified: result.verified,
@@ -1192,10 +1409,18 @@ export class AgentLoop extends EventEmitter {
         diff: result.diff,
       }
     } catch (err) {
+      const message = (err as Error).message
+      hooksManager.execute('PostToolUseFailure', {
+        event: 'PostToolUseFailure',
+        toolName: name,
+        toolInput: args,
+        error: message,
+        projectDir: this.options.cwd,
+      }).catch(() => {})
       return {
         success: false,
         output: '',
-        error: (err as Error).message,
+        error: message,
       }
     }
   }

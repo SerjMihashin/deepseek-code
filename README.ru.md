@@ -87,12 +87,17 @@ DeepSeek Code:
 ## Возможности
 
 - **Agent loop**: планирование, чтение, правки, проверки и продолжение диалога.
-- **TUI**: live status, streaming, tool activity, scroll/follow indicators и keyboard controls.
+- **Сабагенты**: делегирование самостоятельных подзадач вложенным агентам с чистым контекстом и ограниченными инструментами (`run_agent`); несколько сабагентов в одном сообщении работают параллельно. Именованные агенты: `.deepseek-code/agents/*.md` (`/agents new <имя>`).
+- **TUI**: live status, streaming, tool activity с inline-диффами, `@`-упоминания файлов с автодополнением.
 - **Режимы контроля**: read-only plan, ручные подтверждения, auto-edit или turbo для доверенной локальной работы.
-- **Browser tools**: Chrome-проверки для UI, console errors, forms, screenshots и network behavior.
-- **Память и сессии**: продолжение работы и сохранение фактов проекта через `/remember`.
+- **Browser tools**: Chrome-проверки UI, console errors, forms и network behavior — с текстовым «восприятием» (`observe`/`dom`), без vision.
+- **Автоматизация десктопа (Windows)**: `windows_ui` открывает любое доступное десктоп-приложение как текстовое дерево через UI Automation — осмотр окон, клики по кнопкам и меню по имени, заполнение полей, клавиши.
+- **Хуки**: ваши shell-команды на события агента (`.deepseek-code/hooks.json`) — блокировка вызовов, авто-линт после правок с выводом обратно модели.
+- **Скиллы**: переиспользуемые процедуры в `.deepseek-code/skills/<name>/SKILL.md`, агент применяет их сам, либо `/skills <name>`.
+- **Память**: проектная + глобальная `DEEPSEEK.md` в контексте; быстрые заметки `#`/`##`; `/init`.
+- **Сессии**: `--continue` восстанавливает транскрипт; фоновые dev-серверы живут между проверками (`/ps`).
 - **Code review**: `/review` для поиска багов, регрессий, рисков и security-проблем.
-- **Headless mode**: JSON-вывод для скриптов и CI через `--headless --json`.
+- **Headless mode**: JSON-вывод для скриптов и CI через `--headless --json` (хуки и скиллы работают и там).
 - **Budget modes**: `/budget audit`, `/budget normal`, `/budget large`, `/budget off`.
 
 ## Основные команды
@@ -101,8 +106,12 @@ DeepSeek Code:
 |---|---|
 | `/help` | Показать команды и горячие клавиши |
 | `/setup` | Настроить API key, язык, модель и режим подтверждений |
+| `/doctor` | Диагностика окружения: Node, shell, git, API-ключ, Chrome, UIA |
 | `/model` | Сменить модель или открыть выбор модели |
 | `/lang` | Сменить язык ответов |
+| `/agents` | Именованные сабагенты; `/agents new <имя>` создаёт заготовку |
+| `/skills` | Список/запуск скиллов; `/skills <name> [ввод]` исполняет |
+| `/hooks` | Показать загруженные хуки |
 | `/remember <text>` | Сохранить факт о проекте |
 | `/memory` | Показать сохраненную память |
 | `/review` | Запустить AI code review |
@@ -110,6 +119,7 @@ DeepSeek Code:
 | `/budget status\|off\|audit\|normal\|large` | Явно управлять лимитами agent loop |
 | `/chrome` | Управление Chrome mode |
 | `/browser-test` | Запустить browser checks |
+| `/ps` | Список/остановка фоновых процессов (dev-серверы) |
 | `/stats` | Показать токены, стоимость и статистику сессии |
 | `/changelog` | Читать release notes внутри CLI |
 

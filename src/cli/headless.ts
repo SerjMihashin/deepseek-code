@@ -1,6 +1,8 @@
 import { loadConfig } from '../config/loader.js'
 import { AgentLoop } from '../core/agent-loop.js'
 import { saveSession, writeExecutionBundle, writeSessionHandoff } from '../core/session.js'
+import { hooksManager } from '../core/hooks.js'
+import { skillsManager } from '../core/skills.js'
 import { AUDIT_BUDGET_PRESET } from '../tools/types.js'
 import type { SessionOptions } from './interactive.js'
 
@@ -38,6 +40,10 @@ export async function headlessMode (
 
   const approvalMode = (options.approvalMode ?? config.approvalMode ?? 'turbo') as 'plan' | 'default' | 'auto-edit' | 'turbo'
   const sessionId = await saveSession({ approvalMode, lastPrompt: prompt })
+
+  // Same extension surface as interactive mode: hooks fire and skills are
+  // listed in the system prompt for CI/one-shot runs too.
+  await Promise.allSettled([hooksManager.load(), skillsManager.loadAll()])
 
   const agent = new AgentLoop(config, {
     approvalMode,

@@ -307,7 +307,10 @@ describe('bash tool', () => {
   })
 
   it('should handle timeout', async () => {
-    const result = await bashTool.execute({ command: 'echo quick', timeout: 1000 })
+    // 1000ms flaked under parallel test load: a cold PowerShell spawn can take
+    // longer than the whole timeout. Generous value — the point is only that a
+    // fast command finishes within an explicit timeout.
+    const result = await bashTool.execute({ command: 'echo quick', timeout: 10_000 })
     expect(result.success).toBe(true)
   })
 

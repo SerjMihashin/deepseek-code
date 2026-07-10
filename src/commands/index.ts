@@ -374,8 +374,38 @@ async function cmdMcp (ctx: SlashCommandContext, input: string): Promise<boolean
   return true
 }
 
+const SKILL_TEMPLATE = (name: string): string => `---
+name: ${name}
+description: <one line: when does this procedure apply?>
+---
+<Step-by-step instructions for the agent. Be specific: commands to run,
+files to check, what the final report must contain.>
+`
+
 async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<boolean> {
   const rest = input.slice('/skills'.length).trim()
+
+  // /skills new <name> — scaffold a SKILL.md
+  const newMatch = rest.match(/^new\s+([\w][\w-]*)$/)
+  if (newMatch) {
+    const name = newMatch[1]
+    const { mkdirSync, writeFileSync, existsSync: exists } = await import('node:fs')
+    const { join: joinPath } = await import('node:path')
+    const dir = joinPath(process.cwd(), '.deepseek-code', 'skills', name)
+    const file = joinPath(dir, 'SKILL.md')
+    if (exists(file)) {
+      ctx.setMessages(prev => [...prev, { role: 'assistant', content: `Skill "${name}" already exists: \`${file}\`` }])
+      return true
+    }
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(file, SKILL_TEMPLATE(name), 'utf-8')
+    await skillsManager.loadAll()
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `Created \`${file}\` — edit the instructions, then run it with \`/skills ${name}\`. The agent also applies it automatically when a task matches.`,
+    }])
+    return true
+  }
 
   if (!rest) {
     const skills = skillsManager.listSkills()
@@ -428,10 +458,43 @@ async function cmdSkills (ctx: SlashCommandContext, input: string): Promise<bool
   return true
 }
 
-async function cmdAgents (ctx: SlashCommandContext): Promise<boolean> {
+const AGENT_TEMPLATE = (name: string): string => `---
+name: ${name}
+description: <one line: when should the main agent delegate to this one?>
+tools: read_file, grep_search, glob
+---
+You are the "${name}" agent. <Write the instructions this agent must follow:
+what to look at, what rules to apply, and what its final report must contain.>
+`
+
+async function cmdAgents (ctx: SlashCommandContext, input: string): Promise<boolean> {
+  const rest = input.slice('/agents'.length).trim()
+
+  // /agents new <name> — scaffold a named agent definition
+  const newMatch = rest.match(/^new\s+([\w][\w-]*)$/)
+  if (newMatch) {
+    const name = newMatch[1]
+    const { mkdirSync, writeFileSync, existsSync: exists } = await import('node:fs')
+    const { join: joinPath } = await import('node:path')
+    const dir = joinPath(process.cwd(), '.deepseek-code', 'agents')
+    const file = joinPath(dir, `${name}.md`)
+    if (exists(file)) {
+      ctx.setMessages(prev => [...prev, { role: 'assistant', content: `Agent "${name}" already exists: \`${file}\`` }])
+      return true
+    }
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(file, AGENT_TEMPLATE(name), 'utf-8')
+    ctx.setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `Created \`${file}\` — edit the description and instructions, then the main agent can delegate to it via \`run_agent\` with \`agent: "${name}"\`.`,
+    }])
+    return true
+  }
+
   const agents = listAgentConfigs(process.cwd())
   const header = 'The agent can delegate subtasks via the `run_agent` tool (fresh context, restricted tools, own budget). ' +
-    'Named agents are markdown files in `.deepseek-code/agents/` (project) or `~/.deepseek-code/agents/` (global).'
+    'Named agents are markdown files in `.deepseek-code/agents/` (project) or `~/.deepseek-code/agents/` (global). ' +
+    'Scaffold one with `/agents new <name>`.'
   const list = agents.length > 0
     ? agents.map(a => `- **${a.name}** — ${a.description || 'no description'}${a.sourcePath ? `\n  \`${a.sourcePath}\`` : ''}`).join('\n')
     : '_No named agents defined yet._'
@@ -1273,8 +1336,8 @@ export const COMMANDS: CommandEntry[] = [
   { name: '/checkpoint', description: 'Create git checkpoint', descriptionRu: 'Создать git-чекпоинт', handler: cmdCheckpoint },
   { name: '/restore', description: 'List or restore checkpoint: /restore [id]', descriptionRu: 'Список или восстановление чекпоинта: /restore [id]', handler: cmdRestore },
   { name: '/mcp', description: 'MCP servers: /mcp list | connect', descriptionRu: 'MCP-серверы: /mcp list | connect', handler: cmdMcp },
-  { name: '/skills', description: 'List or describe an agent skill', descriptionRu: 'Список или описание навыка', handler: cmdSkills },
-  { name: '/agents', description: 'Subagents: how run_agent works + named agents', descriptionRu: 'Сабагенты: как работает run_agent + именованные агенты', handler: cmdAgents },
+  { name: '/skills', description: 'Skills: list, run <name>, show <name>, new <name>', descriptionRu: 'Скиллы: список, запуск <name>, show <name>, new <name>', handler: cmdSkills },
+  { name: '/agents', description: 'Subagents: list named agents, /agents new <name>', descriptionRu: 'Сабагенты: список именованных, /agents new <имя>', handler: cmdAgents },
   { name: '/hooks', description: 'List loaded lifecycle hooks (hooks.json)', descriptionRu: 'Список загруженных хуков (hooks.json)', handler: cmdHooks },
   { name: '/doctor', description: 'Diagnose environment: node, shell, git, API, Chrome', descriptionRu: 'Диагностика окружения: node, shell, git, API, Chrome', handler: cmdDoctor },
   { name: '/review', description: 'Code review: /review all|diff|auto', descriptionRu: 'Ревью кода: /review all|diff|auto', handler: cmdReview },

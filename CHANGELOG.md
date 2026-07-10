@@ -19,8 +19,13 @@
 - **Long-run completion bell.** When a run longer than 20s finishes, dsc rings the terminal bell — Windows Terminal flashes the taskbar if you switched away. Disable with `"notifyOnComplete": false` in the config.
 
 ### Changed
-- `/agents` now explains `run_agent` and lists named agent definitions from disk (project + global); `/stats` counts them instead of the removed in-memory registry.
+- `/agents` now explains `run_agent` and lists named agent definitions from disk (project + global); `/agents new <name>` and `/skills new <name>` scaffold definitions; `/stats` counts them instead of the removed in-memory registry.
 - Subagent activity is shown live in the status bar (`[agent] read_file: src/...`), and the main session's cost/API-call counters include subagent usage.
+- Headless mode (`--headless`) now loads hooks and skills, matching interactive sessions.
+- The system prompt's tool list includes `run_agent` (main loop only) so the model knows it can delegate and fan out.
+
+### Fixed
+- A named agent whose `tools:` list contains unknown names (e.g. tool names from another CLI) no longer collapses the subagent allowlist into "no filter" — it keeps the mode's default toolset instead of silently widening it.
 
 ## 0.4.8 — Browser Perception & Command Cleanup (2026-07-05)
 

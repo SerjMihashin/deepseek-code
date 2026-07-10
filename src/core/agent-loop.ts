@@ -172,7 +172,7 @@ ${NO_BRUTE_FORCE}
 ${NO_BROAD_KILL}`
 }
 
-export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, model?: string): string {
+export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, model?: string, promptOptions?: { subagentTool?: boolean }): string {
   const osInfo = `${type()} ${release()} (${platform()})`
   let projectInfo = ''
 
@@ -232,6 +232,10 @@ export function buildSystemPrompt (cwd?: string, approvalMode?: ApprovalMode, mo
     const note = available ? '' : ' (заблокирован в текущем режиме)'
     return `  - \`${t.name}\` — ${t.description}${note}`
   })
+
+  if (promptOptions?.subagentTool && mode !== 'plan') {
+    toolListLines.push('  - `run_agent` — delegate a self-contained subtask to a subagent with its own fresh context (read-only by default, `mode: "edit"` for changes). Several run_agent calls in ONE message run in parallel — fan out independent explorations.')
+  }
 
   const capabilitiesSection = [
     `\n## Current Mode: ${mode}`,
@@ -420,7 +424,7 @@ export class AgentLoop extends EventEmitter {
     this.config = config
     this.model = config.model
     this.metrics.setContextWindow(contextWindowFor(this.model))
-    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode, this.model)
+    const defaultSystemPrompt = buildSystemPrompt(options.cwd || process.cwd(), options.approvalMode, this.model, { subagentTool: (options.subagentDepth ?? 0) === 0 })
     this.options = {
       maxIterations: DEFAULT_MAX_ITERATIONS,
       toolTimeout: 30000,
@@ -528,7 +532,7 @@ export class AgentLoop extends EventEmitter {
 
   /** Default system prompt for the current mode plus the optional appendix. */
   private composeSystemPrompt (): string {
-    const base = buildSystemPrompt(this.options.cwd, this.options.approvalMode, this.model)
+    const base = buildSystemPrompt(this.options.cwd, this.options.approvalMode, this.model, { subagentTool: (this.options.subagentDepth ?? 0) === 0 })
     return this.options.systemPromptAppendix
       ? `${base}\n\n${this.options.systemPromptAppendix}`
       : base
@@ -721,8 +725,11 @@ export class AgentLoop extends EventEmitter {
       agentInstructions = named.systemPrompt ?? ''
       if (named.allowedTools && named.allowedTools.length > 0) {
         // Named agent may narrow the toolset further, never widen past the mode.
+        // If nothing matches (e.g. tool names from another CLI), keep the mode
+        // default — an empty allowlist would otherwise mean "no filter".
         const modeSet = new Set(allowedTools)
-        allowedTools = named.allowedTools.filter(t => modeSet.has(t))
+        const narrowed = named.allowedTools.filter(t => modeSet.has(t))
+        if (narrowed.length > 0) allowedTools = narrowed
       }
       subConfig = {
         ...this.config,

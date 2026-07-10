@@ -636,6 +636,34 @@ describe('AgentLoop subagents (run_agent)', () => {
     expect(second.start).toBeLessThan(first.end)
   })
 
+  it('keeps the mode toolset when a named agent lists unknown tool names', async () => {
+    const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const tempDir = mkdtempSync(join(process.cwd(), '.tmp-agents-'))
+    try {
+      const agentsDir = join(tempDir, '.deepseek-code', 'agents')
+      mkdirSync(agentsDir, { recursive: true })
+      writeFileSync(join(agentsDir, 'legacy.md'), '---\nname: legacy\ndescription: Claude-style tool names\ntools: Read, Glob, Grep\n---\nReview.\n', 'utf-8')
+
+      const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', cwd: tempDir, ...noopCallbacks })
+      let capturedOptions: Record<string, unknown> | null = null
+      ;(main as any).createSubagentLoop = (cfg: DeepSeekConfig, opts: Record<string, unknown>) => {
+        capturedOptions = opts
+        const sub = new AgentLoop(cfg, opts)
+        ;(sub as any).api.streamChat = async function * () {
+          yield textChunk('ok')
+        }
+        return sub
+      }
+
+      await (main as any).executeSubagent({ task: 'review something', agent: 'legacy' })
+      // Unknown names must NOT collapse the allowlist to [] (= no filter at all).
+      expect((capturedOptions as any).allowedTools).toEqual(['read_file', 'glob', 'grep_search'])
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it('errors clearly when a named agent does not exist', async () => {
     const main = new AgentLoop(TEST_CONFIG, { approvalMode: 'turbo', ...noopCallbacks })
     const result = await (main as any).executeSubagent({ task: 'x', agent: 'ghost' })

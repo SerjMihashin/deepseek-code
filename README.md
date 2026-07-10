@@ -87,12 +87,17 @@ DeepSeek Code:
 ## Core Features
 
 - **Agent loop**: plan, inspect, edit, verify, and continue.
-- **TUI**: live status, streaming response, tool activity, scroll/follow indicators, and keyboard controls.
+- **Subagents**: delegate self-contained subtasks to nested agents with fresh context and restricted tools (`run_agent`); several subagents in one message run in parallel. Named agents: `.deepseek-code/agents/*.md` (`/agents new <name>`).
+- **TUI**: live status, streaming response, tool activity with inline diffs, `@`-file mentions with autocomplete.
 - **Approval modes**: read-only planning, manual confirmation, auto-edit, or trusted full automation.
-- **Browser tools**: Chrome-based checks for rendered UI, console errors, forms, screenshots, and network behavior.
-- **Session continuity**: continue previous work and save project facts with `/remember`.
+- **Browser tools**: Chrome-based checks for rendered UI, console errors, forms, and network behavior — with text "perception" (`observe`/`dom`), no vision required.
+- **Desktop automation (Windows)**: `windows_ui` exposes any accessible desktop app as a text tree via UI Automation — inspect windows, click buttons/menus by name, fill fields, send keys.
+- **Hooks**: your shell commands on agent events (`.deepseek-code/hooks.json`) — block tool calls, auto-lint after edits with output fed back to the model.
+- **Skills**: reusable procedures in `.deepseek-code/skills/<name>/SKILL.md`, applied by the agent or run via `/skills <name>`.
+- **Memory**: project + global `DEEPSEEK.md` loaded into context; `#`/`##` quick-capture; `/init` scaffolding.
+- **Session continuity**: `--continue` restores the transcript; background dev servers survive between checks (`/ps`).
 - **Review mode**: use `/review` for bug, regression, and security-oriented code review.
-- **Headless mode**: scriptable output via `--headless --json`.
+- **Headless mode**: scriptable output via `--headless --json` (hooks and skills load there too).
 - **Budget modes**: `/budget audit`, `/budget normal`, `/budget large`, `/budget off`.
 
 ## Useful Commands
@@ -101,8 +106,12 @@ DeepSeek Code:
 |---|---|
 | `/help` | Show commands and keyboard controls |
 | `/setup` | Configure API key, language, model, and approval mode |
+| `/doctor` | Diagnose environment: Node, shell, git, API key, Chrome, UIA |
 | `/model` | Switch model or open the model picker |
 | `/lang` | Switch response language |
+| `/agents` | Named subagents; `/agents new <name>` scaffolds one |
+| `/skills` | List/run skills; `/skills <name> [input]` executes one |
+| `/hooks` | Show loaded lifecycle hooks |
 | `/remember <text>` | Save project context |
 | `/memory` | Show saved memories |
 | `/review` | Run AI code review |
@@ -110,6 +119,7 @@ DeepSeek Code:
 | `/budget status\|off\|audit\|normal\|large` | Control loop limits explicitly |
 | `/chrome` | Manage Chrome mode |
 | `/browser-test` | Run browser checks |
+| `/ps` | List/stop background processes (dev servers) |
 | `/stats` | Show tokens, cost, and session statistics |
 | `/changelog` | Read release notes inside the CLI |
 

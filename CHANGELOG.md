@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.5.0 — Subagents, Working Hooks, @-Mentions, Desktop Automation (unreleased)
+## 0.5.0 — Subagents, Working Hooks, @-Mentions, Desktop Automation (2026-07-10)
 
 ### Added
 - **Real subagents (`run_agent` tool).** The agent can delegate a self-contained subtask to a nested agent with its OWN fresh context, restricted toolset and tool-call budget — explore a large codebase area without flooding the main context, run an independent verification pass, or execute a scoped implementation subtask. `mode: "read-only"` (default) gives read/search tools only; `mode: "edit"` adds write/edit/shell. Subagents cannot spawn subagents, their token spend is folded into the session cost report, and their result comes back as a report plus a tool-verified ledger (`N calls ok, M failed; files changed: ...`). Named agents with custom instructions/tools/model live in `.deepseek-code/agents/<name>.md` (project) or `~/.deepseek-code/agents/` (global) — see `/agents`. The old "subagent" module (a single chat call with no tools) was removed.

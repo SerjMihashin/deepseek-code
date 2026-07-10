@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import type { ConsoleMessage, HTTPRequest, Page } from 'puppeteer'
 import type { Tool, ToolParameter, ToolResult } from './types.js'
 import { chromeManager } from './chrome-manager.js'
+import { installPersistentVisuals, highlightAction } from './chrome-visual.js'
 
 export type ChromeAction =
   | 'open'
@@ -298,6 +299,10 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
   }
   const page = await chromeManager.getPage(sameTab)
 
+  // Visual automation layer (neon frame, glowing cursor, click ripple, HUD) —
+  // shows the user what the agent is doing in headed mode. Best-effort.
+  await installPersistentVisuals(page, { headless: chromeManager.getState().headless })
+
   try {
     switch (args.action) {
       case 'open': {
@@ -319,6 +324,9 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
         }
         try {
           await waitForElement(page, selector, timeout)
+          // Glide the glowing cursor to the target first — the click ripple
+          // itself comes from the injected event bridge on the real click.
+          await highlightAction(page, selector, `клик: ${args.targetText ?? args.selector ?? ''}`)
           await page.click(selector)
           await page.waitForNetworkIdle({ idleTime: 500, timeout }).catch(() => {})
           return { success: true, output: `Clicked (${matchedBy}).` }
@@ -343,6 +351,7 @@ async function executeAction (args: ChromeToolArgs): Promise<ToolResult> {
         }
         try {
           await waitForElement(page, selector, timeout)
+          await highlightAction(page, selector, `ввод: ${args.targetText ?? args.selector ?? ''}`)
           await page.click(selector)
           await page.keyboard.down('Control')
           await page.keyboard.press('a')

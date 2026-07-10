@@ -90,7 +90,7 @@ DeepSeek Code:
 - **Subagents**: delegate self-contained subtasks to nested agents with fresh context and restricted tools (`run_agent`); several subagents in one message run in parallel. Named agents: `.deepseek-code/agents/*.md` (`/agents new <name>`).
 - **TUI**: live status, streaming response, tool activity with inline diffs, `@`-file mentions with autocomplete.
 - **Approval modes**: read-only planning, manual confirmation, auto-edit, or trusted full automation.
-- **Browser tools**: Chrome-based checks for rendered UI, console errors, forms, and network behavior — with text "perception" (`observe`/`dom`), no vision required.
+- **Browser tools**: Chrome-based checks for rendered UI, console errors, forms, and network behavior — with text "perception" (`observe`/`dom`), no vision required. In headed mode a visual layer (neon frame, glowing cursor, click ripple, action HUD) shows what the agent is doing.
 - **Desktop automation (Windows)**: `windows_ui` exposes any accessible desktop app as a text tree via UI Automation — inspect windows, click buttons/menus by name, fill fields, send keys.
 - **Hooks**: your shell commands on agent events (`.deepseek-code/hooks.json`) — block tool calls, auto-lint after edits with output fed back to the model.
 - **Skills**: reusable procedures in `.deepseek-code/skills/<name>/SKILL.md`, applied by the agent or run via `/skills <name>`.

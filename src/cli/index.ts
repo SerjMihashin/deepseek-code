@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import type { CliOptions } from './interactive.js'
@@ -97,9 +97,24 @@ export function getCommanderParseSource (args: string[]): 'node' | 'user' {
   return args.length >= 2 ? 'node' : 'user'
 }
 
-const isEntrypoint = process.argv[1]
-  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-  : false
+const realpathOrSelf = (p: string): string => {
+  try {
+    return realpathSync(p)
+  } catch {
+    return p
+  }
+}
+
+// Node realpaths the main module for import.meta.url, but argv[1] keeps the
+// path as invoked — on symlinked installs (npm bin links, mise/nvm/volta
+// version-alias dirs) a plain resolve() comparison never matches and the CLI
+// exits 0 without doing anything. Compare realpaths on both sides instead.
+export function isMainModule (argvPath: string | undefined, moduleUrl: string): boolean {
+  if (!argvPath) return false
+  return realpathOrSelf(resolve(argvPath)) === realpathOrSelf(fileURLToPath(moduleUrl))
+}
+
+const isEntrypoint = isMainModule(process.argv[1], import.meta.url)
 
 if (isEntrypoint) {
   run(process.argv).catch((err) => {

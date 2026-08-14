@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 import type { CliOptions } from './interactive.js'
@@ -97,9 +97,32 @@ export function getCommanderParseSource (args: string[]): 'node' | 'user' {
   return args.length >= 2 ? 'node' : 'user'
 }
 
-const isEntrypoint = process.argv[1]
-  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-  : false
+/**
+ * Is this module the program that was launched?
+ *
+ * Compared through realpath on both sides, because npm installs a global bin
+ * as a symlink: argv[1] is then `<prefix>/bin/deepseek-code` while
+ * import.meta.url is the real `dist/cli/index.js`. `resolve()` normalises a
+ * path but does not follow links, so the two never matched and the CLI exited
+ * 0 without running anything — the whole program silently did nothing when
+ * installed globally, which is how nearly everyone installs it.
+ *
+ * Falls back to plain resolution if a path cannot be realpath'd, so a missing
+ * file cannot turn a working launch into a crash.
+ */
+export function isMainEntrypoint (argv1: string | undefined, moduleUrl: string): boolean {
+  if (!argv1) return false
+  const real = (p: string): string => {
+    try {
+      return realpathSync(p)
+    } catch {
+      return resolve(p)
+    }
+  }
+  return real(resolve(argv1)) === real(fileURLToPath(moduleUrl))
+}
+
+const isEntrypoint = isMainEntrypoint(process.argv[1], import.meta.url)
 
 if (isEntrypoint) {
   run(process.argv).catch((err) => {
